@@ -158,6 +158,28 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["1 of 1"].waitForExistence(timeout: 5))
     }
 
+    func testBatchSeparateAndCombinedSave() {
+        for combined in [false, true] {
+            let app = XCUIApplication(); app.launchArguments = ["--ui-test-fixture", "--ui-test-batch"]; app.launch()
+            app.buttons["library.addDocument"].tap(); app.buttons["Batch to PDF"].tap()
+            XCTAssertTrue(app.buttons["batch.action"].waitForExistence(timeout: 5))
+            if combined {
+                let toggle = app.switches["batch.combine"]
+                toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+                XCTAssertTrue(app.textFields["Combined filename"].waitForExistence(timeout: 5))
+            }
+            app.buttons["batch.action"].tap()
+            let save = app.buttons["batch.action"]
+            expectation(for: NSPredicate(format: "label == 'Save All to Library'"), evaluatedWith: save)
+            waitForExpectations(timeout: 20)
+            save.tap()
+            XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 10))
+            XCTAssertTrue(app.buttons[combined ? "library.document.Combined Documents.pdf" : "library.document.First.pdf"].waitForExistence(timeout: 10))
+            if !combined { XCTAssertTrue(app.buttons["library.document.Second.pdf"].exists) }
+            app.terminate()
+        }
+    }
+
     func testLibraryOrganizationAndContentSearch() {
         let app = XCUIApplication(); app.launchArguments = ["--ui-test-fixture"]; app.launch()
         app.buttons["Document actions"].firstMatch.tap(); app.buttons["Organize"].tap()

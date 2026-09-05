@@ -192,7 +192,7 @@ struct OfficePreviewView: View {
     }
 }
 
-private struct OfficePDFPreview: UIViewRepresentable {
+struct OfficePDFPreview: UIViewRepresentable {
     let data: Data
     func makeUIView(context: Context) -> PDFView {
         let view = PDFView()

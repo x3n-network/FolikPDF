@@ -138,6 +138,47 @@ final class DocumentLibrary: ObservableObject {
         return document
     }
 
+    func importBatchPDFs(_ outputs: [BatchPDFOutput]) async throws -> [LibraryDocument] {
+        guard !isImporting else { throw PDFConversionError.busy }
+        guard !outputs.isEmpty, outputs.count <= 20,
+              outputs.reduce(0, { $0 + $1.preview.data.count }) <= PDFProcessing.maximumBytes else { throw PDFProcessingError.tooLarge }
+        isImporting = true; importStatus = "Saving PDFs…"
+        defer { isImporting = false; importStatus = nil; refresh() }
+        let directory = documentsDirectory
+        let worker = Task.detached {
+            let manager = FileManager.default
+            try manager.createDirectory(at: directory, withIntermediateDirectories: true)
+            let staging = directory.appendingPathComponent(".batch-" + UUID().uuidString)
+            try manager.createDirectory(at: staging, withIntermediateDirectories: true)
+            defer { try? manager.removeItem(at: staging) }
+            var reserved: Set<URL> = []; var moves: [(URL, URL)] = []; var created: [URL] = []
+            do {
+                for output in outputs {
+                    try Task.checkCancellation()
+                    _ = try PDFProcessing.document(output.preview.data)
+                    let filename = try PDFConverter.fileName(output.name)
+                    let destination = Self.uniqueDestination(named: filename, in: directory, fileManager: manager, reserved: reserved)
+                    reserved.insert(destination)
+                    let temporary = staging.appendingPathComponent(UUID().uuidString + ".pdf")
+                    try output.preview.data.write(to: temporary, options: .atomic)
+                    moves.append((temporary, destination))
+                }
+                for (temporary, destination) in moves {
+                    try Task.checkCancellation()
+                    try manager.moveItem(at: temporary, to: destination); created.append(destination)
+                }
+                try Task.checkCancellation()
+                return created
+            } catch {
+                for url in created { try? manager.removeItem(at: url) }
+                throw error
+            }
+        }
+        let urls = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+        refresh()
+        return urls.compactMap { url in documents.first { $0.url == url } }
+    }
+
     private var organizationURL: URL { documentsDirectory.appendingPathComponent(".folik-library.json") }
     var folders: [String] { Array(Set(documents.map { metadata(for: $0).folder }.filter { !$0.isEmpty })).sorted() }
     var tags: [String] { Array(Set(documents.flatMap { metadata(for: $0).tags })).sorted() }
@@ -299,10 +340,11 @@ final class DocumentLibrary: ObservableObject {
     nonisolated private static func uniqueDestination(
         named fileName: String,
         in directory: URL,
-        fileManager: FileManager
+        fileManager: FileManager,
+        reserved: Set<URL> = []
     ) -> URL {
         let original = directory.appendingPathComponent(fileName)
-        guard fileManager.fileExists(atPath: original.path) else { return original }
+        guard fileManager.fileExists(atPath: original.path) || reserved.contains(original) else { return original }
 
         let source = URL(fileURLWithPath: fileName)
         let stem = source.deletingPathExtension().lastPathComponent
@@ -311,7 +353,7 @@ final class DocumentLibrary: ObservableObject {
         while true {
             let candidateName = ext.isEmpty ? "\(stem) \(copyNumber)" : "\(stem) \(copyNumber).\(ext)"
             let candidate = directory.appendingPathComponent(candidateName)
-            if !fileManager.fileExists(atPath: candidate.path) { return candidate }
+            if !fileManager.fileExists(atPath: candidate.path) && !reserved.contains(candidate) { return candidate }
             copyNumber += 1
         }
     }
