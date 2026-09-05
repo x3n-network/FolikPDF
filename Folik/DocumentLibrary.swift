@@ -11,6 +11,7 @@ final class DocumentLibrary: ObservableObject {
     @Published private(set) var documents: [LibraryDocument] = []
     @Published private(set) var isImporting = false
     @Published private(set) var importStatus: String?
+    @Published private(set) var organization: [String: LibraryMetadata] = [:]
     @Published var errorMessage: String?
 
     private let fileManager: FileManager
@@ -137,11 +138,26 @@ final class DocumentLibrary: ObservableObject {
         return document
     }
 
+    private var organizationURL: URL { documentsDirectory.appendingPathComponent(".folik-library.json") }
+    var folders: [String] { Array(Set(documents.map { metadata(for: $0).folder }.filter { !$0.isEmpty })).sorted() }
+    var tags: [String] { Array(Set(documents.flatMap { metadata(for: $0).tags })).sorted() }
+    func metadata(for document: LibraryDocument) -> LibraryMetadata { organization[document.url.lastPathComponent] ?? LibraryMetadata() }
+    func organize(_ document: LibraryDocument, folder: String, tags: [String]) throws {
+        guard documents.contains(where: { $0.url == document.url }) else { throw CocoaError(.fileNoSuchFile) }
+        var records = try LibraryOrganization.load(from: organizationURL)
+        records[document.url.lastPathComponent] = try LibraryMetadata.validated(folder: folder, tags: tags)
+        try LibraryOrganization.save(records, to: organizationURL)
+        organization = records
+    }
+
     func delete(_ document: LibraryDocument) {
+        defer { refresh() }
         do {
             try fileManager.removeItem(at: document.url)
             bookmarkStore.removeBookmarks(for: document.url)
-            refresh()
+            var records = try LibraryOrganization.load(from: organizationURL)
+            records.removeValue(forKey: document.url.lastPathComponent)
+            try LibraryOrganization.save(records, to: organizationURL)
         } catch {
             errorMessage = "Folik couldn’t remove \(document.displayName). \(error.localizedDescription)"
         }
@@ -170,6 +186,7 @@ final class DocumentLibrary: ObservableObject {
                 )
             }
             .sorted { $0.modifiedAt > $1.modifiedAt }
+            organization = try LibraryOrganization.load(from: organizationURL)
         } catch {
             errorMessage = "Folik couldn’t load your library. \(error.localizedDescription)"
         }
@@ -187,6 +204,7 @@ final class DocumentLibrary: ObservableObject {
                 try fileManager.removeItem(at: url)
             }
 
+            try? fileManager.removeItem(at: organizationURL)
             let fixtureURL = documentsDirectory.appendingPathComponent("Folik UI Test.pdf")
             let renderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 612, height: 792))
             try renderer.writePDF(to: fixtureURL) { context in

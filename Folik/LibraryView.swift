@@ -2,6 +2,19 @@ import QuickLookThumbnailing
 import SwiftUI
 
 struct LibraryView: View {
+    @EnvironmentObject private var library: DocumentLibrary
+    @State private var organizing: LibraryDocument?
+    @State private var selectedFolder = "\u{0}"
+    @State private var selectedTag = "\u{0}"
+    var searchStatus: String? = nil
+    var searchHits: [URL: LibrarySearchHit] = [:]
+    var isSearching = false
+    private var visibleDocuments: [LibraryDocument] {
+        documents.filter {
+            let value = library.metadata(for: $0)
+            return (selectedFolder == "\u{0}" || value.folder == selectedFolder) && (selectedTag == "\u{0}" || value.tags.contains(selectedTag))
+        }
+    }
     let documents: [LibraryDocument]
     let isImporting: Bool
     let importStatus: String?
@@ -19,12 +32,19 @@ struct LibraryView: View {
 
     var body: some View {
         Group {
-            if documents.isEmpty {
+            if library.documents.isEmpty {
                 emptyLibrary
             } else {
                 documentList
             }
         }
+        .onChange(of: library.folders) { _, folders in
+            if selectedFolder != "\u{0}" && selectedFolder != "" && !folders.contains(selectedFolder) { selectedFolder = "\u{0}" }
+        }
+        .onChange(of: library.tags) { _, tags in
+            if selectedTag != "\u{0}" && !tags.contains(selectedTag) { selectedTag = "\u{0}" }
+        }
+        .sheet(item: $organizing) { DocumentOrganizationView(document: $0) }
         .background(FolikTheme.surface)
         .navigationTitle("Library")
         .navigationBarTitleDisplayMode(.large)
@@ -100,10 +120,26 @@ struct LibraryView: View {
                     .listRowSeparator(.hidden)
             }
 
-            Section("Recent documents") {
-                ForEach(documents) { document in
+            Section("Find and organize") {
+                Picker("Folder", selection: $selectedFolder) {
+                    Text("All folders").tag("\u{0}"); Text("Unfiled").tag("")
+                    ForEach(library.folders, id: \.self) { Text($0).tag($0) }
+                }
+                Picker("Tag", selection: $selectedTag) {
+                    Text("All tags").tag("\u{0}")
+                    ForEach(library.tags, id: \.self) { Text($0).tag($0) }
+                }
+                if let searchStatus { Text(searchStatus).font(.footnote).foregroundStyle(.secondary) }
+                if isSearching { ProgressView("Searching document text…") }
+            }
+            Section("Documents (\(visibleDocuments.count))") {
+                if visibleDocuments.isEmpty { Text("No matching documents").foregroundStyle(.secondary) }
+                ForEach(visibleDocuments) { document in
                     DocumentRow(
                         document: document,
+                        metadata: library.metadata(for: document),
+                        hit: searchHits[document.url],
+                        organize: { organizing = document },
                         open: { openDocument(document) },
                         delete: { deleteDocument(document) }
                     )
@@ -218,6 +254,9 @@ private struct PrivacyBanner: View {
 
 private struct DocumentRow: View {
     let document: LibraryDocument
+    let metadata: LibraryMetadata
+    let hit: LibrarySearchHit?
+    let organize: () -> Void
     let open: () -> Void
     let delete: () -> Void
 
@@ -233,6 +272,9 @@ private struct DocumentRow: View {
                             .font(.headline)
                             .foregroundStyle(FolikTheme.ink)
                             .lineLimit(2)
+                        if !metadata.folder.isEmpty { Label(metadata.folder, systemImage: "folder").font(.caption).foregroundStyle(.secondary) }
+                        if !metadata.tags.isEmpty { Text(metadata.tags.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary) }
+                        if let hit { Text("Page \(hit.page): \(hit.excerpt)").font(.caption).lineLimit(3).foregroundStyle(.secondary) }
                         HStack(spacing: 6) {
                             Text(document.pageDescription)
                             Text("·")
@@ -252,6 +294,7 @@ private struct DocumentRow: View {
             .accessibilityHint("Opens the PDF")
 
             Menu {
+                Button("Organize", action: organize)
                 ShareLink(item: document.url) {
                     Label("Share a copy", systemImage: "square.and.arrow.up")
                 }

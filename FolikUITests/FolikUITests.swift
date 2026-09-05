@@ -158,6 +158,20 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["1 of 1"].waitForExistence(timeout: 5))
     }
 
+    func testLibraryOrganizationAndContentSearch() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-test-fixture"]; app.launch()
+        app.buttons["Document actions"].firstMatch.tap(); app.buttons["Organize"].tap()
+        let folder = app.textFields["organization.folder"]
+        XCTAssertTrue(folder.waitForExistence(timeout: 5)); folder.tap(); folder.typeText("Work")
+        let tags = app.textFields["organization.tags"]; tags.tap(); tags.typeText("invoice, 2026")
+        app.buttons["organization.save"].tap()
+        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText("searchable")
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH 'Page 1:'")).firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["library.document.Folik UI Test.pdf"].exists)
+    }
+
     func testExistingPDFOCRPreviewAndSave() throws {
         let image = UIGraphicsImageRenderer(size: CGSize(width: 700, height: 900)).image { context in
             UIColor.white.setFill(); context.fill(CGRect(x: 0, y: 0, width: 700, height: 900))

@@ -13,7 +13,8 @@ Folik is a native, local-first PDF reader and workspace for iPhone and iPad. It 
 - Convert TXT (UTF-8/UTF-16) or basic RTF documents up to 5 MB into searchable PDFs with Letter-size pages; complex layouts and attachments are not supported
 - Open PDFs in Folik from Files, Mail, Safari, and other apps using the system share sheet or Open In menu
 - Scan multi-page paper documents with automatic edge detection and perspective correction, then add an on-device searchable text layer and save them as local PDFs
-- Keep a private on-device document library
+- Keep a private on-device document library with virtual folders and tags
+- Search filenames, folders, tags, and selectable PDF text across the library, with matching page excerpts
 - Read PDFs with native PDFKit rendering
 - Browse page thumbnails and document outlines
 - Bookmark important pages locally and filter the Pages panel to return to them quickly
@@ -41,6 +42,12 @@ Folik is at the beginning of its development. Keep an original copy of important
 ### Form compatibility
 
 Folik supports the standard AcroForm widgets that PDFKit can edit on iOS. Checkbox and radio state is saved and restored independently from a field's display string, and radio options with the same field name are counted as one logical field. Required fields are identified from standard field flags and prioritized by the next-field navigator. For documents that expose internal field IDs instead of readable labels, Folik derives a concise label from nearby page text. Folik can place a visual handwritten or typed signature over a document, but it does not yet apply certificate-backed cryptographic signatures to digital-signature fields. XFA-only forms cannot be filled by iOS; Folik detects them and explains the limitation instead of showing an empty or misleading editor. JavaScript calculations and other vendor-specific form behavior may vary, so keep an original copy of important forms.
+
+### Library organization and search
+
+Use a document’s **… → Organize** menu to assign a virtual folder and comma-separated tags. Folder and tag filters narrow the library without moving or renaming files. Organization is stored atomically in an app-local sidecar; unreadable metadata is not silently overwritten. Folder names are limited to 80 characters, with up to 20 tags of 40 characters each.
+
+Library search matches filenames, folder/tag labels, and selectable PDF text, with the first matching page and an excerpt. Search runs off the main thread, debounces typing, and cancels superseded requests. Text is read fresh for each search and is not stored in a persistent index. Locked, unreadable, or oversized documents are skipped with a count. Scanned documents need OCR first.
 
 ### PDF compression
 

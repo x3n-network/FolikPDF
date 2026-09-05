@@ -20,6 +20,8 @@ struct ContentView: View {
     @State private var officeConverterPresented = false
     @State private var pdfToolMode: PDFToolMode?
     @State private var searchText = ""
+    @State private var searchResult = LibrarySearchResult()
+    @State private var searchingText = false
     @State private var handledDebugLaunch = false
 
     var body: some View {
@@ -28,6 +30,19 @@ struct ContentView: View {
                 .navigationDestination(for: LibraryDocument.self) { item in
                     ReaderView(item: item)
                 }
+        }
+        .task(id: LibrarySearchRequest(query: searchText, documents: library.documents)) {
+            searchResult = LibrarySearchResult(); searchingText = false
+            let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !query.isEmpty else { return }
+            let documents = library.documents
+            do {
+                try await Task.sleep(for: .milliseconds(300))
+                searchingText = true
+                let worker = Task.detached { try LibrarySearch.search(query, documents: documents) }
+                let result = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                try Task.checkCancellation(); searchResult = result; searchingText = false
+            } catch { if !Task.isCancelled { searchingText = false } }
         }
         .tint(FolikTheme.cobalt)
         .fileImporter(
@@ -150,6 +165,9 @@ struct ContentView: View {
     @ViewBuilder
     private var libraryRoot: some View {
         let libraryView = LibraryView(
+            searchStatus: searchResult.skipped > 0 ? "Skipped \(searchResult.skipped) protected, unreadable, or oversized documents." : nil,
+            searchHits: searchResult.hits,
+            isSearching: searchingText,
             documents: filteredDocuments,
             isImporting: library.isImporting,
             importStatus: library.importStatus,
@@ -176,7 +194,7 @@ struct ContentView: View {
     private var filteredDocuments: [LibraryDocument] {
         guard !searchText.isEmpty else { return library.documents }
         return library.documents.filter {
-            $0.displayName.localizedCaseInsensitiveContains(searchText)
+            $0.displayName.localizedCaseInsensitiveContains(searchText.trimmingCharacters(in: .whitespacesAndNewlines)) || library.metadata(for: $0).matches(searchText.trimmingCharacters(in: .whitespacesAndNewlines)) || searchResult.hits[$0.url] != nil
         }
     }
 
