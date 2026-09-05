@@ -43,6 +43,10 @@ Folik is at the beginning of its development. Keep an original copy of important
 
 Folik supports the standard AcroForm widgets that PDFKit can edit on iOS. Checkbox and radio state is saved and restored independently from a field's display string, and radio options with the same field name are counted as one logical field. Required fields are identified from standard field flags and prioritized by the next-field navigator. For documents that expose internal field IDs instead of readable labels, Folik derives a concise label from nearby page text. Folik can place a visual handwritten or typed signature over a document, but it does not yet apply certificate-backed cryptographic signatures to digital-signature fields. XFA-only forms cannot be filled by iOS; Folik detects them and explains the limitation instead of showing an empty or misleading editor. JavaScript calculations and other vendor-specific form behavior may vary, so keep an original copy of important forms.
 
+### PDF redaction
+
+Choose **Add (+) → Redact PDF**, mark rectangles by dragging or entering page percentages, then create and review a new copy before saving. Marked regions are painted into rendered pixels before a fresh image-only PDF is created. Source text, metadata, links, outlines, attachments, and editable form/annotation objects are not copied. Visible annotation appearances are flattened where supported. All output pages lose text selection and interactive features; rendering is limited to 200 dpi and 3,500 pixels on the longest side. Review every page before sharing. The original retains its original information. Protected files are rejected; input/output is limited to 100 MB, 500 pages, and 500 marked regions.
+
 ### Batch conversion
 
 Choose **Add (+) → Batch to PDF** for up to 20 files and 100 MB total. Add PDFs, supported Office documents, TXT/RTF, or images; move items up/down or remove them before preparing separate PDFs or one combined document. Review each prepared result and its conversion notes, then save the batch. Duplicate filenames get unique suffixes. Preparation failures save nothing; library saving stages and validates every PDF first and rolls back newly moved files on a handled failure. Originals remain unchanged. Combined PDFs can change outlines and page destinations, and retain the conversion limits of each source format.
@@ -136,7 +140,7 @@ ReaderInspector    Pages, outline, search, and form tools
 SettingsView       About, privacy, support, company, and legal links
 ```
 
-The project intentionally keeps document operations out of SwiftUI views so that OCR, future redaction, page editing, and SPDFV-compatible operations can be tested independently.
+The project intentionally keeps document operations out of SwiftUI views so that OCR, redaction, page editing, and SPDFV-compatible operations can be tested independently.
 
 ## Privacy
 

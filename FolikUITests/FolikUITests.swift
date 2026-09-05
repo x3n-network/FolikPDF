@@ -158,6 +158,21 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["1 of 1"].waitForExistence(timeout: 5))
     }
 
+    func testRedactionAreaPreviewAndSave() {
+        let data = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 612, height: 792)).pdfData { c in
+            c.beginPage(); ("PRIVATE ACCOUNT 4827" as NSString).draw(at: CGPoint(x: 72, y: 72), withAttributes: [.font: UIFont.systemFont(ofSize: 20)])
+        }
+        let app = XCUIApplication(); app.launchArguments = ["--ui-test-fixture", "--ui-test-pdf-source", data.base64EncodedString()]; app.launch()
+        app.buttons["library.addDocument"].tap(); app.buttons["Redact PDF"].tap()
+        let addArea = app.buttons["redaction.addArea"]
+        XCTAssertTrue(addArea.waitForExistence(timeout: 10)); if !addArea.isHittable { app.swipeUp() }; addArea.tap()
+        let create = app.buttons["redaction.preview"]; XCTAssertTrue(create.isEnabled); create.tap()
+        XCTAssertTrue(app.navigationBars["Conversion Preview"].waitForExistence(timeout: 30))
+        let attachment = XCTAttachment(screenshot: app.screenshot()); attachment.lifetime = .keepAlways; add(attachment)
+        app.buttons["office.save"].tap()
+        XCTAssertTrue(app.navigationBars["Redacted Test"].waitForExistence(timeout: 10))
+    }
+
     func testBatchSeparateAndCombinedSave() {
         for combined in [false, true] {
             let app = XCUIApplication(); app.launchArguments = ["--ui-test-fixture", "--ui-test-batch"]; app.launch()

@@ -18,6 +18,7 @@ struct ContentView: View {
     @State private var conversionMode: PDFConversionView.Mode?
     @State private var convertedDocument: LibraryDocument?
     @State private var officeConverterPresented = false
+    @State private var redactionPresented = false
     @State private var batchPresented = false
     @State private var pdfToolMode: PDFToolMode?
     @State private var searchText = ""
@@ -108,6 +109,11 @@ struct ContentView: View {
             PDFToolView(compress: mode == .compression) { document in convertedDocument = document; pdfToolMode = nil }
         }
         .sheet(isPresented: $batchPresented) { BatchConversionView() }
+        .sheet(isPresented: $redactionPresented, onDismiss: {
+            if let document = convertedDocument { convertedDocument = nil; path.append(document) }
+        }) {
+            RedactionView { document in convertedDocument = document; redactionPresented = false }
+        }
         .onOpenURL { url in
             Task {
                 if let document = await library.importDocuments(at: [url]).first {
@@ -182,6 +188,7 @@ struct ContentView: View {
             openSearchablePDF: { pdfToolMode = .searchable },
             openCompression: { pdfToolMode = .compression },
             openBatch: { batchPresented = true },
+            openRedaction: { redactionPresented = true },
             openSettings: { isSettingsPresented = true },
             openDocument: { path.append($0) },
             deleteDocument: library.delete

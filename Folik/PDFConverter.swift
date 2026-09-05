@@ -78,7 +78,7 @@ nonisolated enum PDFConverter {
     static func write(_ input: PDFConversionInput, to url: URL) async throws {
         switch input {
         case .preparedPDF(let data):
-            guard data.count <= 50 * 1024 * 1024 else { throw OfficeConversionError.tooLarge }
+            guard data.count <= PDFProcessing.maximumBytes else { throw PDFProcessingError.tooLarge }
             try data.write(to: url)
         case .images(let pages):
             guard !pages.isEmpty else { throw PDFConversionError.invalidImage }

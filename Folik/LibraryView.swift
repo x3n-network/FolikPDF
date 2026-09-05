@@ -27,6 +27,7 @@ struct LibraryView: View {
     var openSearchablePDF: () -> Void = {}
     var openCompression: () -> Void = {}
     var openBatch: () -> Void = {}
+    var openRedaction: () -> Void = {}
     let openSettings: () -> Void
     let openDocument: (LibraryDocument) -> Void
     let deleteDocument: (LibraryDocument) -> Void
@@ -90,6 +91,7 @@ struct LibraryView: View {
                     Button("Make PDF Searchable", action: openSearchablePDF)
                     Button("Compress PDF", action: openCompression)
                     Button("Batch to PDF", action: openBatch)
+                    Button("Redact PDF", action: openRedaction)
                     Divider()
                     Button(action: openImageConverter) {
                         Label("Images to PDF", systemImage: "photo.on.rectangle")
