@@ -11,6 +11,7 @@ struct LibraryView: View {
     let openImageConverter: () -> Void
     let openTextConverter: () -> Void
     let openOfficeConverter: () -> Void
+    var openSearchablePDF: () -> Void = {}
     let openSettings: () -> Void
     let openDocument: (LibraryDocument) -> Void
     let deleteDocument: (LibraryDocument) -> Void
@@ -64,6 +65,7 @@ struct LibraryView: View {
                         Label("Choose PDFs", systemImage: "folder")
                     }
                     .disabled(isImporting)
+                    Button("Make PDF Searchable", action: openSearchablePDF)
                     Divider()
                     Button(action: openImageConverter) {
                         Label("Images to PDF", systemImage: "photo.on.rectangle")

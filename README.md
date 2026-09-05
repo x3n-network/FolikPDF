@@ -7,6 +7,7 @@ Folik is a native, local-first PDF reader and workspace for iPhone and iPad. It 
 ## Current capabilities
 
 - Import one or more PDFs from Files
+- Make existing scanned PDFs searchable with on-device OCR, progress, cancellation, and review before saving a new copy
 - Convert JPEG, PNG, or HEIC images from Photos or Files into a named, ordered, searchable multipage PDF (up to 30 images, 20 MB each and 100 MB total)
 - Convert Word DOCX and LibreOffice ODT documents on-device, review the generated PDF and conversion notes, then save the exact preview to the library
 - Convert TXT (UTF-8/UTF-16) or basic RTF documents up to 5 MB into searchable PDFs with Letter-size pages; complex layouts and attachments are not supported
@@ -40,6 +41,10 @@ Folik is at the beginning of its development. Keep an original copy of important
 ### Form compatibility
 
 Folik supports the standard AcroForm widgets that PDFKit can edit on iOS. Checkbox and radio state is saved and restored independently from a field's display string, and radio options with the same field name are counted as one logical field. Required fields are identified from standard field flags and prioritized by the next-field navigator. For documents that expose internal field IDs instead of readable labels, Folik derives a concise label from nearby page text. Folik can place a visual handwritten or typed signature over a document, but it does not yet apply certificate-backed cryptographic signatures to digital-signature fields. XFA-only forms cannot be filled by iOS; Folik detects them and explains the limitation instead of showing an empty or misleading editor. JavaScript calculations and other vendor-specific form behavior may vary, so keep an original copy of important forms.
+
+### Existing-PDF OCR
+
+Choose **Add (+) → Make PDF Searchable**. Folik adds an invisible text layer to scanned pages and saves a reviewed new copy. Pages already containing text or annotations are preserved and skipped; the preview reports the counts. OCR can make mistakes, and page destinations/outlines may change. Protected PDFs are not accepted. Input/output limits are 100 MB, 500 pages, and page dimensions up to 40 inches; raster recognition is limited to 3,500 pixels on the longest side. Original page graphics are retained on processed pages.
 
 ### Office document conversion
 

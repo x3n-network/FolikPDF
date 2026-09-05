@@ -126,7 +126,7 @@ struct OfficeConversionView: View {
     }
 }
 
-private struct OfficePreviewView: View {
+struct OfficePreviewView: View {
     let preview: OfficePreview
     let filename: String
     let complete: (LibraryDocument) -> Void

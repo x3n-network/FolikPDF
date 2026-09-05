@@ -13,6 +13,7 @@ struct ContentView: View {
     @State private var conversionMode: PDFConversionView.Mode?
     @State private var convertedDocument: LibraryDocument?
     @State private var officeConverterPresented = false
+    @State private var searchablePDFPresented = false
     @State private var searchText = ""
     @State private var handledDebugLaunch = false
 
@@ -79,6 +80,11 @@ struct ContentView: View {
                 convertedDocument = document
                 officeConverterPresented = false
             }
+        }
+        .sheet(isPresented: $searchablePDFPresented, onDismiss: {
+            if let document = convertedDocument { convertedDocument = nil; path.append(document) }
+        }) {
+            PDFToolView { document in convertedDocument = document; searchablePDFPresented = false }
         }
         .onOpenURL { url in
             Task {
@@ -148,6 +154,7 @@ struct ContentView: View {
             openImageConverter: { conversionMode = .images },
             openTextConverter: { conversionMode = .text },
             openOfficeConverter: { officeConverterPresented = true },
+            openSearchablePDF: { searchablePDFPresented = true },
             openSettings: { isSettingsPresented = true },
             openDocument: { path.append($0) },
             deleteDocument: library.delete

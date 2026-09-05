@@ -24,7 +24,7 @@ enum ScannedPDFError: LocalizedError {
 }
 
 enum ScannedPDFWriter {
-    private struct RecognizedLine: Sendable {
+    struct RecognizedLine: Sendable {
         let text: String
         let normalizedBounds: CGRect
     }
@@ -42,7 +42,7 @@ enum ScannedPDFWriter {
             // Decode, recognize, and draw one page at a time so a long camera scan
             // does not retain several full-resolution bitmap buffers concurrently.
             let image = try decodeImage(data)
-            let recognizedLines = await recognizeText(in: image)
+            let recognizedLines = try await recognizeText(in: image)
             var bounds = pageBounds(for: image)
             let mediaBox = Data(bytes: &bounds, count: MemoryLayout<CGRect>.size)
             context.beginPDFPage([kCGPDFContextMediaBox as String: mediaBox] as CFDictionary)
@@ -64,7 +64,7 @@ enum ScannedPDFWriter {
         catch { throw ScannedPDFError.invalidPageImage }
     }
 
-    nonisolated private static func recognizeText(in image: CGImage) async -> [RecognizedLine] {
+    nonisolated static func recognizeText(in image: CGImage) async throws -> [RecognizedLine] {
         var request = RecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.automaticallyDetectsLanguage = true
@@ -88,11 +88,11 @@ enum ScannedPDFWriter {
                 return RecognizedLine(text: candidate.string, normalizedBounds: bounds)
             }
         } catch {
-            return []
+            throw error
         }
     }
 
-    nonisolated private static func drawSearchableText(
+    nonisolated static func drawSearchableText(
         _ lines: [RecognizedLine],
         imageRect: CGRect,
         in context: CGContext
