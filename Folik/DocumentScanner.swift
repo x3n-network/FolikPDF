@@ -36,7 +36,9 @@ enum ScannedPDFWriter {
         guard let context = CGContext(outputURL as CFURL, mediaBox: &initialBounds, nil) else {
             throw ScannedPDFError.couldNotCreatePDF
         }
+        defer { context.closePDF() }
         for data in pageImageData {
+            try Task.checkCancellation()
             // Decode, recognize, and draw one page at a time so a long camera scan
             // does not retain several full-resolution bitmap buffers concurrently.
             let image = try decodeImage(data)
@@ -55,17 +57,11 @@ enum ScannedPDFWriter {
             drawSearchableText(recognizedLines, imageRect: imageRect, in: context)
             context.endPDFPage()
         }
-        context.closePDF()
     }
 
     nonisolated private static func decodeImage(_ data: Data) throws -> CGImage {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let image = CGImageSourceCreateImageAtIndex(source, 0, nil),
-              image.width > 0,
-              image.height > 0 else {
-            throw ScannedPDFError.invalidPageImage
-        }
-        return image
+        do { return try PDFConverter.image(data) }
+        catch { throw ScannedPDFError.invalidPageImage }
     }
 
     nonisolated private static func recognizeText(in image: CGImage) async -> [RecognizedLine] {

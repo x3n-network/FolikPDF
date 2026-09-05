@@ -7,6 +7,10 @@ Folik is a native, local-first PDF reader and workspace for iPhone and iPad. It 
 ## Current capabilities
 
 - Import one or more PDFs from Files
+- Convert JPEG, PNG, or HEIC images from Photos or Files into a named, ordered, searchable multipage PDF (up to 30 images, 20 MB each and 100 MB total)
+- Convert Word DOCX and LibreOffice ODT documents on-device, review the generated PDF and conversion notes, then save the exact preview to the library
+- Convert TXT (UTF-8/UTF-16) or basic RTF documents up to 5 MB into searchable PDFs with Letter-size pages; complex layouts and attachments are not supported
+- Open PDFs in Folik from Files, Mail, Safari, and other apps using the system share sheet or Open In menu
 - Scan multi-page paper documents with automatic edge detection and perspective correction, then add an on-device searchable text layer and save them as local PDFs
 - Keep a private on-device document library
 - Read PDFs with native PDFKit rendering
@@ -29,13 +33,27 @@ Folik is a native, local-first PDF reader and workspace for iPhone and iPad. It 
 - Share the original, create an editable copy, or export a flattened copy that makes forms, signatures, and annotations part of the page
 - Adapt navigation for compact iPhone and regular iPad layouts
 - Support Dynamic Type, VoiceOver labels, light mode, and dark mode
-- Open Folik settings for the X3N website, team feedback email, privacy details, version, and Apple Standard EULA
+- Open Folik settings for the [Folik open-source project website](https://www.x3n.network/opensource/folik/), X3N website, team feedback email, privacy details, version, and Apple Standard EULA
 
 Folik is at the beginning of its development. Keep an original copy of important documents while editing behavior is hardened against a broad compatibility corpus.
 
 ### Form compatibility
 
 Folik supports the standard AcroForm widgets that PDFKit can edit on iOS. Checkbox and radio state is saved and restored independently from a field's display string, and radio options with the same field name are counted as one logical field. Required fields are identified from standard field flags and prioritized by the next-field navigator. For documents that expose internal field IDs instead of readable labels, Folik derives a concise label from nearby page text. Folik can place a visual handwritten or typed signature over a document, but it does not yet apply certificate-backed cryptographic signatures to digital-signature fields. XFA-only forms cannot be filled by iOS; Folik detects them and explains the limitation instead of showing an empty or misleading editor. JavaScript calculations and other vendor-specific form behavior may vary, so keep an original copy of important forms.
+
+### Office document conversion
+
+Choose **Add (+) → Documents to PDF** for DOCX, ODT, legacy DOC, and Pages files up to 25 MB. The engine supports styled paragraphs, headings, decimal/alphabetic/Roman lists, embedded raster images (including images in table cells), source margins and table column proportions, horizontal table-cell spans, and searchable text. External web/email links remain clickable. Text boxes enter the reading flow, and footnotes/endnotes are collected at the end. Long paragraphs and table cells continue across PDF pages. Conversion happens entirely on-device, and nothing enters the library until you review the PDF and tap **Save to Library**.
+
+This is a limited document renderer, not a full Word/LibreOffice layout implementation. Fonts may be substituted; image placement, complex table sizing, and pagination may change. Nested tables flow in reading order inside their parent cell. Headers, footers, comments, linked images, charts, and some other objects are unsupported; conversion notes identify detected limitations. Review important documents against their originals. Space-aligned text can have a different extraction/selection order in PDF viewers.
+
+Legacy Word 97–2003 `.doc` files have a **text recovery** mode. It preserves the main text, Unicode, basic paragraph/cell boundaries, page breaks and saved field results. Formatting, images, notes, text boxes and other rich content are omitted, and tracked deletions may appear. The preview explicitly labels this mode. Export DOCX or PDF from Word when fidelity matters.
+
+Pages support is limited to extracting `QuickLook/Preview.pdf` from a ZIP or directory package when present. Those PDF bytes are preserved exactly. Saved previews can be outdated or incomplete; modern Pages files without one require **Export → PDF** in Pages. Thumbnail images are never treated as complete documents.
+
+Google Docs can export a DOCX copy for conversion. Direct Google account access, full Pages layout parsing, and full legacy Word formatting are not included.
+
+See [the conversion engine architecture and compatibility notes](CONVERSION_ENGINE.md).
 
 ## Requirements
 
@@ -79,6 +97,13 @@ The app icon uses Folik's folded-page **F** in standard, dark, and tinted appear
 ```text
 DocumentLibrary    Imports and owns local PDF copies
 DocumentScanner    Native camera capture and scanned-image PDF generation
+PDFConverter       Local image and paginated TXT/RTF conversion
+PDFConversionView  Image/text selection, image ordering, and conversion review
+OfficeDocumentEngine  DOCX/ODT parsing and conversion orchestration
+OfficePackage / OfficeXML  Bounded ZIP/XML readers
+DOCXReader / ODTReader  Format-specific content and styles
+OfficePDFRenderer  Shared searchable text, image and table pagination
+OfficeConversionView  Document selection, compatibility notes, PDF preview and save
 DocumentSession    Document state, forms, search, navigation, annotations, and persistence
 DocumentExporter   Original, editable-copy, and flattened-copy export
 PageOrganizer      Source-preserving page operations, merge/extract, and undo

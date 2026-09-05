@@ -10,6 +10,9 @@ struct ContentView: View {
     @State private var isScannerPresented = false
     @State private var cameraPermissionAlertPresented = false
     @State private var isSettingsPresented = false
+    @State private var conversionMode: PDFConversionView.Mode?
+    @State private var convertedDocument: LibraryDocument?
+    @State private var officeConverterPresented = false
     @State private var searchText = ""
     @State private var handledDebugLaunch = false
 
@@ -54,6 +57,28 @@ struct ContentView: View {
         }
         .sheet(isPresented: $isSettingsPresented) {
             SettingsView()
+        }
+        .sheet(item: $conversionMode, onDismiss: {
+            if let document = convertedDocument {
+                convertedDocument = nil
+                path.append(document)
+            }
+        }) { mode in
+            PDFConversionView(mode: mode) { document in
+                convertedDocument = document
+                conversionMode = nil
+            }
+        }
+        .sheet(isPresented: $officeConverterPresented, onDismiss: {
+            if let document = convertedDocument {
+                convertedDocument = nil
+                path.append(document)
+            }
+        }) {
+            OfficeConversionView { document in
+                convertedDocument = document
+                officeConverterPresented = false
+            }
         }
         .onOpenURL { url in
             Task {
@@ -120,6 +145,9 @@ struct ContentView: View {
             canScan: DocumentScannerView.isSupported,
             openImporter: { isImporterPresented = true },
             openScanner: beginScanning,
+            openImageConverter: { conversionMode = .images },
+            openTextConverter: { conversionMode = .text },
+            openOfficeConverter: { officeConverterPresented = true },
             openSettings: { isSettingsPresented = true },
             openDocument: { path.append($0) },
             deleteDocument: library.delete

@@ -8,6 +8,9 @@ struct LibraryView: View {
     let canScan: Bool
     let openImporter: () -> Void
     let openScanner: () -> Void
+    let openImageConverter: () -> Void
+    let openTextConverter: () -> Void
+    let openOfficeConverter: () -> Void
     let openSettings: () -> Void
     let openDocument: (LibraryDocument) -> Void
     let deleteDocument: (LibraryDocument) -> Void
@@ -61,6 +64,16 @@ struct LibraryView: View {
                         Label("Choose PDFs", systemImage: "folder")
                     }
                     .disabled(isImporting)
+                    Divider()
+                    Button(action: openImageConverter) {
+                        Label("Images to PDF", systemImage: "photo.on.rectangle")
+                    }
+                    Button(action: openOfficeConverter) {
+                        Label("Documents to PDF", systemImage: "doc.richtext")
+                    }
+                    Button(action: openTextConverter) {
+                        Label("Text/RTF to PDF", systemImage: "doc.text")
+                    }
                 } label: {
                     if isImporting {
                         ProgressView()
@@ -70,7 +83,7 @@ struct LibraryView: View {
                 }
                 .disabled(isImporting)
                 .accessibilityIdentifier("library.addDocument")
-                .accessibilityHint("Scan paper or choose PDFs from Files")
+                .accessibilityHint("Scan paper, choose PDFs, or convert images and text to PDF")
             }
         }
     }
@@ -121,7 +134,7 @@ struct LibraryView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 28)
 
-                Text("Scan paper or open a PDF to read, search, organize, and mark it up. Everything stays on this device.")
+                Text("Scan paper, open a PDF, or use the Add menu to convert images and text. Read, search, organize, and mark up your documents on this device.")
                     .font(.body)
                     .foregroundStyle(FolikTheme.mutedInk)
                     .multilineTextAlignment(.center)

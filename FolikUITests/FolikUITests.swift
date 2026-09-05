@@ -99,6 +99,105 @@ final class FolikUITests: XCTestCase {
 
         XCTAssertTrue(app.buttons["Scan Document"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["Choose PDFs"].exists)
+        XCTAssertTrue(app.buttons["Images to PDF"].exists)
+        XCTAssertTrue(app.buttons["Text/RTF to PDF"].exists)
+    }
+
+    func testConversionScreensCanBeCancelledWithoutCreatingDocuments() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture"]
+        app.launch()
+        for title in ["Images to PDF", "Text/RTF to PDF"] {
+            app.buttons["library.addDocument"].tap()
+            app.buttons[title].tap()
+            XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 3))
+            XCTAssertFalse(app.buttons["converter.create"].isEnabled)
+            XCTAssertTrue(app.buttons["converter.chooseFiles"].exists)
+            app.buttons["Cancel"].tap()
+            XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 3))
+        }
+    }
+
+    func testImageConversionReviewReordersAndCreatesReadablePDF() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-conversion-selection"]
+        app.launch()
+        app.buttons["library.addDocument"].tap()
+        app.buttons["Images to PDF"].tap()
+        XCTAssertTrue(app.buttons["converter.create"].waitForExistence(timeout: 3))
+        app.buttons["Actions for page 2"].tap()
+        app.buttons["Move Up"].tap()
+        app.buttons["converter.create"].tap()
+        XCTAssertTrue(app.navigationBars["Converted Images"].waitForExistence(timeout: 20))
+        XCTAssertEqual(app.staticTexts["reader.pageStatus"].label, "Page 1 of 2")
+        app.buttons["reader.panel.find"].tap()
+        let query = app.textFields["reader.find.query"]
+        XCTAssertTrue(query.waitForExistence(timeout: 3))
+        query.tap()
+        query.typeText("Second conversion page")
+        XCTAssertTrue(app.staticTexts["1 of 1"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["reader.pageStatus"].label, "Page 1 of 2")
+    }
+
+    func testTextConversionCreatesMultipageReadablePDF() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-conversion-selection"]
+        app.launch()
+        app.buttons["library.addDocument"].tap()
+        app.buttons["Text/RTF to PDF"].tap()
+        XCTAssertTrue(app.buttons["converter.create"].waitForExistence(timeout: 3))
+        app.buttons["converter.create"].tap()
+        XCTAssertTrue(app.navigationBars["Converted Text"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["reader.nextPage"].isEnabled)
+        app.buttons["reader.panel.find"].tap()
+        let query = app.textFields["reader.find.query"]
+        XCTAssertTrue(query.waitForExistence(timeout: 3))
+        query.tap()
+        query.typeText("Conversion line 119")
+        XCTAssertTrue(app.staticTexts["1 of 1"].waitForExistence(timeout: 5))
+    }
+
+    func testOfficeDocumentsPreviewBeforeSaving() throws {
+        for (name, ext) in [("OfficePreview", "docx"), ("OfficePreview", "odt"), ("LegacyUnicode", "doc"), ("PagesSavedPreview", "pages")] {
+            let bundle = Bundle(for: Self.self)
+            let url = try XCTUnwrap(bundle.url(forResource: name, withExtension: ext, subdirectory: "Fixtures") ?? bundle.url(forResource: name, withExtension: ext))
+            let data = try Data(contentsOf: url)
+            let app = XCUIApplication()
+            app.launchArguments = ["--ui-test-fixture", "--ui-test-office-data", data.base64EncodedString(), ext]
+            app.launch()
+            app.buttons["library.addDocument"].tap()
+            app.buttons["Documents to PDF"].tap()
+            XCTAssertTrue(app.buttons["office.preview"].waitForExistence(timeout: 5))
+            XCTAssertFalse(app.buttons["office.save"].exists)
+            app.buttons["office.preview"].tap()
+            XCTAssertTrue(app.navigationBars["Conversion Preview"].waitForExistence(timeout: 15))
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.name = "Office \(ext) preview"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            XCTAssertTrue(app.buttons["office.save"].exists)
+            if ext == "doc" { XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH 'Text recovery only.'")).firstMatch.exists) }
+            if ext == "pages" { XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH 'Saved Pages preview.'")).firstMatch.exists) }
+            app.buttons["office.save"].tap()
+            XCTAssertTrue(app.navigationBars["Office Example"].waitForExistence(timeout: 10))
+            app.terminate()
+        }
+    }
+
+    func testOfficePreviewCanBeCancelledWithoutSaving() throws {
+        let bundle = Bundle(for: Self.self)
+        let url = try XCTUnwrap(bundle.url(forResource: "OfficePreview", withExtension: "docx", subdirectory: "Fixtures") ?? bundle.url(forResource: "OfficePreview", withExtension: "docx"))
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-office-data", try Data(contentsOf: url).base64EncodedString(), "docx"]
+        app.launch()
+        app.buttons["library.addDocument"].tap()
+        app.buttons["Documents to PDF"].tap()
+        app.buttons["office.preview"].tap()
+        XCTAssertTrue(app.navigationBars["Conversion Preview"].waitForExistence(timeout: 15))
+        app.buttons["Back"].tap()
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["library.document.Office Example.pdf"].exists)
     }
 
     func testScannedPDFTextCanBeFound() {
@@ -134,6 +233,7 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))
         let settingsElements = app.descendants(matching: .any)
         XCTAssertTrue(settingsElements["settings.website"].exists)
+        XCTAssertTrue(settingsElements["settings.openSource"].exists)
         XCTAssertTrue(settingsElements["settings.feedback"].exists)
         XCTAssertTrue(app.staticTexts["Documents stay on this device"].exists)
         XCTAssertTrue(app.staticTexts["Scans and text recognition run locally"].exists)

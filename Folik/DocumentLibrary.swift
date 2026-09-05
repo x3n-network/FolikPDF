@@ -44,7 +44,7 @@ final class DocumentLibrary: ObservableObject {
 
     @discardableResult
     func importDocuments(at sourceURLs: [URL]) async -> [LibraryDocument] {
-        guard !sourceURLs.isEmpty else { return [] }
+        guard !sourceURLs.isEmpty, !isImporting else { return [] }
         isImporting = true
         importStatus = sourceURLs.count == 1 ? "Importing PDF…" : "Importing PDFs…"
         defer {
@@ -68,6 +68,7 @@ final class DocumentLibrary: ObservableObject {
 
     @discardableResult
     func importScannedPages(_ pageImageData: [Data], createdAt: Date = Date()) async -> LibraryDocument? {
+        guard !isImporting else { return nil }
         guard !pageImageData.isEmpty else {
             errorMessage = ScannedPDFError.noPages.localizedDescription
             return nil
@@ -103,6 +104,37 @@ final class DocumentLibrary: ObservableObject {
             errorMessage = "Folik couldn’t create that scan. \(error.localizedDescription)"
             return nil
         }
+    }
+
+    func importConvertedPDF(_ input: PDFConversionInput, named name: String) async throws -> LibraryDocument {
+        guard !isImporting else { throw PDFConversionError.busy }
+        let fileName = try PDFConverter.fileName(name)
+        isImporting = true
+        importStatus = "Creating PDF…"
+        defer {
+            isImporting = false
+            importStatus = nil
+        }
+        let directory = documentsDirectory
+        let destination = try await Task.detached(priority: .userInitiated) {
+            let manager = FileManager.default
+            try manager.createDirectory(at: directory, withIntermediateDirectories: true)
+            let destination = Self.uniqueDestination(named: fileName, in: directory, fileManager: manager)
+            let temporary = directory.appendingPathComponent(".conversion-\(UUID().uuidString).pdf")
+            defer { try? manager.removeItem(at: temporary) }
+            try await PDFConverter.write(input, to: temporary)
+            guard let provider = CGDataProvider(url: temporary as CFURL),
+                  let pdf = CGPDFDocument(provider), pdf.numberOfPages > 0 else {
+                throw CocoaError(.fileWriteUnknown)
+            }
+            try manager.moveItem(at: temporary, to: destination)
+            return destination
+        }.value
+        refresh()
+        guard let document = documents.first(where: { $0.url.standardizedFileURL == destination.standardizedFileURL }) else {
+            throw CocoaError(.fileReadUnknown)
+        }
+        return document
     }
 
     func delete(_ document: LibraryDocument) {

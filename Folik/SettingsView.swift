@@ -4,6 +4,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
     private let companyWebsite = URL(string: "https://x3n.network")!
+    private let openSourceWebsite = URL(string: "https://www.x3n.network/opensource/folik/")!
     private let feedbackEmail = URL(string: "mailto:team@x3n.network?subject=Folik%20Feedback")!
     private let standardEULA = URL(
         string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"
@@ -47,6 +48,17 @@ struct SettingsView: View {
                     .accessibilityLabel("Company Website, x3n.network")
                     .accessibilityHint("Opens in your browser")
 
+                    Link(destination: openSourceWebsite) {
+                        ExternalLinkRow(
+                            title: "Open Source Project",
+                            detail: "Source code, license, and contributions",
+                            systemImage: "chevron.left.forwardslash.chevron.right"
+                        )
+                    }
+                    .accessibilityIdentifier("settings.openSource")
+                    .accessibilityLabel("Folik Open Source Project")
+                    .accessibilityHint("Opens the Folik open source website in your browser")
+
                     Link(destination: feedbackEmail) {
                         ExternalLinkRow(
                             title: "Send Feedback",
@@ -72,7 +84,7 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Text("Folik is open source and licensed under the MIT License.")
+                    Text("Folik is open source and licensed under the MIT License. Visit the project website above to view the source code or contribute.")
                         .font(.footnote)
                         .foregroundStyle(FolikTheme.mutedInk)
                 }
