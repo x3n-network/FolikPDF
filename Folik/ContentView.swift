@@ -3,6 +3,11 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
+private enum PDFToolMode: String, Identifiable {
+    case searchable, compression
+    var id: Self { self }
+}
+
 struct ContentView: View {
     @EnvironmentObject private var library: DocumentLibrary
     @State private var path: [LibraryDocument] = []
@@ -13,7 +18,7 @@ struct ContentView: View {
     @State private var conversionMode: PDFConversionView.Mode?
     @State private var convertedDocument: LibraryDocument?
     @State private var officeConverterPresented = false
-    @State private var searchablePDFPresented = false
+    @State private var pdfToolMode: PDFToolMode?
     @State private var searchText = ""
     @State private var handledDebugLaunch = false
 
@@ -81,10 +86,10 @@ struct ContentView: View {
                 officeConverterPresented = false
             }
         }
-        .sheet(isPresented: $searchablePDFPresented, onDismiss: {
+        .sheet(item: $pdfToolMode, onDismiss: {
             if let document = convertedDocument { convertedDocument = nil; path.append(document) }
-        }) {
-            PDFToolView { document in convertedDocument = document; searchablePDFPresented = false }
+        }) { mode in
+            PDFToolView(compress: mode == .compression) { document in convertedDocument = document; pdfToolMode = nil }
         }
         .onOpenURL { url in
             Task {
@@ -154,7 +159,8 @@ struct ContentView: View {
             openImageConverter: { conversionMode = .images },
             openTextConverter: { conversionMode = .text },
             openOfficeConverter: { officeConverterPresented = true },
-            openSearchablePDF: { searchablePDFPresented = true },
+            openSearchablePDF: { pdfToolMode = .searchable },
+            openCompression: { pdfToolMode = .compression },
             openSettings: { isSettingsPresented = true },
             openDocument: { path.append($0) },
             deleteDocument: library.delete

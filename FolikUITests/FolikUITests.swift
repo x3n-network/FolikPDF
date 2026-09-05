@@ -178,6 +178,27 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Searchable Test"].waitForExistence(timeout: 10))
     }
 
+    func testPDFCompressionPreviewAndSave() throws {
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 700, height: 900)).image { context in
+            UIColor.white.setFill(); context.fill(CGRect(x: 0, y: 0, width: 700, height: 900))
+            ("Invoice number 4827" as NSString).draw(at: CGPoint(x: 60, y: 100), withAttributes: [.font: UIFont.systemFont(ofSize: 36), .foregroundColor: UIColor.black])
+        }
+        let data = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 700, height: 900)).pdfData { context in
+            context.beginPage(); image.draw(in: CGRect(x: 0, y: 0, width: 700, height: 900))
+        }
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-pdf-source", data.base64EncodedString()]
+        app.launch()
+        app.buttons["library.addDocument"].tap(); app.buttons["Compress PDF"].tap()
+        XCTAssertTrue(app.navigationBars["Compress PDF"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["pdfTool.preview"].waitForExistence(timeout: 5))
+        app.buttons["pdfTool.preview"].tap()
+        XCTAssertTrue(app.navigationBars["Conversion Preview"].waitForExistence(timeout: 30))
+        let attachment = XCTAttachment(screenshot: app.screenshot()); attachment.lifetime = .keepAlways; add(attachment)
+        app.buttons["office.save"].tap()
+        XCTAssertTrue(app.navigationBars["Compressed Test"].waitForExistence(timeout: 10))
+    }
+
     func testOfficeDocumentsPreviewBeforeSaving() throws {
         for (name, ext) in [("OfficePreview", "docx"), ("OfficePreview", "odt"), ("LegacyUnicode", "doc"), ("PagesSavedPreview", "pages")] {
             let bundle = Bundle(for: Self.self)

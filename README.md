@@ -42,6 +42,10 @@ Folik is at the beginning of its development. Keep an original copy of important
 
 Folik supports the standard AcroForm widgets that PDFKit can edit on iOS. Checkbox and radio state is saved and restored independently from a field's display string, and radio options with the same field name are counted as one logical field. Required fields are identified from standard field flags and prioritized by the next-field navigator. For documents that expose internal field IDs instead of readable labels, Folik derives a concise label from nearby page text. Folik can place a visual handwritten or typed signature over a document, but it does not yet apply certificate-backed cryptographic signatures to digital-signature fields. XFA-only forms cannot be filled by iOS; Folik detects them and explains the limitation instead of showing an empty or misleading editor. JavaScript calculations and other vendor-specific form behavior may vary, so keep an original copy of important forms.
 
+### PDF compression
+
+Choose **Add (+) → Compress PDF**, then Keep Resolution, Screen Optimized, or Smaller File. Native PDFKit image optimization preserves selectable text and annotations without deliberately flattening them. The preview shows original and result sizes; if optimization would make the file larger, the original bytes are retained and labeled already optimized. Image quality can change, so review before saving a new copy. Protected PDFs are not accepted. Cancellation discards the result after an in-progress native write finishes.
+
 ### Existing-PDF OCR
 
 Choose **Add (+) → Make PDF Searchable**. Folik adds an invisible text layer to scanned pages and saves a reviewed new copy. Pages already containing text or annotations are preserved and skipped; the preview reports the counts. OCR can make mistakes, and page destinations/outlines may change. Protected PDFs are not accepted. Input/output limits are 100 MB, 500 pages, and page dimensions up to 40 inches; raster recognition is limited to 3,500 pixels on the longest side. Original page graphics are retained on processed pages.
