@@ -2,7 +2,13 @@
 
 Folik is a native, local-first PDF reader and workspace for iPhone and iPad. It is free, open source, and built without accounts, ads, analytics, document uploads, or in-app purchases.
 
-[Download FolikPDF on the App Store](https://apps.apple.com/app/folikpdf/id6808051666)
+## [Download FolikPDF on the App Store](https://apps.apple.com/app/folikpdf/id6808051666)
+
+**Free for iPhone and iPad. No accounts, ads, or in-app purchases.**
+
+[Visit the Folik website](https://x3n.network/opensource/folik/)
+
+---
 
 ## Current capabilities
 
