@@ -497,6 +497,39 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(app.buttons["organizer.page.1"].waitForExistence(timeout: 3))
     }
 
+    func testCaptureOCRStoreScreenshot() throws {
+        // Raster-only input exercises real OCR, using fictional meeting notes.
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 700, height: 900)).image { context in
+            UIColor.white.setFill(); context.fill(CGRect(x: 0, y: 0, width: 700, height: 900))
+            func line(_ text: String, _ y: CGFloat, _ size: CGFloat, bold: Bool = false) {
+                (text as NSString).draw(at: CGPoint(x: 50, y: y), withAttributes: [.font: bold ? UIFont.boldSystemFont(ofSize: size) : UIFont.systemFont(ofSize: size), .foregroundColor: UIColor.black])
+            }
+            line("MEETING NOTES", 65, 42, bold: true)
+            line("Harbor Studio / Project review", 130, 24)
+            line("September 6, 2026", 170, 22)
+            line("Key decisions", 260, 30, bold: true)
+            line("Approve the updated project brief.", 315, 24)
+            line("Keep the launch checklist in one place.", 365, 24)
+            line("Next steps", 465, 30, bold: true)
+            line("Share the draft with the team.", 520, 24)
+            line("Schedule a follow-up review.", 570, 24)
+            line("Sample scanned document", 790, 18)
+        }
+        let data = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 700, height: 900)).pdfData { context in
+            context.beginPage(); image.draw(in: CGRect(x: 0, y: 0, width: 700, height: 900))
+        }
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-pdf-source", data.base64EncodedString()]
+        app.launch(); app.buttons["library.addDocument"].tap(); app.buttons["Make PDF Searchable"].tap()
+        XCTAssertTrue(app.buttons["pdfTool.preview"].waitForExistence(timeout: 8))
+        app.buttons["pdfTool.preview"].tap()
+        XCTAssertTrue(app.navigationBars["Conversion Preview"].waitForExistence(timeout: 30))
+        XCTAssertTrue(app.staticTexts["Searchable copy. Your source PDF is unchanged."].exists)
+        capture("08-ocr", in: app)
+        app.buttons["office.save"].tap()
+        XCTAssertTrue(app.navigationBars["Searchable Test"].waitForExistence(timeout: 10))
+    }
+
     func testCaptureVersion101Screenshots() throws {
         let bundle = Bundle(for: Self.self)
         let url = try XCTUnwrap(bundle.url(forResource: "OfficePreview", withExtension: "docx", subdirectory: "Fixtures") ?? bundle.url(forResource: "OfficePreview", withExtension: "docx"))
