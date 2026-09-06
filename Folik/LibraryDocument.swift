@@ -1,6 +1,6 @@
 import Foundation
 
-struct LibraryDocument: Identifiable, Hashable, Sendable {
+nonisolated struct LibraryDocument: Identifiable, Hashable, Sendable {
     let url: URL
     let pageCount: Int
     let fileSize: Int64
