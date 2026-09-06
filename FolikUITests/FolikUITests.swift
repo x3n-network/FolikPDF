@@ -497,6 +497,45 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(app.buttons["organizer.page.1"].waitForExistence(timeout: 3))
     }
 
+    func testCaptureVersion101Screenshots() throws {
+        let bundle = Bundle(for: Self.self)
+        let url = try XCTUnwrap(bundle.url(forResource: "OfficePreview", withExtension: "docx", subdirectory: "Fixtures") ?? bundle.url(forResource: "OfficePreview", withExtension: "docx"))
+        let office = XCUIApplication()
+        office.launchArguments = ["--ui-test-fixture", "--ui-test-office-data", try Data(contentsOf: url).base64EncodedString(), "docx"]
+        office.launch()
+        office.buttons["library.addDocument"].tap(); office.buttons["Documents to PDF"].tap()
+        XCTAssertTrue(office.buttons["office.preview"].waitForExistence(timeout: 8))
+        capture("06-document-conversion", in: office)
+        office.terminate()
+
+        // Entirely fictional sample; no user documents or personal details.
+        let data = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 612, height: 792)).pdfData { context in
+            context.beginPage()
+            func line(_ text: String, _ y: CGFloat, _ size: CGFloat, bold: Bool = false) {
+                (text as NSString).draw(at: CGPoint(x: 48, y: y), withAttributes: [.font: bold ? UIFont.boldSystemFont(ofSize: size) : UIFont.systemFont(ofSize: size), .foregroundColor: UIColor.black])
+            }
+            line("Account: 1234 5678 9012", 72, 22)
+            line("PROJECT SUMMARY", 220, 32, bold: true)
+            line("Harbor Studio / September 2026", 270, 18)
+            line("Prepared for sharing", 350, 24, bold: true)
+            line("Design review and project planning", 395, 18)
+            line("Milestone 1     Discovery complete", 455, 18)
+            line("Milestone 2     Draft approved", 495, 18)
+            line("Milestone 3     Final review scheduled", 535, 18)
+            line("Sample document — fictional information", 710, 14)
+        }
+        let redaction = XCUIApplication()
+        redaction.launchArguments = ["--ui-test-fixture", "--ui-test-pdf-source", data.base64EncodedString()]
+        redaction.launch()
+        redaction.buttons["library.addDocument"].tap(); redaction.buttons["Redact PDF"].tap()
+        let area = redaction.buttons["redaction.addArea"]
+        XCTAssertTrue(area.waitForExistence(timeout: 10))
+        if !area.isHittable { redaction.swipeUp() }; area.tap()
+        redaction.buttons["redaction.preview"].tap()
+        XCTAssertTrue(redaction.navigationBars["Conversion Preview"].waitForExistence(timeout: 30))
+        capture("07-redaction", in: redaction)
+    }
+
     func testCaptureAppStoreScreenshots() throws {
         let library = launchApp()
         XCTAssertTrue(library.navigationBars["Library"].waitForExistence(timeout: 8))
