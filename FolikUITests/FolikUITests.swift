@@ -660,7 +660,7 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(settingsElements["settings.website"].exists)
         XCTAssertTrue(settingsElements["settings.openSource"].exists)
         XCTAssertTrue(settingsElements["settings.feedback"].exists)
-        XCTAssertTrue(app.staticTexts["Version 1.0.2 (2)"].exists)
+        XCTAssertTrue(app.staticTexts["Version 1.0.2 (1)"].exists)
         app.swipeUp()
         XCTAssertTrue(app.staticTexts["Documents stay on this device"].exists)
         XCTAssertTrue(app.staticTexts["Scans and text recognition run locally"].exists)
