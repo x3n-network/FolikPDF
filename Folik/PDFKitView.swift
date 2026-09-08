@@ -1,6 +1,20 @@
 import PDFKit
 import SwiftUI
 
+private final class LayoutAwarePDFView: PDFView {
+    var didLayout: (() -> Void)?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        didLayout?()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        didLayout?()
+    }
+}
+
 struct PDFKitView: UIViewRepresentable {
     @ObservedObject var session: DocumentSession
 
@@ -35,7 +49,9 @@ struct PDFKitView: UIViewRepresentable {
 
     @MainActor
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
-        let pdfView = PDFView()
+        fileprivate let pdfView = LayoutAwarePDFView()
+        private var pendingRestore: (pageIndex: Int, layout: ReaderLayout)?
+        private var isRestoreScheduled = false
         var lastCommandID: UUID?
 
         private let session: DocumentSession
@@ -59,6 +75,7 @@ struct PDFKitView: UIViewRepresentable {
         init(session: DocumentSession) {
             self.session = session
             super.init()
+            pdfView.didLayout = { [weak self] in self?.restoreAfterLayout() }
             pdfView.backgroundColor = FolikTheme.readerCanvasUIColor
             pdfView.clipsToBounds = true
             pdfView.autoScales = true
@@ -117,6 +134,7 @@ struct PDFKitView: UIViewRepresentable {
         }
 
         func stopObserving() {
+            pendingRestore = nil
             NotificationCenter.default.removeObserver(self)
             isObserving = false
         }
@@ -349,11 +367,12 @@ struct PDFKitView: UIViewRepresentable {
         }
 
         @objc private func pageChanged() {
-            guard !isPageReportScheduled else { return }
+            guard pendingRestore == nil, !isPageReportScheduled else { return }
             isPageReportScheduled = true
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 self.isPageReportScheduled = false
+                guard self.pendingRestore == nil, self.isObserving else { return }
                 self.session.reportPage(self.pdfView.currentPage)
             }
         }
@@ -403,14 +422,30 @@ struct PDFKitView: UIViewRepresentable {
             case .setLayout(let layout):
                 setLayout(layout, returningTo: pdfView.currentPage)
             case .restore(let pageIndex, let layout):
-                let page = pdfView.document?.page(at: pageIndex)
-                setLayout(layout, returningTo: page)
+                pendingRestore = (pageIndex, layout)
+                restoreAfterLayout()
             case .save:
                 pdfView.endEditing(true)
                 DispatchQueue.main.async { [weak self] in
                     self?.session.noteFormEditing()
                     self?.session.persistChanges()
                 }
+            }
+        }
+
+        private func restoreAfterLayout() {
+            guard pendingRestore != nil, !isRestoreScheduled,
+                  pdfView.window != nil, pdfView.bounds.width > 0, pdfView.bounds.height > 0 else { return }
+            isRestoreScheduled = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.isRestoreScheduled = false
+                guard self.isObserving, let restore = self.pendingRestore,
+                      self.pdfView.window != nil else { return }
+                self.pdfView.layoutIfNeeded()
+                self.setLayout(restore.layout, returningTo: self.pdfView.document?.page(at: restore.pageIndex))
+                self.pendingRestore = nil
+                self.pageChanged()
             }
         }
 
@@ -426,8 +461,9 @@ struct PDFKitView: UIViewRepresentable {
                     pdfView.displayMode = .twoUpContinuous
                     pdfView.displayDirection = .vertical
                 }
-                if let currentPage { pdfView.go(to: currentPage) }
                 pdfView.autoScales = true
+                pdfView.layoutDocumentView()
+                if let currentPage { pdfView.go(to: currentPage) }
         }
     }
 }

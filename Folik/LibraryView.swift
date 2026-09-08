@@ -34,6 +34,7 @@ struct LibraryView: View {
     var searchStatus: String? = nil
     var searchHits: [URL: LibrarySearchHit] = [:]
     var isSearching = false
+    var hasSearchQuery = false
     private var visibleDocuments: [LibraryDocument] {
         documents.filter {
             let value = library.metadata(for: $0)
@@ -172,6 +173,41 @@ struct LibraryView: View {
                     .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
+            }
+
+            if !hasFilters && !hasSearchQuery && !isSelecting, let resume = library.readingResume {
+                Section {
+                    HStack(alignment: .top, spacing: 8) {
+                        Button { openDocument(resume.document) } label: {
+                            VStack(alignment: .leading, spacing: 5) {
+                                Label("Continue Reading", systemImage: "book")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(FolikTheme.cobalt)
+                                Text(resume.document.displayName)
+                                    .font(.headline)
+                                    .foregroundStyle(FolikTheme.ink)
+                                    .lineLimit(2)
+                                Text("Page \(resume.pageIndex + 1) of \(resume.document.pageCount)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("library.resume")
+                        .accessibilityLabel("Continue reading \(resume.document.displayName), page \(resume.pageIndex + 1) of \(resume.document.pageCount)")
+                        Button(action: library.dismissReadingResume) {
+                            Image(systemName: "xmark")
+                                .font(.body)
+                                .frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Dismiss Continue Reading")
+                        .accessibilityIdentifier("library.dismissResume")
+                    }
+                    .padding(.vertical, 4)
+                }
             }
 
             if !favorites.isEmpty {

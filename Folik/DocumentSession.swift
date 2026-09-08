@@ -375,7 +375,8 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         pageIndex = readerState.pageIndex
         layout = readerState.layout
         bookmarkedPageIndices = self.bookmarkStore.bookmarks(for: item.url, pageCount: pageCount)
-        if !isLocked {
+        if document != nil && !isLocked {
+            self.readerStateStore.markOpened(item.url)
             command = PDFReaderCommand(action: .restore(pageIndex: pageIndex, layout: layout))
         }
     }
@@ -417,6 +418,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
     func unlock(with password: String) -> Bool {
         guard let document, document.unlock(withPassword: password) else { return false }
         isLocked = false
+        readerStateStore.markOpened(item.url)
         outlineEntries = Self.flattenOutline(document.outlineRoot)
         configureForms(in: document)
         refreshAnnotations()

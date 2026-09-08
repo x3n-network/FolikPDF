@@ -87,6 +87,36 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["2 of 2"].waitForExistence(timeout: 3))
     }
 
+    func testContinueReadingResumesAndDismissalPersists() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture"]
+        app.launch()
+        let document = app.buttons["library.document.Folik UI Test.pdf"]
+        XCTAssertTrue(document.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["library.resume"].exists)
+        document.tap()
+        app.buttons["reader.nextPage"].tap()
+        XCTAssertTrue(app.staticTexts["Page 2 of 2"].waitForExistence(timeout: 5))
+        app.navigationBars.buttons["Library"].tap()
+        let resume = app.buttons["library.resume"]
+        XCTAssertTrue(resume.waitForExistence(timeout: 5))
+        XCTAssertTrue(resume.label.contains("page 2 of 2"))
+        capture("library-continue-reading", in: app)
+        resume.tap()
+        XCTAssertTrue(app.staticTexts["Page 2 of 2"].waitForExistence(timeout: 5))
+        app.navigationBars.buttons["Library"].tap()
+        app.buttons["library.dismissResume"].tap()
+        XCTAssertFalse(resume.exists)
+        app.terminate()
+        app.launchArguments = []
+        app.launch()
+        XCTAssertTrue(document.waitForExistence(timeout: 5))
+        XCTAssertFalse(resume.exists)
+        document.tap()
+        app.navigationBars.buttons["Library"].tap()
+        XCTAssertTrue(resume.waitForExistence(timeout: 5))
+    }
+
     func testLibraryAddMenuOffersScanningAndFileImport() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-fixture"]

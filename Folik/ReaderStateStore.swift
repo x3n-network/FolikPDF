@@ -5,6 +5,11 @@ nonisolated struct ReaderState: Equatable, Sendable {
     var layout: ReaderLayout
 }
 
+nonisolated struct LibraryResume: Equatable {
+    let document: LibraryDocument
+    let pageIndex: Int
+}
+
 struct ReaderStateStore {
     private let defaults: UserDefaults
     private let storageKey: String
@@ -28,24 +33,55 @@ struct ReaderStateStore {
 
     func save(_ state: ReaderState, for documentURL: URL) {
         var updated = allStates
-        updated[documentKey(for: documentURL)] = StoredReaderState(
-            pageIndex: max(0, state.pageIndex),
-            layout: state.layout.rawValue
+        let key = documentKey(for: documentURL)
+        let previous = updated[key]
+        updated[key] = StoredReaderState(
+            pageIndex: max(0, state.pageIndex), layout: state.layout.rawValue,
+            lastOpened: previous?.lastOpened, resumeDismissed: previous?.resumeDismissed ?? false
         )
-        defaults.set(updated.mapValues { ["pageIndex": $0.pageIndex, "layout": $0.layout] }, forKey: storageKey)
+        persist(updated)
+    }
+
+    func markOpened(_ documentURL: URL, at date: Date = Date()) {
+        var updated = allStates
+        let key = documentKey(for: documentURL)
+        var state = updated[key] ?? StoredReaderState(pageIndex: 0, layout: ReaderLayout.continuous.rawValue)
+        state.lastOpened = date
+        state.resumeDismissed = false
+        updated[key] = state
+        persist(updated)
+    }
+
+    func mostRecent(in documents: [LibraryDocument]) -> LibraryResume? {
+        let states = allStates
+        let recent = documents.compactMap { document -> (LibraryDocument, StoredReaderState)? in
+            guard let state = states[documentKey(for: document.url)], state.lastOpened != nil else { return nil }
+            return (document, state)
+        }.max { ($0.1.lastOpened ?? .distantPast) < ($1.1.lastOpened ?? .distantPast) }
+        guard let (document, state) = recent, !state.resumeDismissed else { return nil }
+        return LibraryResume(document: document, pageIndex: min(max(0, state.pageIndex), max(0, document.pageCount - 1)))
+    }
+
+    func dismissResume(for documentURL: URL) {
+        var updated = allStates
+        let key = documentKey(for: documentURL)
+        guard var state = updated[key] else { return }
+        state.resumeDismissed = true
+        updated[key] = state
+        persist(updated)
     }
 
     func moveState(from oldURL: URL, to newURL: URL) {
         var updated = allStates
         guard let state = updated.removeValue(forKey: documentKey(for: oldURL)) else { return }
         updated[documentKey(for: newURL)] = state
-        defaults.set(updated.mapValues { ["pageIndex": $0.pageIndex, "layout": $0.layout] }, forKey: storageKey)
+        persist(updated)
     }
 
     func removeState(for documentURL: URL) {
         var updated = allStates
         updated.removeValue(forKey: documentKey(for: documentURL))
-        defaults.set(updated.mapValues { ["pageIndex": $0.pageIndex, "layout": $0.layout] }, forKey: storageKey)
+        persist(updated)
     }
 
     private var allStates: [String: StoredReaderState] {
@@ -53,8 +89,20 @@ struct ReaderStateStore {
             guard let value = entry.value as? [String: Any],
                   let pageIndex = (value["pageIndex"] as? NSNumber)?.intValue,
                   let layout = value["layout"] as? String else { return }
-            result[entry.key] = StoredReaderState(pageIndex: pageIndex, layout: layout)
+            result[entry.key] = StoredReaderState(
+                pageIndex: pageIndex, layout: layout,
+                lastOpened: (value["lastOpened"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue) },
+                resumeDismissed: value["resumeDismissed"] as? Bool ?? false
+            )
         } ?? [:]
+    }
+
+    private func persist(_ states: [String: StoredReaderState]) {
+        defaults.set(states.mapValues { state -> [String: Any] in
+            var value: [String: Any] = ["pageIndex": state.pageIndex, "layout": state.layout, "resumeDismissed": state.resumeDismissed]
+            if let opened = state.lastOpened { value["lastOpened"] = opened.timeIntervalSince1970 }
+            return value
+        }, forKey: storageKey)
     }
 
     private func documentKey(for url: URL) -> String {
@@ -62,7 +110,9 @@ struct ReaderStateStore {
     }
 
     private struct StoredReaderState {
-        let pageIndex: Int
-        let layout: String
+        var pageIndex: Int
+        var layout: String
+        var lastOpened: Date? = nil
+        var resumeDismissed = false
     }
 }

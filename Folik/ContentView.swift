@@ -189,6 +189,7 @@ struct ContentView: View {
             searchStatus: searchResult.skipped > 0 ? "Skipped \(searchResult.skipped) protected, unreadable, or oversized documents." : nil,
             searchHits: searchResult.hits,
             isSearching: searchingText,
+            hasSearchQuery: !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             documents: filteredDocuments,
             isImporting: library.isImporting,
             importStatus: library.importStatus,

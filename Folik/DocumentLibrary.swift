@@ -12,6 +12,7 @@ final class DocumentLibrary: ObservableObject {
     @Published private(set) var isImporting = false
     @Published private(set) var importStatus: String?
     @Published private(set) var organization: [String: LibraryMetadata] = [:]
+    @Published private(set) var readingResume: LibraryResume?
     @Published var errorMessage: String?
 
     private let fileManager: FileManager
@@ -270,6 +271,11 @@ final class DocumentLibrary: ObservableObject {
         for document in documents { delete(document) }
     }
 
+    func dismissReadingResume() {
+        if let readingResume { readerStateStore.dismissResume(for: readingResume.document.url) }
+        readingResume = nil
+    }
+
     func refresh() {
         do {
             try fileManager.createDirectory(at: documentsDirectory, withIntermediateDirectories: true)
@@ -294,6 +300,7 @@ final class DocumentLibrary: ObservableObject {
             }
             .sorted { $0.modifiedAt > $1.modifiedAt }
             organization = try LibraryOrganization.load(from: organizationURL)
+            readingResume = readerStateStore.mostRecent(in: documents)
         } catch {
             errorMessage = "Folik couldn’t load your library. \(error.localizedDescription)"
         }

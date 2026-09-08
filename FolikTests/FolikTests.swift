@@ -249,6 +249,34 @@ final class DocumentSessionTests: XCTestCase {
         XCTAssertEqual(store.state(for: url, pageCount: 3), ReaderState(pageIndex: 1, layout: .singlePage))
     }
 
+    func testContinueReadingTracksOpensPreservesDismissalAndMigratesRename() throws {
+        let suite = "FolikResume-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ReaderStateStore(defaults: defaults)
+        let first = workspace.appendingPathComponent("First.pdf")
+        let second = workspace.appendingPathComponent("Second.pdf")
+        try PDFTestFixture.write(to: first, pages: ["1", "2"])
+        try PDFTestFixture.write(to: second, pages: ["1"])
+        let documents = [PDFTestFixture.item(for: first), PDFTestFixture.item(for: second)]
+        store.save(ReaderState(pageIndex: 1, layout: .singlePage), for: first)
+        XCTAssertNil(store.mostRecent(in: documents), "Old reading state must not invent an open date")
+        store.markOpened(first, at: Date(timeIntervalSince1970: 100))
+        store.markOpened(second, at: Date(timeIntervalSince1970: 200))
+        store.save(ReaderState(pageIndex: 1, layout: .twoUp), for: first)
+        XCTAssertEqual(store.mostRecent(in: documents)?.document.url, second)
+        store.dismissResume(for: second)
+        XCTAssertNil(ReaderStateStore(defaults: defaults).mostRecent(in: documents))
+        store.markOpened(first, at: Date(timeIntervalSince1970: 300))
+        XCTAssertEqual(store.mostRecent(in: documents)?.pageIndex, 1)
+        let renamed = workspace.appendingPathComponent("Renamed.pdf")
+        try FileManager.default.moveItem(at: first, to: renamed)
+        store.moveState(from: first, to: renamed)
+        XCTAssertEqual(store.mostRecent(in: [PDFTestFixture.item(for: renamed)])?.pageIndex, 1)
+        store.removeState(for: renamed)
+        XCTAssertNil(store.mostRecent(in: [PDFTestFixture.item(for: renamed)]))
+    }
+
     func testReaderStateClampsStalePageIndexes() throws {
         let suiteName = "FolikReaderBoundsTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

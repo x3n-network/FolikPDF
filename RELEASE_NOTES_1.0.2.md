@@ -78,3 +78,10 @@ Your documents and reading activity remain on your device. No accounts, ads, ana
 - Reviewed final iPad light-mode and iPhone dark-mode screenshots, including source filenames in tool sheets. Corrected an oversized controls row and restored visible menu labels during visual QA.
 - Generic simulator build and final whitespace checks passed. An initial UI-test failure was caused by the test not scrolling to Compress PDF on iPhone 17e; the corrected workflow passed on iPhone and iPad.
 - This was focused post-redesign UI validation, not a repeat of the earlier complete UI suite. Physical-device, manual VoiceOver, and large-PDF performance checks remain release QA tasks. The mobile audit script does not inspect Swift files and supplied no useful coverage.
+
+### Continue Reading
+
+- Shows the most recently opened local PDF with its saved page. Tap to resume; dismiss to hide it until a document is opened again.
+- Hides the card while searching, filtering, or selecting documents.
+- Preserves recent-reading information through renames and keeps existing reading-state data compatible. Opening history remains on-device.
+- Defers PDFKit restoration until its view has a usable layout so reopening a PDF actually returns to the saved page. Four focused persistence tests and two iPhone resume/navigation UI tests passed.
