@@ -36,6 +36,13 @@ struct SettingsView: View {
                     .listRowBackground(Color.clear)
                 }
 
+                Section("Library") {
+                    NavigationLink { RecentlyDeletedView() } label: {
+                        Label("Recently Deleted", systemImage: "trash")
+                    }
+                    .accessibilityIdentifier("settings.recentlyDeleted")
+                }
+
                 Section("X3N") {
                     Link(destination: companyWebsite) {
                         ExternalLinkRow(

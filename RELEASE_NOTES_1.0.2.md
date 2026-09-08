@@ -2,7 +2,11 @@
 
 ## App Store “What’s New”
 
-- Pick up where you left off: Folik now remembers the last page and page layout for each PDF.
+- Pick up where you left off with Continue Reading and remembered page layouts.
+- Choose a larger document grid or the compact list.
+- Merge selected PDFs, review their order, and save a new copy.
+- Get clearer search results and make scanned PDFs searchable from the library.
+- Restore removed PDFs and their saved organization from Recently Deleted.
 - Rename and favorite documents directly from the library.
 - Sort by newest, oldest, name, or file size, with favorites kept at the top.
 - Select multiple documents to organize, favorite, share, or remove them together.
@@ -18,7 +22,7 @@ Your documents and reading activity remain on your device. No accounts, ads, ana
 - Persists the last-viewed page and continuous, single-page, or two-page layout independently for each local PDF.
 - Clamps saved page positions if a document later contains fewer pages.
 - Restores reading state after unlocking a password-protected document without storing its password.
-- Removes saved reading state when the local document is removed.
+- Archives saved reading state with removed PDFs so it returns when they are restored.
 
 ### Library management
 
@@ -105,3 +109,9 @@ Your documents and reading activity remain on your device. No accounts, ads, ana
 - Grid uses larger page previews and adapts from two to four columns by width, with one column at accessibility text sizes. Native list rows keep large libraries virtualized.
 - Keeps document menus, selection, favorites, search excerpts, and filters available in both layouts. Scrolling dismisses the search keyboard interactively.
 - Two focused iPhone checks and two iPad checks passed, covering grid persistence/actions/selection, favorites, and largest-text document access. Reviewed phone/tablet grid screenshots.
+
+### Recently Deleted
+- Removed PDFs remain locally recoverable until explicitly deleted permanently. Restore preserves folders, tags, favorites, bookmarks, and reading position. Filename collisions produce a new name without replacing an existing PDF.
+- Recovery is available from the library and Settings, including after removing the last document. Permanent deletion requires confirmation.
+- Final unit suite: 93 passed and one optional private-file test skipped. Recovery tests cover exact PDF bytes, relaunch, filename collisions, metadata/reading-state restoration, permanent deletion, and corrupt metadata preservation.
+- Recovery and Settings UI tests passed on iPhone. Final iPad checks passed for recovery, Continue Reading, and reader navigation. Reviewed the recovery screenshot and fixed sheet ownership across empty/populated library transitions.

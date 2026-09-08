@@ -78,6 +78,14 @@ struct ReaderStateStore {
         persist(updated)
     }
 
+    func snapshot(for url: URL) -> StoredReaderState? { allStates[documentKey(for: url)] }
+
+    func restore(_ snapshot: StoredReaderState?, for url: URL) {
+        var updated = allStates
+        updated[documentKey(for: url)] = snapshot
+        persist(updated)
+    }
+
     func removeState(for documentURL: URL) {
         var updated = allStates
         updated.removeValue(forKey: documentKey(for: documentURL))
@@ -109,7 +117,7 @@ struct ReaderStateStore {
         url.standardizedFileURL.path
     }
 
-    private struct StoredReaderState {
+    struct StoredReaderState: Codable, Equatable, Sendable {
         var pageIndex: Int
         var layout: String
         var lastOpened: Date? = nil

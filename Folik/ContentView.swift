@@ -10,6 +10,7 @@ private struct LibraryPDFToolRequest: Identifiable {
 }
 
 struct ContentView: View {
+    @State private var showingDeleted = false
     @EnvironmentObject private var library: DocumentLibrary
     @State private var path: [LibraryDocument] = []
     @State private var isImporterPresented = false
@@ -167,6 +168,12 @@ struct ContentView: View {
             }
             #endif
         }
+        .sheet(isPresented: $showingDeleted) {
+            NavigationStack {
+                RecentlyDeletedView()
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingDeleted = false } } }
+            }
+        }
         .alert("Couldn’t complete that action", isPresented: errorIsPresented) {
             Button("OK", role: .cancel) { library.errorMessage = nil }
         } message: {
@@ -200,6 +207,7 @@ struct ContentView: View {
             openScanner: beginScanning,
             openTools: { toolsPresented = true },
             openSettings: { isSettingsPresented = true },
+            openRecentlyDeleted: { showingDeleted = true },
             openDocument: { path.append($0) },
             deleteDocument: library.delete,
             openDocumentTool: { tool, document in

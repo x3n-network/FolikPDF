@@ -27,3 +27,5 @@ The current app does not require network access for its functionality.
 The open-source app does not include third-party analytics or tracking. Apple may provide developers with aggregated App Store or crash information according to a user's device and App Store privacy settings.
 
 This document describes the current source tree. Any future feature that changes these guarantees must update this file before release.
+
+Removed library PDFs are retained locally in Recently Deleted until the user restores them or explicitly deletes them permanently. Recovery preserves organization, favorites, bookmarks, and reading position. Folik does not automatically expire removed PDFs.

@@ -13,6 +13,9 @@ final class DocumentLibrary: ObservableObject {
     @Published private(set) var importStatus: String?
     @Published private(set) var organization: [String: LibraryMetadata] = [:]
     @Published private(set) var readingResume: LibraryResume?
+    @Published private(set) var recentlyDeleted: [DeletedDocument] = []
+    @Published private(set) var unreadableDeletedCount = 0
+    private var trash: RecentlyDeletedStore { RecentlyDeletedStore(root: documentsDirectory.appendingPathComponent(".folik-trash", isDirectory: true)) }
     @Published var errorMessage: String?
 
     private let fileManager: FileManager
@@ -256,15 +259,55 @@ final class DocumentLibrary: ObservableObject {
     func delete(_ document: LibraryDocument) {
         defer { refresh() }
         do {
-            try fileManager.removeItem(at: document.url)
+            let previous = try LibraryOrganization.load(from: organizationURL)
+            let record = DeletedDocument(id: UUID(), originalFilename: document.url.lastPathComponent,
+                deletedAt: Date(), metadata: previous[document.url.lastPathComponent] ?? LibraryMetadata(),
+                bookmarks: Array(bookmarkStore.bookmarks(for: document.url, pageCount: document.pageCount)),
+                readerState: readerStateStore.snapshot(for: document.url))
+            try trash.archive(record, from: document.url)
+            var records = previous
+            records.removeValue(forKey: record.originalFilename)
+            do { try LibraryOrganization.save(records, to: organizationURL) }
+            catch {
+                try fileManager.moveItem(at: trash.pdf(record.id), to: document.url)
+                try? trash.remove(record.id)
+                throw error
+            }
             bookmarkStore.removeBookmarks(for: document.url)
             readerStateStore.removeState(for: document.url)
-            var records = try LibraryOrganization.load(from: organizationURL)
-            records.removeValue(forKey: document.url.lastPathComponent)
-            try LibraryOrganization.save(records, to: organizationURL)
         } catch {
-            errorMessage = "Folik couldn’t remove \(document.displayName). \(error.localizedDescription)"
+            errorMessage = "Folik couldn’t move \(document.displayName) to Recently Deleted. \(error.localizedDescription)"
         }
+    }
+
+    @discardableResult
+    func restoreDeleted(_ item: DeletedDocument) throws -> URL {
+        defer { refresh() }
+        let record = try trash.read(item.id)
+        let destination = Self.uniqueDestination(named: record.originalFilename, in: documentsDirectory, fileManager: fileManager)
+        let previous = try LibraryOrganization.load(from: organizationURL)
+        var records = previous
+        records[destination.lastPathComponent] = record.metadata
+        // Save metadata first: an interruption after moving the PDF cannot lose its organization.
+        try LibraryOrganization.save(records, to: organizationURL)
+        let oldState = readerStateStore.snapshot(for: destination)
+        let oldBookmarks = bookmarkStore.bookmarks(for: destination, pageCount: Int.max)
+        readerStateStore.restore(record.readerState, for: destination)
+        bookmarkStore.save(Set(record.bookmarks), for: destination)
+        do { try fileManager.moveItem(at: trash.pdf(record.id), to: destination) }
+        catch {
+            readerStateStore.restore(oldState, for: destination)
+            bookmarkStore.save(oldBookmarks, for: destination)
+            try LibraryOrganization.save(previous, to: organizationURL)
+            throw error
+        }
+        try? trash.remove(record.id)
+        return destination
+    }
+
+    func permanentlyDelete(_ item: DeletedDocument) throws {
+        defer { refresh() }
+        try trash.remove(item.id)
     }
 
     func delete(_ documents: [LibraryDocument]) {
@@ -299,7 +342,21 @@ final class DocumentLibrary: ObservableObject {
                 )
             }
             .sorted { $0.modifiedAt > $1.modifiedAt }
-            organization = try LibraryOrganization.load(from: organizationURL)
+            let inventory = try trash.inventory()
+            recentlyDeleted = inventory.documents
+            unreadableDeletedCount = inventory.unreadable
+            var records = try LibraryOrganization.load(from: organizationURL)
+            let previous = records
+            for archived in recentlyDeleted {
+                let source = documentsDirectory.appendingPathComponent(archived.originalFilename)
+                if !fileManager.fileExists(atPath: source.path) {
+                    records.removeValue(forKey: archived.originalFilename)
+                    bookmarkStore.removeBookmarks(for: source)
+                    readerStateStore.removeState(for: source)
+                }
+            }
+            if records != previous { try LibraryOrganization.save(records, to: organizationURL) }
+            organization = records
             readingResume = readerStateStore.mostRecent(in: documents)
         } catch {
             errorMessage = "Folik couldn’t load your library. \(error.localizedDescription)"
@@ -319,6 +376,7 @@ final class DocumentLibrary: ObservableObject {
                 try fileManager.removeItem(at: url)
             }
 
+            try? fileManager.removeItem(at: trash.root)
             try? fileManager.removeItem(at: organizationURL)
             let fixtureURL = documentsDirectory.appendingPathComponent("Folik UI Test.pdf")
             bookmarkStore.removeBookmarks(for: fixtureURL)

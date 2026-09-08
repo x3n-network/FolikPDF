@@ -6,6 +6,34 @@ final class FolikUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testRecentlyDeletedRestoresLastPDFAndConfirmsPermanentDeletion() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Document actions"].waitForExistence(timeout: 5))
+        app.buttons["Document actions"].tap()
+        app.buttons["Move to Recently Deleted"].tap()
+        app.buttons["library.recentlyDeleted"].tap()
+        let restore = app.buttons["trash.restore.Folik UI Test.pdf"]
+        XCTAssertTrue(restore.waitForExistence(timeout: 3))
+        capture("Recently Deleted", in: app)
+        restore.tap()
+        XCTAssertTrue(app.staticTexts["No Deleted Documents"].waitForExistence(timeout: 3))
+        app.navigationBars["Recently Deleted"].buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["library.document.Folik UI Test.pdf"].waitForExistence(timeout: 3))
+        app.buttons["Document actions"].tap()
+        app.buttons["Move to Recently Deleted"].tap()
+        app.buttons["library.recentlyDeleted"].tap()
+        let delete = app.buttons["trash.delete.Folik UI Test.pdf"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 3))
+        delete.tap()
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(restore.exists)
+        delete.tap()
+        app.alerts.buttons["Delete Permanently"].tap()
+        XCTAssertTrue(app.staticTexts["No Deleted Documents"].waitForExistence(timeout: 3))
+    }
+
     func testLibraryOpensDocumentAndAdvancesPage() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-fixture"]
@@ -632,9 +660,10 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(settingsElements["settings.website"].exists)
         XCTAssertTrue(settingsElements["settings.openSource"].exists)
         XCTAssertTrue(settingsElements["settings.feedback"].exists)
+        XCTAssertTrue(app.staticTexts["Version 1.0.2 (2)"].exists)
+        app.swipeUp()
         XCTAssertTrue(app.staticTexts["Documents stay on this device"].exists)
         XCTAssertTrue(app.staticTexts["Scans and text recognition run locally"].exists)
-        XCTAssertTrue(app.staticTexts["Version 1.0.2 (2)"].exists)
         app.swipeUp()
         XCTAssertTrue(settingsElements["settings.eula"].waitForExistence(timeout: 3))
     }

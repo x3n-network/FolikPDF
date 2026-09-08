@@ -63,6 +63,7 @@ struct LibraryView: View {
     let openScanner: () -> Void
     let openTools: () -> Void
     let openSettings: () -> Void
+    var openRecentlyDeleted: () -> Void = {}
     let openDocument: (LibraryDocument) -> Void
     let deleteDocument: (LibraryDocument) -> Void
     let openDocumentTool: (LibraryPDFTool, LibraryDocument) -> Void
@@ -121,14 +122,14 @@ struct LibraryView: View {
             isPresented: $confirmBulkDelete,
             titleVisibility: .visible
         ) {
-            Button("Remove from Folik", role: .destructive) {
+            Button("Move to Recently Deleted", role: .destructive) {
                 library.delete(selectedDocuments)
                 selection.removeAll()
                 isSelecting = false
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This removes the local copies. This action cannot be undone.")
+            Text("You can restore these PDFs from Recently Deleted.")
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { availableWidth = $0 }
         .background(FolikTheme.surface)
@@ -305,6 +306,15 @@ struct LibraryView: View {
                     .padding(.vertical, 4)
                 }
             }
+            if !library.recentlyDeleted.isEmpty || library.unreadableDeletedCount > 0 {
+                Section {
+                    Button { openRecentlyDeleted() } label: {
+                        Label("Recently Deleted (\(library.recentlyDeleted.count))", systemImage: "trash")
+                            .frame(minHeight: 44)
+                    }
+                    .accessibilityIdentifier("library.recentlyDeleted")
+                }
+            }
             Section {
                 Label("On-device & private", systemImage: "lock.shield")
                     .font(.footnote)
@@ -476,6 +486,11 @@ struct LibraryView: View {
     private var emptyLibrary: some View {
         ScrollView {
             VStack(spacing: 0) {
+                if !library.recentlyDeleted.isEmpty || library.unreadableDeletedCount > 0 {
+                    Button("Recently Deleted") { openRecentlyDeleted() }
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("library.recentlyDeleted")
+                }
                 Spacer(minLength: 68)
                 FolikWordmark()
                     .padding(.bottom, 36)
@@ -733,7 +748,7 @@ private struct DocumentRow: View {
                         Label("Share a copy", systemImage: "square.and.arrow.up")
                     }
                     Button(role: .destructive, action: delete) {
-                        Label("Remove from Folik", systemImage: "trash")
+                        Label("Move to Recently Deleted", systemImage: "trash")
                     }
                 } label: {
                     Image(systemName: "ellipsis")
