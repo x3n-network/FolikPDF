@@ -22,6 +22,9 @@ private struct LibraryDocumentSelection: Identifiable {
 
 struct LibraryView: View {
     @EnvironmentObject private var library: DocumentLibrary
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @AppStorage("folik.libraryGridLayout") private var isGrid = false
+    @State private var availableWidth: CGFloat = 390
     @AppStorage("folik.librarySortOrder") private var sortOrderRawValue = LibrarySortOrder.newest.rawValue
     @State private var organizing: LibraryDocumentSelection?
     @State private var renaming: LibraryDocument?
@@ -127,6 +130,7 @@ struct LibraryView: View {
         } message: {
             Text("This removes the local copies. This action cannot be undone.")
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { availableWidth = $0 }
         .background(FolikTheme.surface)
         .navigationTitle("Library")
         .navigationBarTitleDisplayMode(.large)
@@ -314,6 +318,7 @@ struct LibraryView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .scrollDismissesKeyboard(.interactively)
         .listSectionSpacing(16)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if isSelecting { bulkActionBar }
@@ -327,10 +332,15 @@ struct LibraryView: View {
                     sortMenu
                     Spacer(minLength: 8)
                     filterMenu
+                    layoutMenu
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     sortMenu
-                    filterMenu
+                    HStack {
+                        filterMenu
+                        Spacer(minLength: 8)
+                        layoutMenu
+                    }
                 }
             }
             .fixedSize(horizontal: false, vertical: true)
@@ -355,6 +365,21 @@ struct LibraryView: View {
             if isSearching { ProgressView("Searching document text…").font(.footnote) }
         }
         .buttonStyle(.borderless)
+    }
+
+    private var layoutMenu: some View {
+        Menu {
+            Picker("Library layout", selection: $isGrid) {
+                Label("List", systemImage: "list.bullet").tag(false)
+                Label("Grid", systemImage: "square.grid.2x2").tag(true)
+            }
+        } label: {
+            Image(systemName: isGrid ? "square.grid.2x2.fill" : "list.bullet")
+                .frame(width: 44, height: 44)
+        }
+        .accessibilityLabel("Library layout")
+        .accessibilityValue(isGrid ? "Grid" : "List")
+        .accessibilityIdentifier("library.layout")
     }
 
     private var sortMenu: some View {
@@ -402,9 +427,33 @@ struct LibraryView: View {
         .accessibilityIdentifier("library.filter")
     }
 
+    @ViewBuilder
     private func documentRows(_ items: [LibraryDocument]) -> some View {
-        ForEach(items) { document in
+        if isGrid {
+            let columns = dynamicTypeSize.isAccessibilitySize ? 1 : max(2, min(4, Int((availableWidth - 32) / 170)))
+            ForEach(Array(stride(from: 0, to: items.count, by: columns)), id: \.self) { start in
+                HStack(alignment: .top, spacing: 12) {
+                    ForEach(Array(items[start..<min(start + columns, items.count)])) { document in
+                        documentItem(document)
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                    }
+                    ForEach(0..<max(0, columns - (items.count - start)), id: \.self) { _ in
+                        Color.clear.frame(maxWidth: .infinity).accessibilityHidden(true)
+                    }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 12, trailing: 0))
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+            }
+        } else {
+            ForEach(items) { document in documentItem(document) }
+        }
+    }
+
+    private func documentItem(_ document: LibraryDocument) -> some View {
             DocumentRow(
+                isGrid: isGrid,
                 document: document,
                 metadata: library.metadata(for: document),
                 hit: searchHits[document.url],
@@ -422,7 +471,6 @@ struct LibraryView: View {
                 delete: { deleteDocument(document) },
                 openTool: { openDocumentTool($0, document) }
             )
-        }
     }
 
     private var emptyLibrary: some View {
@@ -584,6 +632,7 @@ struct LibraryView: View {
 
 private struct DocumentRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    var isGrid = false
     let document: LibraryDocument
     let metadata: LibraryMetadata
     let hit: LibrarySearchHit?
@@ -607,11 +656,43 @@ private struct DocumentRow: View {
         return details.joined(separator: ", ")
     }
 
+    @ViewBuilder
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        if isGrid {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    if isSelecting {
+                        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(FolikTheme.cobalt)
+                            .frame(width: 44, height: 44)
+                            .accessibilityHidden(true)
+                            .onTapGesture(perform: toggleSelection)
+                    }
+                    Spacer(minLength: 0)
+                    if !isSelecting { actionsMenu }
+                }
+                documentButton
+            }
+            .padding(12)
+            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+            .overlay {
+                if isSelecting && isSelected {
+                    RoundedRectangle(cornerRadius: 16).stroke(FolikTheme.cobalt, lineWidth: 2)
+                }
+            }
+        } else {
+            HStack(alignment: .top, spacing: 8) {
+                documentButton
+                if !isSelecting { actionsMenu }
+            }
+            .padding(.vertical, 8)
+        }
+    }
+
+    private var documentButton: some View {
             Button(action: isSelecting ? toggleSelection : open) {
                 HStack(spacing: 12) {
-                    if isSelecting {
+                    if isSelecting && !isGrid {
                         Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                             .font(.title3)
                             .foregroundStyle(isSelected ? FolikTheme.cobalt : FolikTheme.mutedInk)
@@ -629,7 +710,9 @@ private struct DocumentRow: View {
             .accessibilityHint(isSelecting ? "Toggles selection" : "Opens the PDF")
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            if !isSelecting {
+    }
+
+    private var actionsMenu: some View {
                 Menu {
                     Button(action: toggleFavorite) {
                         Label(metadata.isFavorite ? "Remove Favorite" : "Favorite", systemImage: metadata.isFavorite ? "star.slash" : "star")
@@ -660,18 +743,16 @@ private struct DocumentRow: View {
                 }
                 .accessibilityLabel("Document actions")
                 .accessibilityHint(document.displayName)
-            }
-        }
-        .padding(.vertical, 8)
     }
 
     private var documentContent: some View {
-        let layout = dynamicTypeSize.isAccessibilitySize
+        let layout = isGrid || dynamicTypeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
             : AnyLayout(HStackLayout(alignment: .center, spacing: 14))
         return layout {
-            PDFCoverThumbnail(url: document.url)
-                .frame(width: 60, height: 80)
+            PDFCoverThumbnail(url: document.url, thumbnailSize: isGrid ? CGSize(width: 200, height: 260) : CGSize(width: 104, height: 136))
+                .frame(width: isGrid ? nil : 60, height: isGrid ? 170 : 80)
+                .frame(maxWidth: isGrid ? .infinity : nil)
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -716,6 +797,7 @@ private struct DocumentRow: View {
 
 private struct PDFCoverThumbnail: View {
     let url: URL
+    var thumbnailSize = CGSize(width: 104, height: 136)
     @State private var image: UIImage?
     @State private var request: QLThumbnailGenerator.Request?
 
@@ -742,6 +824,7 @@ private struct PDFCoverThumbnail: View {
         .onAppear(perform: loadThumbnail)
         .onDisappear {
             if let request { QLThumbnailGenerator.shared.cancel(request) }
+            request = nil
         }
         .accessibilityHidden(true)
     }
@@ -750,7 +833,7 @@ private struct PDFCoverThumbnail: View {
         guard image == nil, request == nil else { return }
         let request = QLThumbnailGenerator.Request(
             fileAt: url,
-            size: CGSize(width: 104, height: 136),
+            size: thumbnailSize,
             scale: UIScreen.main.scale,
             representationTypes: .thumbnail
         )

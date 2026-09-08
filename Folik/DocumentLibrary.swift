@@ -308,6 +308,7 @@ final class DocumentLibrary: ObservableObject {
 
     #if DEBUG
     func prepareUITestFixture() {
+        UserDefaults.standard.set(false, forKey: "folik.libraryGridLayout")
         do {
             try fileManager.createDirectory(at: documentsDirectory, withIntermediateDirectories: true)
             for url in try fileManager.contentsOfDirectory(

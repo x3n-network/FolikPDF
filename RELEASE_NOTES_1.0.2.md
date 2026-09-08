@@ -98,3 +98,10 @@ Your documents and reading activity remain on your device. No accounts, ads, ana
 - Offers Make PDF Searchable for the relevant PDFs, with direct loading for a single candidate or a document chooser for several. Folder, tag, and favorite filters apply to these suggestions.
 - Adds Clear search to empty results and reports searching during the debounce interval. Search remains on-device and does not modify source PDFs.
 - Seven organization/search unit tests and two iPhone search/OCR UI tests passed; reviewed the empty-results guidance screenshot.
+
+### Optional document grid
+
+- Adds a remembered List/Grid choice beside the library controls; List remains the default.
+- Grid uses larger page previews and adapts from two to four columns by width, with one column at accessibility text sizes. Native list rows keep large libraries virtualized.
+- Keeps document menus, selection, favorites, search excerpts, and filters available in both layouts. Scrolling dismisses the search keyboard interactively.
+- Two focused iPhone checks and two iPad checks passed, covering grid persistence/actions/selection, favorites, and largest-text document access. Reviewed phone/tablet grid screenshots.

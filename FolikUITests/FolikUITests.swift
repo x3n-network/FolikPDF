@@ -176,6 +176,49 @@ final class FolikUITests: XCTestCase {
         XCTAssertFalse(app.buttons["library.searchOCR"].exists)
     }
 
+    func testGridLayoutPersistsAndSupportsSelectionAndDocumentTools() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-library-pair"]
+        app.launch()
+        XCTAssertTrue(app.buttons["library.layout"].waitForExistence(timeout: 5))
+        app.buttons["library.layout"].tap()
+        app.buttons["Grid"].tap()
+        XCTAssertEqual(app.buttons["library.layout"].value as? String, "Grid")
+        XCTAssertTrue(app.buttons["library.document.Second.pdf"].isHittable)
+        capture("library-grid", in: app)
+        app.buttons["library.select"].tap()
+        app.buttons["library.document.Second.pdf"].tap()
+        XCTAssertEqual(app.buttons["library.document.Second.pdf"].value as? String, "Selected")
+        app.buttons["library.select"].tap()
+        app.terminate()
+        app.launchArguments = []
+        app.launch()
+        XCTAssertTrue(app.buttons["library.layout"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["library.layout"].value as? String, "Grid")
+        app.buttons["Document actions"].firstMatch.tap()
+        app.buttons["Tools"].tap()
+        XCTAssertTrue(app.buttons["Compress PDF"].exists)
+        app.navigationBars["Library"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        app.buttons["library.layout"].tap()
+        app.buttons["List"].tap()
+        XCTAssertEqual(app.buttons["library.layout"].value as? String, "List")
+    }
+
+    func testGridAtAccessibilityTextSizeKeepsDocumentsReachable() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-library-pair", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        XCTAssertTrue(app.buttons["library.layout"].waitForExistence(timeout: 5))
+        app.buttons["library.layout"].tap()
+        app.buttons["Grid"].tap()
+        let document = app.buttons["library.document.Folik UI Test.pdf"]
+        for _ in 0..<5 where !document.exists || !document.isHittable { app.swipeUp() }
+        XCTAssertTrue(document.isHittable)
+        capture("library-grid-largest-text", in: app)
+        document.tap()
+        XCTAssertTrue(app.navigationBars["Folik UI Test"].waitForExistence(timeout: 5))
+    }
+
     func testLibraryAddMenuOffersScanningAndFileImport() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-fixture"]
