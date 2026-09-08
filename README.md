@@ -10,6 +10,12 @@ Folik is a native, local-first PDF reader and workspace for iPhone and iPad. It 
 
 ---
 
+<p align="center">
+  <img src="docs/screenshots/folik-library-1.0.2.jpg" width="320" alt="Folik 1.0.2 on iPhone: a private PDF library with Continue Reading, favorites, folders, and document previews." />
+</p>
+
+The updated library in **Folik 1.0.2**. Browse in a list or grid, resume reading, merge selected PDFs, and recover removed documents from Recently Deleted.
+
 ## Current capabilities
 
 - Import one or more PDFs from Files
@@ -20,11 +26,13 @@ Folik is a native, local-first PDF reader and workspace for iPhone and iPad. It 
 - Convert TXT (UTF-8/UTF-16) or basic RTF documents up to 5 MB into searchable PDFs with Letter-size pages; complex layouts and attachments are not supported
 - Open PDFs in Folik from Files, Mail, Safari, and other apps using the system share sheet or Open In menu
 - Scan multi-page paper documents with automatic edge detection and perspective correction, then add an on-device searchable text layer and save them as local PDFs
-- Keep a private on-device document library with virtual folders and tags
+- Keep a private on-device document library with virtual folders and tags, plus a remembered list or adaptive grid layout
+- Combine 2–20 selected library PDFs, review the merged result, and save a new copy
+- Restore PDFs from Recently Deleted with their folders, tags, favorites, bookmarks, and reading position; permanent deletion requires confirmation
 - Rename, favorite, and sort documents, or select several to organize, share, favorite, or remove together
 - Search filenames, folders, tags, and selectable PDF text across the library, with matching page excerpts
 - Read PDFs with native PDFKit rendering
-- Resume each PDF at its last-viewed page and restore its continuous, single-page, or two-page layout
+- Resume each PDF at its last-viewed page and restore its continuous, single-page, or two-page layout, with a dismissible Continue Reading card
 - Browse page thumbnails and document outlines
 - Bookmark important pages locally and filter the Pages panel to return to them quickly
 - Organize pages in a safe new copy: reorder, rotate, duplicate, delete, extract, insert blanks, or add pages from another PDF—with multi-step undo
