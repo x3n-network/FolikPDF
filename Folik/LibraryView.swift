@@ -25,6 +25,7 @@ struct LibraryView: View {
     @AppStorage("folik.librarySortOrder") private var sortOrderRawValue = LibrarySortOrder.newest.rawValue
     @State private var organizing: LibraryDocumentSelection?
     @State private var renaming: LibraryDocument?
+    @State private var merging: LibraryDocumentSelection?
     @State private var selection: Set<LibraryDocument.ID> = []
     @State private var isSelecting = false
     @State private var confirmBulkDelete = false
@@ -42,7 +43,7 @@ struct LibraryView: View {
         }
         .sorted(by: documentSort)
     }
-    private var selectedDocuments: [LibraryDocument] { documents.filter { selection.contains($0.id) } }
+    private var selectedDocuments: [LibraryDocument] { visibleDocuments.filter { selection.contains($0.id) } }
     private var selectedShouldFavorite: Bool {
         selectedDocuments.contains { !library.metadata(for: $0).isFavorite }
     }
@@ -81,6 +82,12 @@ struct LibraryView: View {
         }
         .sheet(item: $organizing) { DocumentOrganizationView(documents: $0.documents) }
         .sheet(item: $renaming) { RenameDocumentView(document: $0) }
+        .sheet(item: $merging) { selection in
+            BatchConversionView(libraryDocuments: selection.documents) {
+                self.selection.removeAll()
+                isSelecting = false
+            }
+        }
         .confirmationDialog(
             "Remove \(selectedDocuments.count) document\(selectedDocuments.count == 1 ? "" : "s") from Folik?",
             isPresented: $confirmBulkDelete,
@@ -449,6 +456,13 @@ struct LibraryView: View {
             Spacer(minLength: 0)
 
             Menu {
+                Button {
+                    merging = LibraryDocumentSelection(documents: selectedDocuments)
+                } label: {
+                    Label("Merge PDFs", systemImage: "doc.on.doc")
+                }
+                .disabled(selection.count < 2 || selection.count > 20 || isImporting)
+                .accessibilityHint("Select between 2 and 20 PDFs to merge")
                 Button {
                     organizing = LibraryDocumentSelection(documents: selectedDocuments)
                 } label: {

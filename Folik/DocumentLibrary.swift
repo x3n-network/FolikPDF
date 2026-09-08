@@ -361,6 +361,15 @@ final class DocumentLibrary: ObservableObject {
                     throw CocoaError(.fileWriteUnknown)
                 }
             }
+            if ProcessInfo.processInfo.arguments.contains("--ui-test-library-pair") {
+                let secondURL = documentsDirectory.appendingPathComponent("Second.pdf")
+                bookmarkStore.removeBookmarks(for: secondURL)
+                readerStateStore.removeState(for: secondURL)
+                try UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 612, height: 792)).writePDF(to: secondURL) { context in
+                    context.beginPage()
+                    NSString(string: "SECOND LIBRARY DOCUMENT").draw(at: CGPoint(x: 72, y: 96), withAttributes: [.font: UIFont.systemFont(ofSize: 24)])
+                }
+            }
             refresh()
         } catch {
             errorMessage = "Folik couldn’t prepare its UI test document. \(error.localizedDescription)"

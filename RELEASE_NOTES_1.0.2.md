@@ -85,3 +85,9 @@ Your documents and reading activity remain on your device. No accounts, ads, ana
 - Hides the card while searching, filtering, or selecting documents.
 - Preserves recent-reading information through renames and keeps existing reading-state data compatible. Opening history remains on-device.
 - Defers PDFKit restoration until its view has a usable layout so reopening a PDF actually returns to the saved page. Four focused persistence tests and two iPhone resume/navigation UI tests passed.
+
+### Merge selected PDFs
+
+- Select 2–20 library PDFs and choose More → Merge PDFs. The source order follows the current library sort; reorder or remove sources and optionally add PDFs before previewing.
+- Opens a combined preview before saving a new merged copy; source PDFs remain unchanged. Existing limits and conversion notes apply.
+- Five batch/merge engine tests and the library merge and existing batch-conversion UI flows passed. Verified chosen page order and unchanged source bytes; visually reviewed the merged preview.

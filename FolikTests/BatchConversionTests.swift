@@ -37,6 +37,24 @@ final class BatchConversionTests: XCTestCase {
         XCTAssertTrue(library.documents.isEmpty)
         XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: directory.path).isEmpty)
     }
+    func testMergeLibraryPDFsPreservesSourceBytesAndChosenOrder() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let library = DocumentLibrary(documentsDirectory: directory)
+        let prepared = try await BatchConversion.prepare(sources, combined: false)
+        let documents = try await library.importBatchPDFs(prepared)
+        let originals = try documents.map { try Data(contentsOf: $0.url) }
+        let loaded = try BatchConversion.load(documents.reversed().map(\.url))
+        let merged = try await BatchConversion.prepare(loaded, combined: true, name: "Merged")
+        let saved = try await library.importBatchPDFs(merged)
+        let pdf = try XCTUnwrap(PDFDocument(url: saved[0].url))
+        XCTAssertEqual(pdf.pageCount, 2)
+        XCTAssertTrue(pdf.page(at: 0)?.string?.contains("SECOND BATCH MARKER") == true)
+        XCTAssertTrue(pdf.page(at: 1)?.string?.contains("FIRST BATCH MARKER") == true)
+        XCTAssertEqual(try documents.map { try Data(contentsOf: $0.url) }, originals)
+        XCTAssertThrowsError(try BatchConversion.load(documents.map(\.url), existingBytes: PDFProcessing.maximumBytes))
+    }
+
     func testLimitsFailuresAndCancellation() async throws {
         do { _ = try await BatchConversion.prepare([], combined: false); XCTFail("Empty batch accepted") } catch { }
         do { _ = try await BatchConversion.prepare([BatchSource(name: "Bad", extensionName: "docx", data: Data())], combined: false); XCTFail("Invalid source accepted") } catch { }

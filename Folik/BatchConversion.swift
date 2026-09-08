@@ -14,6 +14,23 @@ nonisolated struct BatchPDFOutput: Identifiable, Sendable {
 }
 nonisolated enum BatchConversion {
     static let extensions = ["pdf", "docx", "odt", "doc", "pages", "txt", "rtf", "jpg", "jpeg", "png", "heic"]
+    static func load(_ urls: [URL], existingBytes: Int = 0) throws -> [BatchSource] {
+        guard !urls.isEmpty, urls.count <= 20, existingBytes >= 0, existingBytes <= PDFProcessing.maximumBytes else {
+            throw PDFProcessingError.tooLarge
+        }
+        var items: [BatchSource] = []
+        var total = existingBytes
+        for url in urls {
+            try Task.checkCancellation()
+            let ext = url.pathExtension.lowercased()
+            let data = try ext == "pages" ? PagesPDFReader.readFile(url) : PDFConverter.readFile(url, maximumBytes: PDFProcessing.maximumBytes)
+            guard data.count <= PDFProcessing.maximumBytes - total else { throw PDFProcessingError.tooLarge }
+            total += data.count
+            items.append(BatchSource(name: url.deletingPathExtension().lastPathComponent, extensionName: ext, data: data))
+        }
+        return items
+    }
+
     static func prepare(_ sources: [BatchSource], combined: Bool, name: String = "Combined Documents",
                         progress: @Sendable (Int, Int) async -> Void = { _, _ in }) async throws -> [BatchPDFOutput] {
         guard !sources.isEmpty, sources.count <= 20,

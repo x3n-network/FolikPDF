@@ -2,6 +2,11 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct BatchConversionView: View {
+    var libraryDocuments: [LibraryDocument] = []
+    var didSave: (() -> Void)? = nil
+    @State private var loadedInitialSources = false
+    private var isLibraryMerge: Bool { !libraryDocuments.isEmpty }
+    private var canPrepare: Bool { sources.count >= (isLibraryMerge ? 2 : 1) && (!combined || (try? PDFConverter.fileName(filename)) != nil) }
     @EnvironmentObject private var library: DocumentLibrary
     @Environment(\.dismiss) private var dismiss
     @State private var sources: [BatchSource] = []
@@ -19,9 +24,12 @@ struct BatchConversionView: View {
         NavigationStack {
             List {
                 Section {
-                    Button("Choose Files") { showFiles = true }.disabled(busy)
-                    Text("Up to 20 files and 100 MB total. PDFs, supported Office files, TXT/RTF, and images. Reorder files before preparing the PDFs.").font(.footnote).foregroundStyle(.secondary)
-                    Toggle("Combine into one PDF", isOn: $combined).disabled(busy).accessibilityIdentifier("batch.combine")
+                    Button(isLibraryMerge ? "Add PDFs" : "Choose Files") { showFiles = true }.disabled(busy)
+                    Text(isLibraryMerge ? "Combine 2–20 PDFs in the order below, up to 100 MB total. Review the merged pages before saving a new copy. Your originals are kept." : "Up to 20 files and 100 MB total. PDFs, supported Office files, TXT/RTF, and images. Reorder files before preparing the PDFs.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    if !isLibraryMerge {
+                        Toggle("Combine into one PDF", isOn: $combined).disabled(busy).accessibilityIdentifier("batch.combine")
+                    }
                     if combined { TextField("Combined filename", text: $filename).disabled(busy) }
                 }
                 Section("Source order") {
@@ -53,14 +61,14 @@ struct BatchConversionView: View {
                     }
                 }
             }
-            .navigationTitle("Batch to PDF").navigationBarTitleDisplayMode(.inline)
+            .navigationTitle(isLibraryMerge ? "Merge PDFs" : "Batch to PDF").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { task?.cancel(); dismiss() }.disabled(saving) } }
             .safeAreaInset(edge: .bottom) {
-                Button(outputs.isEmpty ? "Prepare PDFs" : "Save All to Library") { outputs.isEmpty ? prepare() : save() }
-                    .buttonStyle(.borderedProminent).frame(minHeight: 48).padding().disabled(busy || sources.isEmpty)
+                Button(outputs.isEmpty ? (isLibraryMerge ? "Preview Merged PDF" : "Prepare PDFs") : (isLibraryMerge ? "Save Merged Copy" : "Save All to Library")) { outputs.isEmpty ? prepare() : save() }
+                    .buttonStyle(.borderedProminent).frame(minHeight: 48).padding().disabled(busy || !canPrepare)
                     .accessibilityIdentifier("batch.action")
             }
-            .fileImporter(isPresented: $showFiles, allowedContentTypes: BatchConversion.extensions.compactMap { UTType(filenameExtension: $0) }, allowsMultipleSelection: true) { result in
+            .fileImporter(isPresented: $showFiles, allowedContentTypes: isLibraryMerge ? [.pdf] : BatchConversion.extensions.compactMap { UTType(filenameExtension: $0) }, allowsMultipleSelection: true) { result in
                 switch result { case .success(let urls): load(urls); case .failure(let failure): error = failure.localizedDescription }
             }
             .sheet(item: $review) { preview in
@@ -80,6 +88,13 @@ struct BatchConversionView: View {
             .onDisappear { task?.cancel() }
             .interactiveDismissDisabled(saving)
             .onAppear {
+                guard !loadedInitialSources else { return }
+                loadedInitialSources = true
+                if isLibraryMerge {
+                    combined = true
+                    load(libraryDocuments.map(\.url))
+                    return
+                }
                 #if DEBUG
                 if ProcessInfo.processInfo.arguments.contains("--ui-test-batch") && sources.isEmpty {
                     sources = [BatchSource(name: "First", extensionName: "txt", data: Data("FIRST BATCH MARKER".utf8)), BatchSource(name: "Second", extensionName: "txt", data: Data("SECOND BATCH MARKER".utf8))]
@@ -95,17 +110,8 @@ struct BatchConversionView: View {
         task = Task {
             defer { busy = false }
             do {
-                let loaded = try await Task.detached {
-                    var items: [BatchSource] = []; var total = existingBytes
-                    for url in urls {
-                        try Task.checkCancellation()
-                        let ext = url.pathExtension.lowercased()
-                        let data = try ext == "pages" ? PagesPDFReader.readFile(url) : PDFConverter.readFile(url, maximumBytes: PDFProcessing.maximumBytes)
-                        total += data.count; guard total <= PDFProcessing.maximumBytes else { throw PDFProcessingError.tooLarge }
-                        items.append(BatchSource(name: url.deletingPathExtension().lastPathComponent, extensionName: ext, data: data))
-                    }
-                    return items
-                }.value
+                let worker = Task.detached { try BatchConversion.load(urls, existingBytes: existingBytes) }
+                let loaded = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
                 try Task.checkCancellation(); sources += loaded
             } catch is CancellationError { } catch { self.error = error.localizedDescription }
         }
@@ -121,6 +127,7 @@ struct BatchConversionView: View {
             do {
                 let prepared = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
                 try Task.checkCancellation(); outputs = prepared
+                if isLibraryMerge { review = prepared.first?.preview }
             } catch is CancellationError { } catch { self.error = error.localizedDescription }
         }
     }
@@ -128,7 +135,7 @@ struct BatchConversionView: View {
         saving = true; busy = true; error = nil; status = "Saving prepared PDFs…"
         task = Task {
             defer { saving = false; busy = false }
-            do { _ = try await library.importBatchPDFs(outputs); dismiss() }
+            do { _ = try await library.importBatchPDFs(outputs); didSave?(); dismiss() }
             catch { self.error = error.localizedDescription }
         }
     }

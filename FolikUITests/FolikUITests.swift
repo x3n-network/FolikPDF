@@ -117,6 +117,41 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(resume.waitForExistence(timeout: 5))
     }
 
+    func testMergeSelectedLibraryPDFsCanReorderPreviewAndSave() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-library-pair"]
+        app.launch()
+        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["library.document.Second.pdf"].waitForExistence(timeout: 5))
+        app.buttons["library.sort"].tap()
+        app.buttons["Name"].tap()
+        app.buttons["library.select"].tap()
+        app.buttons["library.document.Folik UI Test.pdf"].tap()
+        app.buttons["More"].tap()
+        XCTAssertFalse(app.buttons["Merge PDFs"].isEnabled)
+        app.navigationBars["Library"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        app.buttons["library.document.Second.pdf"].tap()
+        app.buttons["More"].tap()
+        app.buttons["Merge PDFs"].tap()
+        XCTAssertTrue(app.navigationBars["Merge PDFs"].waitForExistence(timeout: 5))
+        let secondActions = app.buttons["Actions for Second"]
+        XCTAssertTrue(secondActions.waitForExistence(timeout: 10))
+        secondActions.tap()
+        app.buttons["Move Up"].tap()
+        XCTAssertTrue(app.staticTexts["1. Second.pdf"].exists)
+        app.buttons["batch.action"].tap()
+        XCTAssertTrue(app.navigationBars["Batch Preview"].waitForExistence(timeout: 15))
+        capture("library-merge-preview", in: app)
+        app.navigationBars["Batch Preview"].buttons["Done"].tap()
+        app.buttons["batch.action"].tap()
+        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 10))
+        let merged = app.buttons["library.document.Combined Documents.pdf"]
+        XCTAssertTrue(merged.waitForExistence(timeout: 5))
+        XCTAssertTrue(merged.label.contains("3 pages"))
+        XCTAssertTrue(app.buttons["library.document.Folik UI Test.pdf"].exists)
+        XCTAssertTrue(app.buttons["library.document.Second.pdf"].exists)
+    }
+
     func testLibraryAddMenuOffersScanningAndFileImport() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-fixture"]
