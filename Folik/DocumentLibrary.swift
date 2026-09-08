@@ -365,6 +365,10 @@ final class DocumentLibrary: ObservableObject {
 
     #if DEBUG
     func prepareUITestFixture() {
+        if ProcessInfo.processInfo.arguments.contains("--store-screenshots-102") {
+            do { try prepareStoreScreenshots102() } catch { errorMessage = error.localizedDescription }
+            return
+        }
         UserDefaults.standard.set(false, forKey: "folik.libraryGridLayout")
         do {
             try fileManager.createDirectory(at: documentsDirectory, withIntermediateDirectories: true)
@@ -445,6 +449,53 @@ final class DocumentLibrary: ObservableObject {
         } catch {
             errorMessage = "Folik couldn’t prepare its UI test document. \(error.localizedDescription)"
         }
+    }
+
+    private func prepareStoreScreenshots102() throws {
+        try fileManager.createDirectory(at: documentsDirectory, withIntermediateDirectories: true)
+        for url in try fileManager.contentsOfDirectory(at: documentsDirectory, includingPropertiesForKeys: nil)
+            where url.pathExtension.lowercased() == "pdf" { try fileManager.removeItem(at: url) }
+        try? fileManager.removeItem(at: trash.root)
+        UserDefaults.standard.set(false, forKey: "folik.libraryGridLayout")
+        UserDefaults.standard.set("name", forKey: "folik.librarySortOrder")
+        let samples: [(String, String, UIColor, Int)] = [
+            ("Project Brief", "A considered space for creative work.", UIColor(red: 0.12, green: 0.24, blue: 0.56, alpha: 1), 4),
+            ("Meeting Notes", "Good ideas. Clear next steps.", UIColor(red: 0.18, green: 0.40, blue: 0.35, alpha: 1), 2),
+            ("Travel Plans", "A few days somewhere new.", UIColor(red: 0.68, green: 0.34, blue: 0.20, alpha: 1), 3),
+            ("Studio Invoice", "Thoughtful work, simply documented.", UIColor(red: 0.43, green: 0.27, blue: 0.51, alpha: 1), 1)
+        ]
+        var metadata: [String: LibraryMetadata] = [:]
+        for (name, subtitle, color, pages) in samples {
+            let url = documentsDirectory.appendingPathComponent(name + ".pdf")
+            bookmarkStore.removeBookmarks(for: url)
+            readerStateStore.removeState(for: url)
+            try UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 612, height: 792)).writePDF(to: url) { context in
+                for page in 0..<pages {
+                    context.beginPage()
+                    UIColor(red: 0.97, green: 0.96, blue: 0.93, alpha: 1).setFill()
+                    context.fill(CGRect(x: 0, y: 0, width: 612, height: 792))
+                    color.setFill(); context.fill(CGRect(x: 0, y: 0, width: 612, height: 310))
+                    func text(_ value: String, _ y: CGFloat, _ size: CGFloat, _ ink: UIColor, bold: Bool = false) {
+                        (value as NSString).draw(in: CGRect(x: 48, y: y, width: 520, height: 90), withAttributes: [.font: bold ? UIFont.boldSystemFont(ofSize: size) : UIFont.systemFont(ofSize: size), .foregroundColor: ink])
+                    }
+                    text("HARBOR STUDIO   /   SEPTEMBER 2026", 42, 13, .white)
+                    text(name, 120, 46, .white, bold: true)
+                    text(subtitle, 235, 19, .white)
+                    text(page == 0 ? "Overview" : "The details", 355, 25, color, bold: true)
+                    text("A little planning makes room for great work.", 401, 18, .darkGray)
+                    text("01    Gather inspiration and define the direction.", 471, 17, .darkGray)
+                    text("02    Bring the details together in one place.", 518, 17, .darkGray)
+                    text("03    Review, refine, and share the next steps.", 565, 17, .darkGray)
+                    text("SAMPLE DOCUMENT                                      \(page + 1) / \(pages)", 729, 11, color)
+                }
+            }
+            metadata[url.lastPathComponent] = LibraryMetadata(folder: name == "Travel Plans" ? "Personal" : "Studio", tags: name == "Project Brief" ? ["Planning"] : [], isFavorite: name == "Project Brief")
+        }
+        try LibraryOrganization.save(metadata, to: organizationURL)
+        let recent = documentsDirectory.appendingPathComponent("Project Brief.pdf")
+        readerStateStore.save(ReaderState(pageIndex: 1, layout: .continuous), for: recent)
+        readerStateStore.markOpened(recent)
+        refresh()
     }
 
     func prepareUITestScanFixture() async -> LibraryDocument? {

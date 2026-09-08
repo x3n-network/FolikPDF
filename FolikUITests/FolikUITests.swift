@@ -830,6 +830,60 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(app.buttons["organizer.page.1"].waitForExistence(timeout: 3))
     }
 
+    func testCaptureVersion102Screenshots() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--store-screenshots-102"]
+        app.launch()
+        XCTAssertTrue(app.buttons["library.document.Project Brief.pdf"].waitForExistence(timeout: 8))
+        capture("01-library", in: app)
+        app.buttons["library.dismissResume"].tap()
+        app.buttons["Document actions"].firstMatch.tap()
+        app.buttons["Remove Favorite"].tap()
+        app.buttons["library.layout"].tap()
+        app.buttons["Grid"].tap()
+        capture("09-grid", in: app)
+        app.buttons["library.layout"].tap()
+        app.buttons["List"].tap()
+        app.buttons["library.select"].tap()
+        app.buttons["library.document.Project Brief.pdf"].tap()
+        app.buttons["library.document.Meeting Notes.pdf"].tap()
+        app.buttons["More"].tap()
+        app.buttons["Merge PDFs"].tap()
+        XCTAssertTrue(app.buttons["batch.action"].waitForExistence(timeout: 15))
+        app.buttons["batch.action"].tap()
+        XCTAssertTrue(app.navigationBars["Batch Preview"].waitForExistence(timeout: 15))
+        app.navigationBars["Batch Preview"].buttons["Done"].tap()
+        capture("10-merge", in: app)
+        app.terminate()
+
+        let data = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 612, height: 792)).pdfData { c in
+            c.beginPage()
+            func line(_ text: String, _ y: CGFloat, _ size: CGFloat) {
+                (text as NSString).draw(at: CGPoint(x: 48, y: y), withAttributes: [.font: UIFont.systemFont(ofSize: size), .foregroundColor: UIColor.black])
+            }
+            line("HARBOR STUDIO / PROJECT BRIEF", 60, 24)
+            line("Prepared for review", 110, 18)
+            line("Contact: alex@example.com", 220, 20)
+            line("Reply to alex@example.com with feedback.", 280, 20)
+            line("Share the approved project brief with the team.", 440, 18)
+            line("Fictional sample document", 710, 14)
+        }
+        app.launchArguments = ["--ui-test-fixture", "--store-screenshots-102", "--ui-test-pdf-source", data.base64EncodedString()]
+        app.launch()
+        app.buttons["library.addDocument"].tap()
+        let redact = app.buttons["Redact PDF"]
+        if !redact.exists { app.swipeUp() }
+        redact.tap()
+        let query = app.textFields["redaction.searchText"]
+        XCTAssertTrue(query.waitForExistence(timeout: 10))
+        if !query.isHittable { app.swipeUp() }
+        query.tap(); query.typeText("alex@example.com")
+        app.buttons["redaction.findText"].tap()
+        XCTAssertTrue(app.navigationBars["Review Suggestions"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["redaction.addSuggestions"].isEnabled)
+        capture("07-redaction", in: app)
+    }
+
     func testCaptureOCRStoreScreenshot() throws {
         // Raster-only input exercises real OCR, using fictional meeting notes.
         let image = UIGraphicsImageRenderer(size: CGSize(width: 700, height: 900)).image { context in
