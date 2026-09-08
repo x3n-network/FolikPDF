@@ -640,8 +640,10 @@ private struct FormNavigator: View {
 
                     if session.incompleteFormFieldCount > 0 {
                         Button {
-                            session.goToNextIncompleteFormField()
                             close()
+                            DispatchQueue.main.async {
+                                session.goToNextIncompleteFormField()
+                            }
                         } label: {
                             Label(
                                 session.remainingRequiredFormFieldCount > 0 ? "Next required field" : "Next empty field",
@@ -675,8 +677,10 @@ private struct FormNavigator: View {
 
             List(session.formFields) { field in
                 Button {
-                    session.goToFormField(field)
                     close()
+                    DispatchQueue.main.async {
+                        session.goToFormField(field)
+                    }
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: field.isFilled ? "checkmark.circle.fill" : "circle")

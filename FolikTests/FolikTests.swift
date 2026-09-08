@@ -130,16 +130,67 @@ final class DocumentLibraryTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let bookmarkStore = BookmarkStore(defaults: defaults)
-        let library = DocumentLibrary(documentsDirectory: libraryDirectory, bookmarkStore: bookmarkStore)
+        let readerStateStore = ReaderStateStore(defaults: defaults)
+        let library = DocumentLibrary(
+            documentsDirectory: libraryDirectory,
+            bookmarkStore: bookmarkStore,
+            readerStateStore: readerStateStore
+        )
         let imported = await library.importDocuments(at: [source])
         let document = try XCTUnwrap(imported.first)
         bookmarkStore.save([0], for: document.url)
+        readerStateStore.save(ReaderState(pageIndex: 0, layout: .singlePage), for: document.url)
 
         library.delete(document)
 
         XCTAssertTrue(library.documents.isEmpty)
         XCTAssertFalse(FileManager.default.fileExists(atPath: document.url.path))
         XCTAssertTrue(bookmarkStore.bookmarks(for: document.url, pageCount: 1).isEmpty)
+        XCTAssertEqual(readerStateStore.state(for: document.url, pageCount: 1), ReaderState(pageIndex: 0, layout: .continuous))
+    }
+
+    func testRenamePreservesOrganizationBookmarksFavoriteAndReaderState() async throws {
+        let source = workspace.appendingPathComponent("Original.pdf")
+        try PDFTestFixture.write(to: source, pages: ["One", "Two"])
+        let suiteName = "FolikRenameTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let bookmarkStore = BookmarkStore(defaults: defaults)
+        let readerStateStore = ReaderStateStore(defaults: defaults)
+        let library = DocumentLibrary(
+            documentsDirectory: libraryDirectory,
+            bookmarkStore: bookmarkStore,
+            readerStateStore: readerStateStore
+        )
+        let imported = await library.importDocuments(at: [source])
+        let original = try XCTUnwrap(imported.first)
+        try library.organize(original, folder: "Work", tags: ["draft"])
+        try library.setFavorite(true, for: [original])
+        bookmarkStore.save([1], for: original.url)
+        readerStateStore.save(ReaderState(pageIndex: 1, layout: .twoUp), for: original.url)
+
+        let renamed = try library.rename(original, to: "Final Report")
+
+        XCTAssertEqual(renamed.url.lastPathComponent, "Final Report.pdf")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: original.url.path))
+        XCTAssertEqual(library.metadata(for: renamed).folder, "Work")
+        XCTAssertEqual(library.metadata(for: renamed).tags, ["draft"])
+        XCTAssertTrue(library.metadata(for: renamed).isFavorite)
+        XCTAssertEqual(bookmarkStore.bookmarks(for: renamed.url, pageCount: 2), [1])
+        XCTAssertEqual(readerStateStore.state(for: renamed.url, pageCount: 2), ReaderState(pageIndex: 1, layout: .twoUp))
+    }
+
+    func testRenameRejectsAnExistingNameWithoutChangingFiles() async throws {
+        let first = workspace.appendingPathComponent("First.pdf")
+        let second = workspace.appendingPathComponent("Second.pdf")
+        try PDFTestFixture.write(to: first, pages: ["First"])
+        try PDFTestFixture.write(to: second, pages: ["Second"])
+        let library = DocumentLibrary(documentsDirectory: libraryDirectory)
+        _ = await library.importDocuments(at: [first, second])
+        let firstDocument = try XCTUnwrap(library.documents.first { $0.displayName == "First" })
+
+        XCTAssertThrowsError(try library.rename(firstDocument, to: "Second"))
+        XCTAssertEqual(Set(library.documents.map(\.url.lastPathComponent)), ["First.pdf", "Second.pdf"])
     }
 }
 
@@ -173,6 +224,44 @@ final class DocumentSessionTests: XCTestCase {
             return XCTFail("Expected a page-navigation command")
         }
         XCTAssertEqual(index, 1)
+    }
+
+    func testReaderPositionAndLayoutPersistPerDocument() throws {
+        let suiteName = "FolikReaderStateTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = ReaderStateStore(defaults: defaults)
+        let url = workspace.appendingPathComponent("Guide.pdf")
+        try PDFTestFixture.write(to: url, pages: ["One", "Two", "Three"])
+        store.save(ReaderState(pageIndex: 2, layout: .twoUp), for: url)
+
+        let session = DocumentSession(item: PDFTestFixture.item(for: url), readerStateStore: store)
+
+        XCTAssertEqual(session.pageIndex, 2)
+        XCTAssertEqual(session.layout, .twoUp)
+        guard case .restore(let pageIndex, let layout) = session.command?.action else {
+            return XCTFail("Expected a reader-state restoration command")
+        }
+        XCTAssertEqual(pageIndex, 2)
+        XCTAssertEqual(layout, .twoUp)
+        session.reportPage(session.document?.page(at: 1))
+        session.setLayout(.singlePage)
+        XCTAssertEqual(store.state(for: url, pageCount: 3), ReaderState(pageIndex: 1, layout: .singlePage))
+    }
+
+    func testReaderStateClampsStalePageIndexes() throws {
+        let suiteName = "FolikReaderBoundsTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = ReaderStateStore(defaults: defaults)
+        let url = workspace.appendingPathComponent("Short.pdf")
+        try PDFTestFixture.write(to: url, pages: ["One", "Two"])
+        store.save(ReaderState(pageIndex: 99, layout: .continuous), for: url)
+
+        let session = DocumentSession(item: PDFTestFixture.item(for: url), readerStateStore: store)
+
+        XCTAssertEqual(session.pageIndex, 1)
+        XCTAssertEqual(store.state(for: url, pageCount: 2).pageIndex, 1)
     }
 
     func testBookmarksPersistPerDocumentWithoutModifyingPDF() throws {

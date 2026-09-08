@@ -3,6 +3,24 @@ import Foundation
 nonisolated struct LibraryMetadata: Codable, Equatable, Sendable {
     var folder = ""
     var tags: [String] = []
+    var isFavorite = false
+
+    private enum CodingKeys: String, CodingKey {
+        case folder, tags, isFavorite
+    }
+
+    init(folder: String = "", tags: [String] = [], isFavorite: Bool = false) {
+        self.folder = folder
+        self.tags = tags
+        self.isFavorite = isFavorite
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        folder = try container.decodeIfPresent(String.self, forKey: .folder) ?? ""
+        tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
+        isFavorite = try container.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
+    }
     static func validated(folder: String, tags: [String]) throws -> Self {
         let folder = folder.trimmingCharacters(in: .whitespacesAndNewlines)
         let tags = tags.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
@@ -18,11 +36,12 @@ nonisolated struct LibraryMetadata: Codable, Equatable, Sendable {
     }
 }
 nonisolated enum LibraryOrganizationError: LocalizedError {
-    case invalidLabels, invalidStore
+    case invalidLabels, invalidStore, nameAlreadyExists
     var errorDescription: String? {
         switch self {
         case .invalidLabels: "Use a folder name up to 80 characters and up to 20 tags of 40 characters each."
         case .invalidStore: "Library organization data could not be read. Your PDFs are unchanged."
+        case .nameAlreadyExists: "A document with that name is already in your library."
         }
     }
 }

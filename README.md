@@ -14,14 +14,17 @@ Folik is a native, local-first PDF reader and workspace for iPhone and iPad. It 
 
 - Import one or more PDFs from Files
 - Make existing scanned PDFs searchable with on-device OCR, progress, cancellation, and review before saving a new copy
+- Find literal text, email addresses, phone numbers, and Social Security numbers on-device, review each match, and add selected matches to a redacted copy
 - Convert JPEG, PNG, or HEIC images from Photos or Files into a named, ordered, searchable multipage PDF (up to 30 images, 20 MB each and 100 MB total)
 - Convert Word DOCX and LibreOffice ODT documents on-device, review the generated PDF and conversion notes, then save the exact preview to the library
 - Convert TXT (UTF-8/UTF-16) or basic RTF documents up to 5 MB into searchable PDFs with Letter-size pages; complex layouts and attachments are not supported
 - Open PDFs in Folik from Files, Mail, Safari, and other apps using the system share sheet or Open In menu
 - Scan multi-page paper documents with automatic edge detection and perspective correction, then add an on-device searchable text layer and save them as local PDFs
 - Keep a private on-device document library with virtual folders and tags
+- Rename, favorite, and sort documents, or select several to organize, share, favorite, or remove together
 - Search filenames, folders, tags, and selectable PDF text across the library, with matching page excerpts
 - Read PDFs with native PDFKit rendering
+- Resume each PDF at its last-viewed page and restore its continuous, single-page, or two-page layout
 - Browse page thumbnails and document outlines
 - Bookmark important pages locally and filter the Pages panel to return to them quickly
 - Organize pages in a safe new copy: reorder, rotate, duplicate, delete, extract, insert blanks, or add pages from another PDF—with multi-step undo
@@ -51,7 +54,9 @@ Folik supports the standard AcroForm widgets that PDFKit can edit on iOS. Checkb
 
 ### PDF redaction
 
-Choose **Add (+) → Redact PDF**, mark rectangles by dragging or entering page percentages, then create and review a new copy before saving. Marked regions are painted into rendered pixels before a fresh image-only PDF is created. Source text, metadata, links, outlines, attachments, and editable form/annotation objects are not copied. Visible annotation appearances are flattened where supported. All output pages lose text selection and interactive features; rendering is limited to 200 dpi and 3,500 pixels on the longest side. Review every page before sharing. The original retains its original information. Protected files are rejected; input/output is limited to 100 MB, 500 pages, and 500 marked regions.
+Choose **Add (+) → Redact PDF**, then mark rectangles manually or search selectable text for a literal phrase, email addresses, phone numbers, and US Social Security numbers. Pattern matches are suggestions, not guarantees: review and deselect false positives before adding the areas. Scanned pages need **Make PDF Searchable** first. All discovery runs on-device, and nothing is uploaded.
+
+Marked regions are painted into rendered pixels before a fresh image-only PDF is created. Source text, metadata, links, outlines, attachments, and editable form/annotation objects are not copied. Visible annotation appearances are flattened where supported. All output pages lose text selection and interactive features; rendering is limited to 200 dpi and 3,500 pixels on the longest side. Review every page before sharing. The original retains its original information. Protected files are rejected; input/output is limited to 100 MB, 500 pages, and 500 marked regions.
 
 ### Batch conversion
 
@@ -141,6 +146,8 @@ SignatureStore     Protected local storage and legacy migration for reusable sig
 BookmarkStore      Private app-local page bookmarks, isolated by document
 PDFKitView         Native PDFView bridge and live ink gesture capture
 LibraryView        Library and import experience
+LibraryToolsView   Grouped capture, conversion, improvement, and protection tools
+ReaderStateStore   Private per-document reading position and layout persistence
 ReaderView         Adaptive iPhone/iPad reader chrome
 ReaderInspector    Pages, outline, search, and form tools
 SettingsView       About, privacy, support, company, and legal links

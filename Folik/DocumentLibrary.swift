@@ -17,10 +17,16 @@ final class DocumentLibrary: ObservableObject {
     private let fileManager: FileManager
     private let documentsDirectory: URL
     private let bookmarkStore: BookmarkStore
+    private let readerStateStore: ReaderStateStore
 
-    init(fileManager: FileManager = .default, bookmarkStore: BookmarkStore? = nil) {
+    init(
+        fileManager: FileManager = .default,
+        bookmarkStore: BookmarkStore? = nil,
+        readerStateStore: ReaderStateStore? = nil
+    ) {
         self.fileManager = fileManager
         self.bookmarkStore = bookmarkStore ?? BookmarkStore()
+        self.readerStateStore = readerStateStore ?? ReaderStateStore()
         documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
         refresh()
     }
@@ -28,17 +34,20 @@ final class DocumentLibrary: ObservableObject {
     init(
         documentsDirectory: URL,
         fileManager: FileManager = .default,
-        bookmarkStore: BookmarkStore? = nil
+        bookmarkStore: BookmarkStore? = nil,
+        readerStateStore: ReaderStateStore? = nil
     ) {
         self.fileManager = fileManager
         self.documentsDirectory = documentsDirectory
         self.bookmarkStore = bookmarkStore ?? BookmarkStore()
+        self.readerStateStore = readerStateStore ?? ReaderStateStore()
         refresh()
     }
 
     init(previewDocuments: [LibraryDocument]) {
         fileManager = .default
         bookmarkStore = BookmarkStore()
+        readerStateStore = ReaderStateStore()
         documentsDirectory = URL(fileURLWithPath: "/tmp/FolikPreview", isDirectory: true)
         documents = previewDocuments
     }
@@ -184,11 +193,63 @@ final class DocumentLibrary: ObservableObject {
     var tags: [String] { Array(Set(documents.flatMap { metadata(for: $0).tags })).sorted() }
     func metadata(for document: LibraryDocument) -> LibraryMetadata { organization[document.url.lastPathComponent] ?? LibraryMetadata() }
     func organize(_ document: LibraryDocument, folder: String, tags: [String]) throws {
-        guard documents.contains(where: { $0.url == document.url }) else { throw CocoaError(.fileNoSuchFile) }
+        try organize([document], folder: folder, tags: tags)
+    }
+    func organize(_ documents: [LibraryDocument], folder: String, tags: [String]) throws {
+        guard !documents.isEmpty,
+              documents.allSatisfy({ item in self.documents.contains(where: { $0.url == item.url }) }) else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        let validated = try LibraryMetadata.validated(folder: folder, tags: tags)
         var records = try LibraryOrganization.load(from: organizationURL)
-        records[document.url.lastPathComponent] = try LibraryMetadata.validated(folder: folder, tags: tags)
+        for document in documents {
+            var updated = validated
+            updated.isFavorite = records[document.url.lastPathComponent]?.isFavorite ?? false
+            records[document.url.lastPathComponent] = updated
+        }
         try LibraryOrganization.save(records, to: organizationURL)
         organization = records
+    }
+
+    func setFavorite(_ isFavorite: Bool, for documents: [LibraryDocument]) throws {
+        guard !documents.isEmpty else { return }
+        var records = try LibraryOrganization.load(from: organizationURL)
+        for document in documents {
+            guard self.documents.contains(where: { $0.url == document.url }) else { throw CocoaError(.fileNoSuchFile) }
+            var metadata = records[document.url.lastPathComponent] ?? LibraryMetadata()
+            metadata.isFavorite = isFavorite
+            records[document.url.lastPathComponent] = metadata
+        }
+        try LibraryOrganization.save(records, to: organizationURL)
+        organization = records
+    }
+
+    @discardableResult
+    func rename(_ document: LibraryDocument, to proposedName: String) throws -> LibraryDocument {
+        guard documents.contains(where: { $0.url == document.url }) else { throw CocoaError(.fileNoSuchFile) }
+        let fileName = try PDFConverter.fileName(proposedName)
+        let destination = documentsDirectory.appendingPathComponent(fileName)
+        if destination.standardizedFileURL == document.url.standardizedFileURL { return document }
+        guard !fileManager.fileExists(atPath: destination.path) else { throw LibraryOrganizationError.nameAlreadyExists }
+
+        var records = try LibraryOrganization.load(from: organizationURL)
+        let metadata = records.removeValue(forKey: document.url.lastPathComponent)
+        if let metadata { records[fileName] = metadata }
+
+        try fileManager.moveItem(at: document.url, to: destination)
+        do {
+            if metadata != nil { try LibraryOrganization.save(records, to: organizationURL) }
+        } catch {
+            try? fileManager.moveItem(at: destination, to: document.url)
+            throw error
+        }
+        bookmarkStore.moveBookmarks(from: document.url, to: destination)
+        readerStateStore.moveState(from: document.url, to: destination)
+        refresh()
+        guard let renamed = documents.first(where: { $0.url.standardizedFileURL == destination.standardizedFileURL }) else {
+            throw CocoaError(.fileReadUnknown)
+        }
+        return renamed
     }
 
     func delete(_ document: LibraryDocument) {
@@ -196,12 +257,17 @@ final class DocumentLibrary: ObservableObject {
         do {
             try fileManager.removeItem(at: document.url)
             bookmarkStore.removeBookmarks(for: document.url)
+            readerStateStore.removeState(for: document.url)
             var records = try LibraryOrganization.load(from: organizationURL)
             records.removeValue(forKey: document.url.lastPathComponent)
             try LibraryOrganization.save(records, to: organizationURL)
         } catch {
             errorMessage = "Folik couldn’t remove \(document.displayName). \(error.localizedDescription)"
         }
+    }
+
+    func delete(_ documents: [LibraryDocument]) {
+        for document in documents { delete(document) }
     }
 
     func refresh() {
@@ -247,6 +313,8 @@ final class DocumentLibrary: ObservableObject {
 
             try? fileManager.removeItem(at: organizationURL)
             let fixtureURL = documentsDirectory.appendingPathComponent("Folik UI Test.pdf")
+            bookmarkStore.removeBookmarks(for: fixtureURL)
+            readerStateStore.removeState(for: fixtureURL)
             let renderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 612, height: 792))
             try renderer.writePDF(to: fixtureURL) { context in
                 for pageNumber in 1...2 {

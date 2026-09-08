@@ -98,10 +98,144 @@ final class FolikUITests: XCTestCase {
         XCTAssertEqual(addDocument.label, "Add Document")
         addDocument.tap()
 
+        XCTAssertTrue(app.navigationBars["Add & Tools"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Capture and import"].exists)
+        XCTAssertTrue(app.staticTexts["Convert to PDF"].exists)
+        XCTAssertTrue(app.staticTexts["Improve and protect"].exists)
         XCTAssertTrue(app.buttons["Scan Document"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["Choose PDFs"].exists)
         XCTAssertTrue(app.buttons["Images to PDF"].exists)
         XCTAssertTrue(app.buttons["Text/RTF to PDF"].exists)
+    }
+
+    func testLibrarySelectionCanFavoriteDocuments() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture"]
+        app.launch()
+
+        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
+        app.buttons["library.select"].tap()
+        let document = app.descendants(matching: .any)["library.document.Folik UI Test.pdf"]
+        XCTAssertTrue(document.waitForExistence(timeout: 3))
+        document.tap()
+        app.buttons["More"].tap()
+        app.buttons["Favorite"].tap()
+        app.buttons["Done"].tap()
+
+        app.buttons["Document actions"].tap()
+        XCTAssertTrue(app.buttons["Remove Favorite"].waitForExistence(timeout: 3))
+    }
+
+    func testLibraryLargeTextLayoutKeepsDocumentsAndControlsAccessible() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture"]
+        app.launch()
+        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
+        app.buttons["Document actions"].tap()
+        app.buttons["Rename"].tap()
+        let name = app.textFields["rename.name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.tap()
+        name.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: "Folik UI Test".count))
+        let longName = "Home renovation contract and supporting documents for September 2026"
+        name.typeText(longName)
+        app.buttons["rename.save"].tap()
+        XCTAssertTrue(app.buttons["library.document." + longName + ".pdf"].waitForExistence(timeout: 5))
+        app.terminate()
+        app.launchArguments = ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        XCTAssertTrue(app.buttons["library.filter"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["library.filter"].isHittable)
+        XCTAssertTrue(app.buttons["library.sort"].isHittable)
+        capture("library-largest-text-portrait", in: app)
+        XCUIDevice.shared.orientation = .landscapeLeft
+        capture("library-largest-text-landscape", in: app)
+        XCUIDevice.shared.orientation = .portrait
+        let document = app.buttons["library.document." + longName + ".pdf"]
+        if !document.isHittable { app.swipeUp() }
+        XCTAssertTrue(document.isHittable)
+        document.tap()
+        XCTAssertTrue(app.navigationBars[longName].waitForExistence(timeout: 5))
+    }
+
+    func testLibraryFavoritesFilterCanBeCleared() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture"]
+        app.launch()
+        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
+        app.buttons["library.filter"].tap()
+        app.buttons["Favorites only"].tap()
+        XCTAssertTrue(app.staticTexts["No matching documents"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["library.document.Folik UI Test.pdf"].exists)
+        app.buttons["library.clearFilters"].tap()
+        XCTAssertTrue(app.buttons["library.document.Folik UI Test.pdf"].waitForExistence(timeout: 3))
+
+        app.buttons["Document actions"].tap()
+        app.buttons["Favorite"].tap()
+        XCTAssertTrue(app.staticTexts["Favorites (1)"].waitForExistence(timeout: 3))
+        app.buttons["library.filter"].tap()
+        app.buttons["Favorites only"].tap()
+        XCTAssertTrue(app.buttons["library.document.Folik UI Test.pdf"].exists)
+        capture("library-favorites-filter", in: app)
+        app.buttons["Document actions"].tap()
+        app.buttons["Remove Favorite"].tap()
+        XCTAssertTrue(app.staticTexts["No matching documents"].waitForExistence(timeout: 3))
+        app.buttons["library.clearFilters"].tap()
+        XCTAssertTrue(app.buttons["library.document.Folik UI Test.pdf"].exists)
+    }
+
+    func testLibraryDocumentToolsLoadSelectedPDFAndResetForGlobalTools() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture"]
+        app.launch()
+        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
+        for title in ["Make PDF Searchable", "Compress PDF", "Redact PDF"] {
+            app.buttons["Document actions"].tap()
+            app.buttons["Tools"].tap()
+            app.buttons[title].tap()
+            XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.staticTexts["pdfTool.source"].waitForExistence(timeout: 10))
+            XCTAssertEqual(app.staticTexts["pdfTool.source"].label, "Folik UI Test.pdf")
+            if title == "Redact PDF" {
+                XCTAssertTrue(app.staticTexts["Page 1 of 2"].waitForExistence(timeout: 10))
+                XCTAssertFalse(app.buttons["redaction.preview"].isEnabled)
+            } else {
+                XCTAssertTrue(app.buttons["pdfTool.preview"].isEnabled)
+                XCTAssertEqual(app.textFields["Filename"].value as? String,
+                               title == "Compress PDF" ? "Folik UI Test Compressed" : "Folik UI Test Searchable")
+            }
+            capture("library-tool-" + title, in: app)
+            app.navigationBars[title].buttons["Cancel"].tap()
+            XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
+        }
+        app.buttons["library.addDocument"].tap()
+        XCTAssertTrue(app.navigationBars["Add & Tools"].waitForExistence(timeout: 5))
+        let compress = app.buttons["Compress PDF"]
+        for _ in 0..<3 where !compress.exists || !compress.isHittable { app.swipeUp() }
+        XCTAssertTrue(compress.waitForExistence(timeout: 3))
+        compress.tap()
+        XCTAssertTrue(app.navigationBars["Compress PDF"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["pdfTool.preview"].isEnabled)
+        XCTAssertFalse(app.staticTexts["pdfTool.source"].exists)
+    }
+
+    func testLibraryCompressionSavesCopyAndKeepsOriginal() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture"]
+        app.launch()
+        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
+        app.buttons["Document actions"].tap()
+        app.buttons["Tools"].tap()
+        app.buttons["Compress PDF"].tap()
+        XCTAssertTrue(app.staticTexts["pdfTool.source"].waitForExistence(timeout: 10))
+        app.buttons["pdfTool.preview"].tap()
+        XCTAssertTrue(app.navigationBars["Conversion Preview"].waitForExistence(timeout: 30))
+        app.buttons["office.save"].tap()
+        XCTAssertTrue(app.navigationBars["Folik UI Test Compressed"].waitForExistence(timeout: 10))
+        app.navigationBars.buttons["Library"].tap()
+        XCTAssertTrue(app.buttons["library.document.Folik UI Test.pdf"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["library.document.Folik UI Test Compressed.pdf"].exists)
+        capture("library-two-documents", in: app)
     }
 
     func testConversionScreensCanBeCancelledWithoutCreatingDocuments() {
@@ -163,7 +297,10 @@ final class FolikUITests: XCTestCase {
             c.beginPage(); ("PRIVATE ACCOUNT 4827" as NSString).draw(at: CGPoint(x: 72, y: 72), withAttributes: [.font: UIFont.systemFont(ofSize: 20)])
         }
         let app = XCUIApplication(); app.launchArguments = ["--ui-test-fixture", "--ui-test-pdf-source", data.base64EncodedString()]; app.launch()
-        app.buttons["library.addDocument"].tap(); app.buttons["Redact PDF"].tap()
+        app.buttons["library.addDocument"].tap()
+        let redact = app.buttons["Redact PDF"]
+        if !redact.exists { app.swipeUp() }
+        XCTAssertTrue(redact.waitForExistence(timeout: 3)); redact.tap()
         let addArea = app.buttons["redaction.addArea"]
         XCTAssertTrue(addArea.waitForExistence(timeout: 10)); if !addArea.isHittable { app.swipeUp() }; addArea.tap()
         let create = app.buttons["redaction.preview"]; XCTAssertTrue(create.isEnabled); create.tap()
@@ -171,6 +308,37 @@ final class FolikUITests: XCTestCase {
         let attachment = XCTAttachment(screenshot: app.screenshot()); attachment.lifetime = .keepAlways; add(attachment)
         app.buttons["office.save"].tap()
         XCTAssertTrue(app.navigationBars["Redacted Test"].waitForExistence(timeout: 10))
+    }
+
+    func testSmartRedactionFindsAndAddsReviewedText() {
+        let data = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 612, height: 792)).pdfData { context in
+            context.beginPage()
+            ("PRIVATE ACCOUNT 4827" as NSString).draw(at: CGPoint(x: 72, y: 72), withAttributes: [.font: UIFont.systemFont(ofSize: 20)])
+            ("Public project summary" as NSString).draw(at: CGPoint(x: 72, y: 500), withAttributes: [.font: UIFont.systemFont(ofSize: 20)])
+        }
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-pdf-source", data.base64EncodedString()]
+        app.launch()
+        app.buttons["library.addDocument"].tap()
+        let redact = app.buttons["Redact PDF"]
+        if !redact.exists { app.swipeUp() }
+        XCTAssertTrue(redact.waitForExistence(timeout: 3))
+        redact.tap()
+
+        let query = app.textFields["redaction.searchText"]
+        XCTAssertTrue(query.waitForExistence(timeout: 10))
+        if !query.isHittable { app.swipeUp() }
+        query.tap()
+        query.typeText("PRIVATE ACCOUNT")
+        app.buttons["redaction.findText"].tap()
+
+        XCTAssertTrue(app.navigationBars["Review Suggestions"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["PRIVATE ACCOUNT"].exists)
+        let addSuggestions = app.buttons["redaction.addSuggestions"]
+        XCTAssertTrue(addSuggestions.isEnabled)
+        addSuggestions.tap()
+        XCTAssertTrue(app.staticTexts["Area 1 · Page 1"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["redaction.preview"].isEnabled)
     }
 
     func testBatchSeparateAndCombinedSave() {
@@ -285,7 +453,11 @@ final class FolikUITests: XCTestCase {
         app.launch()
         app.buttons["library.addDocument"].tap()
         app.buttons["Documents to PDF"].tap()
-        app.buttons["office.preview"].tap()
+        let preview = app.buttons["office.preview"]
+        XCTAssertTrue(preview.waitForExistence(timeout: 5))
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: preview)
+        waitForExpectations(timeout: 5)
+        preview.tap()
         XCTAssertTrue(app.navigationBars["Conversion Preview"].waitForExistence(timeout: 15))
         app.buttons["Back"].tap()
         app.buttons["Cancel"].tap()
@@ -330,7 +502,7 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(settingsElements["settings.feedback"].exists)
         XCTAssertTrue(app.staticTexts["Documents stay on this device"].exists)
         XCTAssertTrue(app.staticTexts["Scans and text recognition run locally"].exists)
-        XCTAssertTrue(app.staticTexts["Version 1.0 (1)"].exists)
+        XCTAssertTrue(app.staticTexts["Version 1.0.2 (2)"].exists)
         app.swipeUp()
         XCTAssertTrue(settingsElements["settings.eula"].waitForExistence(timeout: 3))
     }
@@ -560,7 +732,10 @@ final class FolikUITests: XCTestCase {
         let redaction = XCUIApplication()
         redaction.launchArguments = ["--ui-test-fixture", "--ui-test-pdf-source", data.base64EncodedString()]
         redaction.launch()
-        redaction.buttons["library.addDocument"].tap(); redaction.buttons["Redact PDF"].tap()
+        redaction.buttons["library.addDocument"].tap()
+        let redactTool = redaction.buttons["Redact PDF"]
+        if !redactTool.exists { redaction.swipeUp() }
+        XCTAssertTrue(redactTool.waitForExistence(timeout: 3)); redactTool.tap()
         let area = redaction.buttons["redaction.addArea"]
         XCTAssertTrue(area.waitForExistence(timeout: 10))
         if !area.isHittable { redaction.swipeUp() }; area.tap()

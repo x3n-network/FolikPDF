@@ -3,7 +3,10 @@ import UniformTypeIdentifiers
 
 struct PDFToolView: View {
     var compress = false
+    var initialURL: URL? = nil
     let complete: (LibraryDocument) -> Void
+    @State private var loadedInitialSource = false
+    @State private var sourceName: String?
     @Environment(\.dismiss) private var dismiss
     @State private var preset: PDFCompressionPreset = .smaller
     @State private var showFiles = false
@@ -18,7 +21,14 @@ struct PDFToolView: View {
         NavigationStack {
             Form {
                 Section {
-                    Button("Choose PDF") { showFiles = true }.disabled(busy)
+                    if let sourceName {
+                        Label(sourceName, systemImage: "doc")
+                            .font(.subheadline.weight(.semibold))
+                            .accessibilityIdentifier("pdfTool.source")
+                    }
+                    Button(source == nil ? "Choose PDF" : "Choose Another PDF") { showFiles = true }
+                        .frame(minHeight: 44)
+                        .disabled(busy)
                     Text(compress ? "Reduce image-heavy PDFs while keeping the original. Review quality and compare file sizes before saving." : "Add searchable text to scanned PDF pages on this device. Pages with existing text or annotations are preserved and skipped.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
@@ -52,6 +62,12 @@ struct PDFToolView: View {
             .sheet(item: $preview) { OfficePreviewView(preview: $0, filename: filename, complete: complete) }
             .onDisappear { task?.cancel() }
             .onAppear {
+                guard !loadedInitialSource else { return }
+                loadedInitialSource = true
+                if let initialURL {
+                    load(initialURL)
+                    return
+                }
                 #if DEBUG
                 let args = ProcessInfo.processInfo.arguments
                 if let index = args.firstIndex(of: "--ui-test-pdf-source"), index + 1 < args.count, source == nil {
@@ -62,13 +78,13 @@ struct PDFToolView: View {
         }
     }
     private func load(_ url: URL) {
-        busy = true; error = nil; status = "Reading PDF…"; source = nil
+        busy = true; error = nil; status = "Reading PDF…"; source = nil; sourceName = nil; preview = nil
         task = Task {
             defer { busy = false }
             do {
                 let data = try await Task.detached { try PDFConverter.readFile(url, maximumBytes: PDFProcessing.maximumBytes) }.value
                 try Task.checkCancellation()
-                source = data; filename = url.deletingPathExtension().lastPathComponent + (compress ? " Compressed" : " Searchable")
+                source = data; sourceName = url.lastPathComponent; filename = url.deletingPathExtension().lastPathComponent + (compress ? " Compressed" : " Searchable")
             } catch is CancellationError { } catch { self.error = error.localizedDescription }
         }
     }

@@ -1,36 +1,62 @@
 import QuickLookThumbnailing
 import SwiftUI
 
+nonisolated enum LibrarySortOrder: String, CaseIterable, Identifiable {
+    case newest, oldest, name, size
+
+    var id: Self { self }
+    var title: String {
+        switch self {
+        case .newest: "Newest"
+        case .oldest: "Oldest"
+        case .name: "Name"
+        case .size: "File Size"
+        }
+    }
+}
+
+private struct LibraryDocumentSelection: Identifiable {
+    let id = UUID()
+    let documents: [LibraryDocument]
+}
+
 struct LibraryView: View {
     @EnvironmentObject private var library: DocumentLibrary
-    @State private var organizing: LibraryDocument?
+    @AppStorage("folik.librarySortOrder") private var sortOrderRawValue = LibrarySortOrder.newest.rawValue
+    @State private var organizing: LibraryDocumentSelection?
+    @State private var renaming: LibraryDocument?
+    @State private var selection: Set<LibraryDocument.ID> = []
+    @State private var isSelecting = false
+    @State private var confirmBulkDelete = false
     @State private var selectedFolder = "\u{0}"
     @State private var selectedTag = "\u{0}"
+    @State private var favoritesOnly = false
     var searchStatus: String? = nil
     var searchHits: [URL: LibrarySearchHit] = [:]
     var isSearching = false
     private var visibleDocuments: [LibraryDocument] {
         documents.filter {
             let value = library.metadata(for: $0)
-            return (selectedFolder == "\u{0}" || value.folder == selectedFolder) && (selectedTag == "\u{0}" || value.tags.contains(selectedTag))
+            return (selectedFolder == "\u{0}" || value.folder == selectedFolder) && (selectedTag == "\u{0}" || value.tags.contains(selectedTag)) && (!favoritesOnly || value.isFavorite)
         }
+        .sorted(by: documentSort)
     }
+    private var selectedDocuments: [LibraryDocument] { documents.filter { selection.contains($0.id) } }
+    private var selectedShouldFavorite: Bool {
+        selectedDocuments.contains { !library.metadata(for: $0).isFavorite }
+    }
+    private var sortOrder: LibrarySortOrder { LibrarySortOrder(rawValue: sortOrderRawValue) ?? .newest }
     let documents: [LibraryDocument]
     let isImporting: Bool
     let importStatus: String?
     let canScan: Bool
     let openImporter: () -> Void
     let openScanner: () -> Void
-    let openImageConverter: () -> Void
-    let openTextConverter: () -> Void
-    let openOfficeConverter: () -> Void
-    var openSearchablePDF: () -> Void = {}
-    var openCompression: () -> Void = {}
-    var openBatch: () -> Void = {}
-    var openRedaction: () -> Void = {}
+    let openTools: () -> Void
     let openSettings: () -> Void
     let openDocument: (LibraryDocument) -> Void
     let deleteDocument: (LibraryDocument) -> Void
+    let openDocumentTool: (LibraryPDFTool, LibraryDocument) -> Void
 
     var body: some View {
         Group {
@@ -46,7 +72,28 @@ struct LibraryView: View {
         .onChange(of: library.tags) { _, tags in
             if selectedTag != "\u{0}" && !tags.contains(selectedTag) { selectedTag = "\u{0}" }
         }
-        .sheet(item: $organizing) { DocumentOrganizationView(document: $0) }
+        .onChange(of: selectedFolder) { _, _ in selection.removeAll() }
+        .onChange(of: selectedTag) { _, _ in selection.removeAll() }
+        .onChange(of: favoritesOnly) { _, _ in selection.removeAll() }
+        .onChange(of: visibleDocuments.map(\.id)) { _, ids in
+            selection.formIntersection(ids)
+        }
+        .sheet(item: $organizing) { DocumentOrganizationView(documents: $0.documents) }
+        .sheet(item: $renaming) { RenameDocumentView(document: $0) }
+        .confirmationDialog(
+            "Remove \(selectedDocuments.count) document\(selectedDocuments.count == 1 ? "" : "s") from Folik?",
+            isPresented: $confirmBulkDelete,
+            titleVisibility: .visible
+        ) {
+            Button("Remove from Folik", role: .destructive) {
+                library.delete(selectedDocuments)
+                selection.removeAll()
+                isSelecting = false
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes the local copies. This action cannot be undone.")
+        }
         .background(FolikTheme.surface)
         .navigationTitle("Library")
         .navigationBarTitleDisplayMode(.large)
@@ -69,8 +116,12 @@ struct LibraryView: View {
         }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                if !documents.isEmpty {
-                    FolikWordmark(compact: true)
+                if !library.documents.isEmpty {
+                    Button(isSelecting ? "Done" : "Select") {
+                        isSelecting.toggle()
+                        if !isSelecting { selection.removeAll() }
+                    }
+                    .accessibilityIdentifier("library.select")
                 }
             }
             ToolbarItemGroup(placement: .primaryAction) {
@@ -79,30 +130,7 @@ struct LibraryView: View {
                 }
                 .accessibilityIdentifier("library.settings")
 
-                Menu {
-                    Button(action: openScanner) {
-                        Label("Scan Document", systemImage: "doc.viewfinder")
-                    }
-                    .disabled(!canScan || isImporting)
-                    Button(action: openImporter) {
-                        Label("Choose PDFs", systemImage: "folder")
-                    }
-                    .disabled(isImporting)
-                    Button("Make PDF Searchable", action: openSearchablePDF)
-                    Button("Compress PDF", action: openCompression)
-                    Button("Batch to PDF", action: openBatch)
-                    Button("Redact PDF", action: openRedaction)
-                    Divider()
-                    Button(action: openImageConverter) {
-                        Label("Images to PDF", systemImage: "photo.on.rectangle")
-                    }
-                    Button(action: openOfficeConverter) {
-                        Label("Documents to PDF", systemImage: "doc.richtext")
-                    }
-                    Button(action: openTextConverter) {
-                        Label("Text/RTF to PDF", systemImage: "doc.text")
-                    }
-                } label: {
+                Button(action: openTools) {
                     if isImporting {
                         ProgressView()
                     } else {
@@ -116,41 +144,184 @@ struct LibraryView: View {
         }
     }
 
+    private var hasFilters: Bool {
+        favoritesOnly || selectedFolder != "\u{0}" || selectedTag != "\u{0}"
+    }
+
+    private var filterSummary: String {
+        var labels: [String] = []
+        if favoritesOnly { labels.append("Favorites") }
+        if selectedFolder != "\u{0}" { labels.append(selectedFolder.isEmpty ? "Unfiled" : selectedFolder) }
+        if selectedTag != "\u{0}" { labels.append("#" + selectedTag) }
+        return labels.joined(separator: " · ")
+    }
+
+    private func clearFilters() {
+        favoritesOnly = false
+        selectedFolder = "\u{0}"
+        selectedTag = "\u{0}"
+    }
+
     private var documentList: some View {
-        List {
+        let visible = visibleDocuments
+        let favorites = visible.filter { library.metadata(for: $0).isFavorite }
+        let otherDocuments = visible.filter { !library.metadata(for: $0).isFavorite }
+        return List {
             Section {
-                PrivacyBanner()
-                    .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 16, trailing: 16))
+                libraryControls
+                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                    .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
             }
 
-            Section("Find and organize") {
-                Picker("Folder", selection: $selectedFolder) {
-                    Text("All folders").tag("\u{0}"); Text("Unfiled").tag("")
-                    ForEach(library.folders, id: \.self) { Text($0).tag($0) }
+            if !favorites.isEmpty {
+                Section("Favorites (\(favorites.count))") {
+                    documentRows(favorites)
                 }
-                Picker("Tag", selection: $selectedTag) {
-                    Text("All tags").tag("\u{0}")
-                    ForEach(library.tags, id: \.self) { Text($0).tag($0) }
-                }
-                if let searchStatus { Text(searchStatus).font(.footnote).foregroundStyle(.secondary) }
-                if isSearching { ProgressView("Searching document text…") }
             }
-            Section("Documents (\(visibleDocuments.count))") {
-                if visibleDocuments.isEmpty { Text("No matching documents").foregroundStyle(.secondary) }
-                ForEach(visibleDocuments) { document in
-                    DocumentRow(
-                        document: document,
-                        metadata: library.metadata(for: document),
-                        hit: searchHits[document.url],
-                        organize: { organizing = document },
-                        open: { openDocument(document) },
-                        delete: { deleteDocument(document) }
-                    )
+            if !otherDocuments.isEmpty {
+                Section(favorites.isEmpty ? "Documents (\(otherDocuments.count))" : "Other Documents (\(otherDocuments.count))") {
+                    documentRows(otherDocuments)
                 }
+            }
+            if visible.isEmpty {
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(isSearching ? "Searching your library…" : "No matching documents")
+                            .font(.headline)
+                        Text(hasFilters ? "Try another search or clear your filters to see more documents." : "Try a different filename, folder, tag, or phrase from a searchable PDF.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        if hasFilters {
+                            Button("Clear filters", action: clearFilters)
+                                .frame(minHeight: 44)
+                        }
+                    }
+                    .padding(.vertical, 8)
+                }
+            }
+            Section {
+                Label("On-device & private", systemImage: "lock.shield")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("On-device and private. Documents are processed locally and never uploaded by Folik.")
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             }
         }
         .listStyle(.insetGrouped)
+        .listSectionSpacing(16)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if isSelecting { bulkActionBar }
+        }
+    }
+
+    private var libraryControls: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 16) {
+                    sortMenu
+                    Spacer(minLength: 8)
+                    filterMenu
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    sortMenu
+                    filterMenu
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            if hasFilters {
+                HStack(alignment: .center, spacing: 8) {
+                    Text(filterSummary)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    Button(action: clearFilters) {
+                        Image(systemName: "xmark.circle.fill")
+                            .frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel("Clear filters")
+                    .accessibilityIdentifier("library.clearFilters")
+                }
+            }
+            if let searchStatus {
+                Text(searchStatus).font(.footnote).foregroundStyle(.secondary)
+            }
+            if isSearching { ProgressView("Searching document text…").font(.footnote) }
+        }
+        .buttonStyle(.borderless)
+    }
+
+    private var sortMenu: some View {
+        Menu {
+            Picker("Sort documents", selection: $sortOrderRawValue) {
+                ForEach(LibrarySortOrder.allCases) { order in
+                    Text(order.title).tag(order.rawValue)
+                }
+            }
+        } label: {
+            Label(sortOrder.title, systemImage: "arrow.up.arrow.down")
+                .font(.subheadline.weight(.semibold))
+                .fixedSize()
+                .frame(minHeight: 44)
+        }
+        .labelStyle(.titleAndIcon)
+        .accessibilityLabel("Sort: \(sortOrder.title)")
+        .accessibilityIdentifier("library.sort")
+    }
+
+    private var filterMenu: some View {
+        Menu {
+            Toggle("Favorites only", isOn: $favoritesOnly)
+            Picker("Folder", selection: $selectedFolder) {
+                Text("All folders").tag("\u{0}")
+                Text("Unfiled").tag("")
+                ForEach(library.folders, id: \.self) { Text($0).tag($0) }
+            }
+            .pickerStyle(.menu)
+            Picker("Tag", selection: $selectedTag) {
+                Text("All tags").tag("\u{0}")
+                ForEach(library.tags, id: \.self) { Text($0).tag($0) }
+            }
+            .pickerStyle(.menu)
+            if hasFilters { Button("Clear filters", action: clearFilters) }
+        } label: {
+            Label(hasFilters ? "Filtered" : "Filter", systemImage: hasFilters ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                .font(.subheadline.weight(.semibold))
+                .fixedSize()
+                .frame(minHeight: 44)
+        }
+        .labelStyle(.titleAndIcon)
+        .accessibilityLabel("Filter documents")
+        .accessibilityValue(hasFilters ? filterSummary : "All documents")
+        .accessibilityIdentifier("library.filter")
+    }
+
+    private func documentRows(_ items: [LibraryDocument]) -> some View {
+        ForEach(items) { document in
+            DocumentRow(
+                document: document,
+                metadata: library.metadata(for: document),
+                hit: searchHits[document.url],
+                isSelecting: isSelecting,
+                isSelected: selection.contains(document.id),
+                toolsDisabled: isImporting,
+                toggleSelection: {
+                    if selection.contains(document.id) { selection.remove(document.id) }
+                    else { selection.insert(document.id) }
+                },
+                organize: { organizing = LibraryDocumentSelection(documents: [document]) },
+                rename: { renaming = document },
+                toggleFavorite: { updateFavorites(!library.metadata(for: document).isFavorite, for: [document]) },
+                open: { openDocument(document) },
+                delete: { deleteDocument(document) },
+                openTool: { openDocumentTool($0, document) }
+            )
+        }
     }
 
     private var emptyLibrary: some View {
@@ -230,90 +401,208 @@ struct LibraryView: View {
             .frame(maxWidth: .infinity)
         }
     }
-}
 
-private struct PrivacyBanner: View {
-    var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            Image(systemName: "lock.shield.fill")
-                .font(.title3)
-                .foregroundStyle(FolikTheme.cobalt)
-                .frame(width: 32, height: 32)
-                .background(FolikTheme.cobalt.opacity(0.12), in: RoundedRectangle(cornerRadius: 9))
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Private by design")
-                    .font(.headline)
-                Text("Documents are processed locally and never uploaded by Folik.")
-                    .font(.subheadline)
-                    .foregroundStyle(FolikTheme.mutedInk)
+    private var bulkActionBar: some View {
+        HStack(spacing: 6) {
+            Button(!visibleDocuments.isEmpty && selection.count == visibleDocuments.count ? "Deselect All" : "Select All") {
+                selection = selection.count == visibleDocuments.count ? [] : Set(visibleDocuments.map(\.id))
             }
+            .frame(minHeight: 44)
+            .disabled(visibleDocuments.isEmpty)
+
             Spacer(minLength: 0)
+
+            Menu {
+                Button {
+                    organizing = LibraryDocumentSelection(documents: selectedDocuments)
+                } label: {
+                    Label("Organize", systemImage: "folder")
+                }
+                Button {
+                    updateFavorites(selectedShouldFavorite, for: selectedDocuments)
+                } label: {
+                    Label(
+                        selectedShouldFavorite ? "Favorite" : "Remove Favorite",
+                        systemImage: selectedShouldFavorite ? "star" : "star.slash"
+                    )
+                }
+            } label: {
+                Label("More", systemImage: "ellipsis.circle")
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            .disabled(selection.isEmpty)
+
+            ShareLink(items: selectedDocuments.map(\.url)) {
+                Image(systemName: "square.and.arrow.up").frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("Share selected documents")
+            .disabled(selection.isEmpty)
+
+            Button(role: .destructive) { confirmBulkDelete = true } label: {
+                Image(systemName: "trash").frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("Remove selected documents")
+            .disabled(selection.isEmpty)
         }
-        .padding(16)
-        .background(FolikTheme.raisedSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .accessibilityElement(children: .combine)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(.bar)
+        .overlay(alignment: .top) { Divider() }
+    }
+
+    private func documentSort(_ lhs: LibraryDocument, _ rhs: LibraryDocument) -> Bool {
+        let leftFavorite = library.metadata(for: lhs).isFavorite
+        let rightFavorite = library.metadata(for: rhs).isFavorite
+        if leftFavorite != rightFavorite { return leftFavorite }
+        switch sortOrder {
+        case .newest: return lhs.modifiedAt > rhs.modifiedAt
+        case .oldest: return lhs.modifiedAt < rhs.modifiedAt
+        case .name: return lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending
+        case .size:
+            return lhs.fileSize == rhs.fileSize
+                ? lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending
+                : lhs.fileSize > rhs.fileSize
+        }
+    }
+
+    private func updateFavorites(_ isFavorite: Bool, for documents: [LibraryDocument]) {
+        do {
+            try library.setFavorite(isFavorite, for: documents)
+        } catch {
+            library.errorMessage = "Folik couldn’t update those favorites. \(error.localizedDescription)"
+        }
     }
 }
 
 private struct DocumentRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let document: LibraryDocument
     let metadata: LibraryMetadata
     let hit: LibrarySearchHit?
+    let isSelecting: Bool
+    let isSelected: Bool
+    let toolsDisabled: Bool
+    let toggleSelection: () -> Void
     let organize: () -> Void
+    let rename: () -> Void
+    let toggleFavorite: () -> Void
     let open: () -> Void
     let delete: () -> Void
+    let openTool: (LibraryPDFTool) -> Void
+
+    private var accessibilityDescription: String {
+        var details = [document.displayName, document.pageDescription, document.fileSizeDescription]
+        if metadata.isFavorite { details.append("Favorite") }
+        if !metadata.folder.isEmpty { details.append("Folder: " + metadata.folder) }
+        if !metadata.tags.isEmpty { details.append("Tags: " + metadata.tags.joined(separator: ", ")) }
+        if let hit { details.append("Page \(hit.page): \(hit.excerpt)") }
+        return details.joined(separator: ", ")
+    }
 
     var body: some View {
-        HStack(spacing: 14) {
-            Button(action: open) {
-                HStack(spacing: 14) {
-                    PDFCoverThumbnail(url: document.url)
-                        .frame(width: 52, height: 68)
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(document.displayName)
-                            .font(.headline)
-                            .foregroundStyle(FolikTheme.ink)
-                            .lineLimit(2)
-                        if !metadata.folder.isEmpty { Label(metadata.folder, systemImage: "folder").font(.caption).foregroundStyle(.secondary) }
-                        if !metadata.tags.isEmpty { Text(metadata.tags.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary) }
-                        if let hit { Text("Page \(hit.page): \(hit.excerpt)").font(.caption).lineLimit(3).foregroundStyle(.secondary) }
-                        HStack(spacing: 6) {
-                            Text(document.pageDescription)
-                            Text("·")
-                            Text(document.fileSizeDescription)
-                        }
-                        .font(.subheadline)
-                        .foregroundStyle(FolikTheme.mutedInk)
+        HStack(alignment: .top, spacing: 8) {
+            Button(action: isSelecting ? toggleSelection : open) {
+                HStack(spacing: 12) {
+                    if isSelecting {
+                        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                            .font(.title3)
+                            .foregroundStyle(isSelected ? FolikTheme.cobalt : FolikTheme.mutedInk)
+                            .frame(width: 30, height: 44)
+                            .accessibilityHidden(true)
                     }
-                    Spacer(minLength: 0)
+                    documentContent
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .frame(maxWidth: .infinity)
             .accessibilityIdentifier("library.document.\(document.url.lastPathComponent)")
-            .accessibilityLabel("\(document.displayName), \(document.pageDescription), \(document.fileSizeDescription)")
-            .accessibilityHint("Opens the PDF")
+            .accessibilityLabel(accessibilityDescription)
+            .accessibilityValue(isSelecting ? (isSelected ? "Selected" : "Not selected") : "")
+            .accessibilityHint(isSelecting ? "Toggles selection" : "Opens the PDF")
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Menu {
-                Button("Organize", action: organize)
-                ShareLink(item: document.url) {
-                    Label("Share a copy", systemImage: "square.and.arrow.up")
+            if !isSelecting {
+                Menu {
+                    Button(action: toggleFavorite) {
+                        Label(metadata.isFavorite ? "Remove Favorite" : "Favorite", systemImage: metadata.isFavorite ? "star.slash" : "star")
+                    }
+                    Button("Rename", action: rename)
+                    Button("Organize", action: organize)
+                    Menu {
+                        ForEach(LibraryPDFTool.allCases) { tool in
+                            Button { openTool(tool) } label: {
+                                Label(tool.title, systemImage: tool.icon)
+                            }
+                        }
+                    } label: {
+                        Label("Tools", systemImage: "wrench.and.screwdriver")
+                    }
+                    .disabled(toolsDisabled)
+                    ShareLink(item: document.url) {
+                        Label("Share a copy", systemImage: "square.and.arrow.up")
+                    }
+                    Button(role: .destructive, action: delete) {
+                        Label("Remove from Folik", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.body.weight(.semibold))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
-                Button(role: .destructive, action: delete) {
-                    Label("Remove from Folik", systemImage: "trash")
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.body.weight(.semibold))
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
+                .accessibilityLabel("Document actions")
+                .accessibilityHint(document.displayName)
             }
-            .accessibilityLabel("Document actions")
         }
-        .padding(.vertical, 5)
+        .padding(.vertical, 8)
+    }
+
+    private var documentContent: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 14))
+        return layout {
+            PDFCoverThumbnail(url: document.url)
+                .frame(width: 60, height: 80)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(document.displayName)
+                        .font(.headline)
+                        .foregroundStyle(FolikTheme.ink)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if metadata.isFavorite {
+                        Image(systemName: "star.fill")
+                            .font(.caption)
+                            .foregroundStyle(FolikTheme.cobalt)
+                            .accessibilityHidden(true)
+                    }
+                }
+                Text("\(document.pageDescription) · \(document.fileSizeDescription)")
+                    .font(.caption)
+                    .foregroundStyle(FolikTheme.mutedInk)
+                if !metadata.folder.isEmpty {
+                    Label(metadata.folder, systemImage: "folder")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                }
+                if !metadata.tags.isEmpty {
+                    Text(metadata.tags.map { "#" + $0 }.joined(separator: "  "))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                }
+                if let hit {
+                    Text("Page \(hit.page): \(hit.excerpt)")
+                        .font(.caption)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 

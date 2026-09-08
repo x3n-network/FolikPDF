@@ -3,9 +3,10 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-private enum PDFToolMode: String, Identifiable {
-    case searchable, compression
-    var id: Self { self }
+private struct LibraryPDFToolRequest: Identifiable {
+    let id = UUID()
+    let tool: LibraryPDFTool
+    var sourceURL: URL? = nil
 }
 
 struct ContentView: View {
@@ -15,12 +16,13 @@ struct ContentView: View {
     @State private var isScannerPresented = false
     @State private var cameraPermissionAlertPresented = false
     @State private var isSettingsPresented = false
+    @State private var toolsPresented = false
+    @State private var pendingTool: LibraryTool?
     @State private var conversionMode: PDFConversionView.Mode?
     @State private var convertedDocument: LibraryDocument?
     @State private var officeConverterPresented = false
-    @State private var redactionPresented = false
     @State private var batchPresented = false
-    @State private var pdfToolMode: PDFToolMode?
+    @State private var pdfToolRequest: LibraryPDFToolRequest?
     @State private var searchText = ""
     @State private var searchResult = LibrarySearchResult()
     @State private var searchingText = false
@@ -81,6 +83,12 @@ struct ContentView: View {
         .sheet(isPresented: $isSettingsPresented) {
             SettingsView()
         }
+        .sheet(isPresented: $toolsPresented, onDismiss: launchPendingTool) {
+            LibraryToolsView(canScan: DocumentScannerView.isSupported) { tool in
+                pendingTool = tool
+                toolsPresented = false
+            }
+        }
         .sheet(item: $conversionMode, onDismiss: {
             if let document = convertedDocument {
                 convertedDocument = nil
@@ -103,17 +111,22 @@ struct ContentView: View {
                 officeConverterPresented = false
             }
         }
-        .sheet(item: $pdfToolMode, onDismiss: {
+        .sheet(item: $pdfToolRequest, onDismiss: {
             if let document = convertedDocument { convertedDocument = nil; path.append(document) }
-        }) { mode in
-            PDFToolView(compress: mode == .compression) { document in convertedDocument = document; pdfToolMode = nil }
+        }) { request in
+            if request.tool == .redact {
+                RedactionView(initialURL: request.sourceURL) { document in
+                    convertedDocument = document
+                    pdfToolRequest = nil
+                }
+            } else {
+                PDFToolView(compress: request.tool == .compress, initialURL: request.sourceURL) { document in
+                    convertedDocument = document
+                    pdfToolRequest = nil
+                }
+            }
         }
         .sheet(isPresented: $batchPresented) { BatchConversionView() }
-        .sheet(isPresented: $redactionPresented, onDismiss: {
-            if let document = convertedDocument { convertedDocument = nil; path.append(document) }
-        }) {
-            RedactionView { document in convertedDocument = document; redactionPresented = false }
-        }
         .onOpenURL { url in
             Task {
                 if let document = await library.importDocuments(at: [url]).first {
@@ -182,16 +195,13 @@ struct ContentView: View {
             canScan: DocumentScannerView.isSupported,
             openImporter: { isImporterPresented = true },
             openScanner: beginScanning,
-            openImageConverter: { conversionMode = .images },
-            openTextConverter: { conversionMode = .text },
-            openOfficeConverter: { officeConverterPresented = true },
-            openSearchablePDF: { pdfToolMode = .searchable },
-            openCompression: { pdfToolMode = .compression },
-            openBatch: { batchPresented = true },
-            openRedaction: { redactionPresented = true },
+            openTools: { toolsPresented = true },
             openSettings: { isSettingsPresented = true },
             openDocument: { path.append($0) },
-            deleteDocument: library.delete
+            deleteDocument: library.delete,
+            openDocumentTool: { tool, document in
+                pdfToolRequest = LibraryPDFToolRequest(tool: tool, sourceURL: document.url)
+            }
         )
 
         if library.documents.isEmpty {
@@ -213,6 +223,22 @@ struct ContentView: View {
             get: { library.errorMessage != nil },
             set: { if !$0 { library.errorMessage = nil } }
         )
+    }
+
+    private func launchPendingTool() {
+        guard let tool = pendingTool else { return }
+        pendingTool = nil
+        switch tool {
+        case .scan: beginScanning()
+        case .importPDF: isImporterPresented = true
+        case .images: conversionMode = .images
+        case .documents: officeConverterPresented = true
+        case .text: conversionMode = .text
+        case .searchable: pdfToolRequest = LibraryPDFToolRequest(tool: .searchable)
+        case .compress: pdfToolRequest = LibraryPDFToolRequest(tool: .compress)
+        case .batch: batchPresented = true
+        case .redact: pdfToolRequest = LibraryPDFToolRequest(tool: .redact)
+        }
     }
 
     private func beginScanning() {

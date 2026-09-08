@@ -2,7 +2,7 @@ import Combine
 import PDFKit
 import SwiftUI
 
-enum ReaderLayout: String, CaseIterable, Identifiable {
+nonisolated enum ReaderLayout: String, CaseIterable, Identifiable, Sendable {
     case continuous
     case singlePage
     case twoUp
@@ -311,6 +311,7 @@ struct PDFReaderCommand {
         case nextPage
         case fitPage
         case setLayout(ReaderLayout)
+        case restore(pageIndex: Int, layout: ReaderLayout)
         case save
     }
 }
@@ -355,19 +356,28 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
     private var annotationRedoStack: [AnnotationHistoryAction] = []
     private let signatureStore: SignatureStore
     private let bookmarkStore: BookmarkStore
+    private let readerStateStore: ReaderStateStore
 
     init(
         item: LibraryDocument,
         signatureStore: SignatureStore? = nil,
-        bookmarkStore: BookmarkStore? = nil
+        bookmarkStore: BookmarkStore? = nil,
+        readerStateStore: ReaderStateStore? = nil
     ) {
         self.item = item
         self.signatureStore = signatureStore ?? SignatureStore()
         self.bookmarkStore = bookmarkStore ?? BookmarkStore()
+        self.readerStateStore = readerStateStore ?? ReaderStateStore()
         super.init()
         loadSavedSignatures()
         loadDocument()
+        let readerState = self.readerStateStore.state(for: item.url, pageCount: pageCount)
+        pageIndex = readerState.pageIndex
+        layout = readerState.layout
         bookmarkedPageIndices = self.bookmarkStore.bookmarks(for: item.url, pageCount: pageCount)
+        if !isLocked {
+            command = PDFReaderCommand(action: .restore(pageIndex: pageIndex, layout: layout))
+        }
     }
 
     var pageCount: Int { document?.pageCount ?? item.pageCount }
@@ -410,7 +420,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         outlineEntries = Self.flattenOutline(document.outlineRoot)
         configureForms(in: document)
         refreshAnnotations()
-        command = PDFReaderCommand(action: .fitPage)
+        command = PDFReaderCommand(action: .restore(pageIndex: pageIndex, layout: layout))
         return true
     }
 
@@ -745,7 +755,9 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
     func fitPage() { command = PDFReaderCommand(action: .fitPage) }
 
     func setLayout(_ layout: ReaderLayout) {
+        guard self.layout != layout else { return }
         self.layout = layout
+        saveReaderState()
         command = PDFReaderCommand(action: .setLayout(layout))
     }
 
@@ -1193,10 +1205,18 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
 
     func reportPage(_ page: PDFPage?) {
         guard let document, let page else { return }
-        pageIndex = max(0, document.index(for: page))
+        let reportedIndex = max(0, document.index(for: page))
+        if pageIndex != reportedIndex {
+            pageIndex = reportedIndex
+            saveReaderState()
+        }
         if let selectedAnnotation, selectedAnnotation.pageIndex != pageIndex {
             self.selectedAnnotation = nil
         }
+    }
+
+    private func saveReaderState() {
+        readerStateStore.save(ReaderState(pageIndex: pageIndex, layout: layout), for: item.url)
     }
 
     func reportSelection(_ selection: PDFSelection?) {

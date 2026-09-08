@@ -40,6 +40,7 @@ struct PDFKitView: UIViewRepresentable {
 
         private let session: DocumentSession
         private var isObserving = false
+        private var isPageReportScheduled = false
         private var isSelectionReportScheduled = false
         private var drawingPage: PDFPage?
         private var drawingPoints: [CGPoint] = []
@@ -348,7 +349,13 @@ struct PDFKitView: UIViewRepresentable {
         }
 
         @objc private func pageChanged() {
-            session.reportPage(pdfView.currentPage)
+            guard !isPageReportScheduled else { return }
+            isPageReportScheduled = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.isPageReportScheduled = false
+                self.session.reportPage(self.pdfView.currentPage)
+            }
         }
 
         @objc private func selectionChanged() {
@@ -394,7 +401,20 @@ struct PDFKitView: UIViewRepresentable {
             case .fitPage:
                 pdfView.autoScales = true
             case .setLayout(let layout):
-                let currentPage = pdfView.currentPage
+                setLayout(layout, returningTo: pdfView.currentPage)
+            case .restore(let pageIndex, let layout):
+                let page = pdfView.document?.page(at: pageIndex)
+                setLayout(layout, returningTo: page)
+            case .save:
+                pdfView.endEditing(true)
+                DispatchQueue.main.async { [weak self] in
+                    self?.session.noteFormEditing()
+                    self?.session.persistChanges()
+                }
+            }
+        }
+
+        private func setLayout(_ layout: ReaderLayout, returningTo currentPage: PDFPage?) {
                 switch layout {
                 case .continuous:
                     pdfView.displayMode = .singlePageContinuous
@@ -408,13 +428,6 @@ struct PDFKitView: UIViewRepresentable {
                 }
                 if let currentPage { pdfView.go(to: currentPage) }
                 pdfView.autoScales = true
-            case .save:
-                pdfView.endEditing(true)
-                DispatchQueue.main.async { [weak self] in
-                    self?.session.noteFormEditing()
-                    self?.session.persistChanges()
-                }
-            }
         }
     }
 }

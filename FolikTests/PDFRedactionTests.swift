@@ -5,6 +5,18 @@ import XCTest
 
 @MainActor
 final class PDFRedactionTests: XCTestCase {
+    private func smartFixture() throws -> Data {
+        UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 612, height: 792)).pdfData { context in
+            context.beginPage()
+            let attributes: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 22), .foregroundColor: UIColor.black]
+            ("Contact alice@example.com" as NSString).draw(at: CGPoint(x: 72, y: 90), withAttributes: attributes)
+            ("Call (212) 555-0198" as NSString).draw(at: CGPoint(x: 72, y: 150), withAttributes: attributes)
+            ("SSN 123-45-6789" as NSString).draw(at: CGPoint(x: 72, y: 210), withAttributes: attributes)
+            ("Keep this sentence" as NSString).draw(at: CGPoint(x: 72, y: 600), withAttributes: attributes)
+            context.beginPage()
+            ("Café CAFE cafe" as NSString).draw(at: CGPoint(x: 72, y: 90), withAttributes: attributes)
+        }
+    }
     private func fixture() throws -> Data {
         let data = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 612, height: 792)).pdfData { c in
             c.beginPage()
@@ -69,5 +81,51 @@ final class PDFRedactionTests: XCTestCase {
         let task = Task { try await PDFRedaction.redact(input, areas: [RedactionArea(page: 0, rect: CGRect(x: 0, y: 0, width: 1, height: 1))]) }
         task.cancel()
         do { _ = try await task.value; XCTFail("Cancellation ignored") } catch { XCTAssertTrue(error is CancellationError) }
+    }
+
+    func testSmartRedactionFindsCommonSensitivePatternsOnDevice() throws {
+        let suggestions = try SmartRedaction.findSensitiveInformation(in: smartFixture())
+        XCTAssertEqual(suggestions.count, 3)
+        XCTAssertEqual(Set(suggestions.map(\.kind)), [.email, .phone, .socialSecurityNumber])
+        XCTAssertEqual(Set(suggestions.map(\.area.page)), [0])
+        for suggestion in suggestions {
+            let rect = suggestion.area.rect
+            XCTAssertGreaterThan(rect.width, 0)
+            XCTAssertGreaterThan(rect.height, 0)
+            XCTAssertGreaterThanOrEqual(rect.minX, 0)
+            XCTAssertGreaterThanOrEqual(rect.minY, 0)
+            XCTAssertLessThanOrEqual(rect.maxX, 1)
+            XCTAssertLessThanOrEqual(rect.maxY, 1)
+        }
+    }
+
+    func testSmartRedactionLiteralSearchIgnoresCaseAndDiacritics() throws {
+        let suggestions = try SmartRedaction.findText(in: smartFixture(), query: "café")
+        XCTAssertEqual(suggestions.count, 3)
+        XCTAssertEqual(suggestions.map(\.kind), [.search, .search, .search])
+        XCTAssertEqual(Set(suggestions.map(\.area.page)), [1])
+    }
+
+    func testSmartRedactionSuggestedAreasRemoveMatchesAndHandleRotation() async throws {
+        let source = try XCTUnwrap(PDFDocument(data: smartFixture()))
+        source.page(at: 0)?.rotation = 90
+        let rotatedData = try XCTUnwrap(source.dataRepresentation())
+        let suggestions = try SmartRedaction.findSensitiveInformation(in: rotatedData)
+        XCTAssertEqual(suggestions.count, 3)
+        let result = try await PDFRedaction.redact(rotatedData, areas: suggestions.map(\.area))
+        let page = try XCTUnwrap(PDFDocument(data: result.data)?.page(at: 0))
+        let image = try PDFProcessing.bitmap(try XCTUnwrap(page.pageRef), dpi: 180)
+        let recognized = try await ScannedPDFWriter.recognizeText(in: image).map(\.text).joined(separator: " ")
+        XCTAssertFalse(recognized.localizedCaseInsensitiveContains("alice"))
+        XCTAssertFalse(recognized.contains("555-0198"))
+        XCTAssertFalse(recognized.contains("123-45-6789"))
+        XCTAssertTrue(recognized.localizedCaseInsensitiveContains("Keep this sentence"))
+    }
+
+    func testSmartRedactionReportsPDFWithoutSearchableText() throws {
+        let blank = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 612, height: 792)).pdfData { $0.beginPage() }
+        XCTAssertThrowsError(try SmartRedaction.findText(in: blank, query: "secret")) { error in
+            XCTAssertEqual(error as? SmartRedactionError, .noSearchableText)
+        }
     }
 }

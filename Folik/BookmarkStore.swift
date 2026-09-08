@@ -33,6 +33,13 @@ struct BookmarkStore {
         save([], for: documentURL)
     }
 
+    func moveBookmarks(from oldURL: URL, to newURL: URL) {
+        var updated = allBookmarks
+        guard let bookmarks = updated.removeValue(forKey: documentKey(for: oldURL)) else { return }
+        updated[documentKey(for: newURL)] = bookmarks
+        defaults.set(updated, forKey: storageKey)
+    }
+
     private var allBookmarks: [String: [Int]] {
         defaults.dictionary(forKey: storageKey)?.reduce(into: [:]) { result, entry in
             if let values = entry.value as? [Int] {

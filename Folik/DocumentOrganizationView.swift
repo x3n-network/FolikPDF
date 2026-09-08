@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct DocumentOrganizationView: View {
-    let document: LibraryDocument
+    let documents: [LibraryDocument]
     @EnvironmentObject private var library: DocumentLibrary
     @Environment(\.dismiss) private var dismiss
     @State private var folder = ""
@@ -10,6 +10,14 @@ struct DocumentOrganizationView: View {
     var body: some View {
         NavigationStack {
             Form {
+                if documents.count > 1 {
+                    Section {
+                        Label("Apply to \(documents.count) documents", systemImage: "doc.on.doc")
+                        Text("Saving replaces the folder and tags on every selected document.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 Section("Folder") {
                     TextField("Folder name (optional)", text: $folder).accessibilityIdentifier("organization.folder")
                     if !library.folders.isEmpty {
@@ -31,13 +39,18 @@ struct DocumentOrganizationView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
                         do {
-                            try library.organize(document, folder: folder, tags: tags.components(separatedBy: ","))
+                            try library.organize(documents, folder: folder, tags: tags.components(separatedBy: ","))
                             dismiss()
                         } catch { self.error = error.localizedDescription }
                     }.accessibilityIdentifier("organization.save")
                 }
             }
-            .onAppear { let value = library.metadata(for: document); folder = value.folder; tags = value.tags.joined(separator: ", ") }
+            .onAppear {
+                guard documents.count == 1, let document = documents.first else { return }
+                let value = library.metadata(for: document)
+                folder = value.folder
+                tags = value.tags.joined(separator: ", ")
+            }
         }
     }
 }

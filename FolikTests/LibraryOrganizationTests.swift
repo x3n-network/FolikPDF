@@ -41,6 +41,32 @@ final class LibraryOrganizationTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: store), invalid)
         XCTAssertThrowsError(try LibraryMetadata.validated(folder: String(repeating: "a", count: 81), tags: []))
     }
+    func testLegacyOrganizationWithoutFavoriteStillLoads() throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("Example.pdf"); try write("Example", to: url)
+        let store = root.appendingPathComponent(".folik-library.json")
+        try Data(#"{"Example.pdf":{"folder":"Work","tags":["2026"]}}"#.utf8).write(to: store)
+
+        let library = DocumentLibrary(documentsDirectory: root)
+        let metadata = library.metadata(for: try XCTUnwrap(library.documents.first))
+
+        XCTAssertEqual(metadata.folder, "Work")
+        XCTAssertEqual(metadata.tags, ["2026"])
+        XCTAssertFalse(metadata.isFavorite)
+    }
+
+    func testBulkOrganizationPreservesFavorite() throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        try write("First", to: root.appendingPathComponent("First.pdf"))
+        try write("Second", to: root.appendingPathComponent("Second.pdf"))
+        let library = DocumentLibrary(documentsDirectory: root)
+        try library.setFavorite(true, for: [try XCTUnwrap(library.documents.first)])
+
+        try library.organize(library.documents, folder: "Work", tags: ["review"])
+
+        XCTAssertTrue(library.documents.allSatisfy { library.metadata(for: $0).folder == "Work" })
+        XCTAssertEqual(library.documents.filter { library.metadata(for: $0).isFavorite }.count, 1)
+    }
     func testSearchFindsPageAndDiacriticsAndDoesNotReuseStaleText() throws {
         let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
         let url = root.appendingPathComponent("Unrelated filename.pdf")
