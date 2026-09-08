@@ -91,3 +91,10 @@ Your documents and reading activity remain on your device. No accounts, ads, ana
 - Select 2–20 library PDFs and choose More → Merge PDFs. The source order follows the current library sort; reorder or remove sources and optionally add PDFs before previewing.
 - Opens a combined preview before saving a new merged copy; source PDFs remain unchanged. Existing limits and conversion notes apply.
 - Five batch/merge engine tests and the library merge and existing batch-conversion UI flows passed. Verified chosen page order and unchanged source bytes; visually reviewed the merged preview.
+
+### More helpful library search
+
+- Distinguishes PDFs without selectable text from searchable PDFs with no matches and protected/unreadable files.
+- Offers Make PDF Searchable for the relevant PDFs, with direct loading for a single candidate or a document chooser for several. Folder, tag, and favorite filters apply to these suggestions.
+- Adds Clear search to empty results and reports searching during the debounce interval. Search remains on-device and does not modify source PDFs.
+- Seven organization/search unit tests and two iPhone search/OCR UI tests passed; reviewed the empty-results guidance screenshot.

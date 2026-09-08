@@ -40,9 +40,9 @@ struct ContentView: View {
             let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !query.isEmpty else { return }
             let documents = library.documents
+            searchingText = true
             do {
                 try await Task.sleep(for: .milliseconds(300))
-                searchingText = true
                 let worker = Task.detached { try LibrarySearch.search(query, documents: documents) }
                 let result = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
                 try Task.checkCancellation(); searchResult = result; searchingText = false
@@ -190,6 +190,8 @@ struct ContentView: View {
             searchHits: searchResult.hits,
             isSearching: searchingText,
             hasSearchQuery: !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            noTextDocuments: library.documents.filter { searchResult.noSearchableText.contains($0.url) },
+            clearSearch: { searchText = "" },
             documents: filteredDocuments,
             isImporting: library.isImporting,
             importStatus: library.importStatus,

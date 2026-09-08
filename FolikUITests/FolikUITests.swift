@@ -152,6 +152,30 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(app.buttons["library.document.Second.pdf"].exists)
     }
 
+    func testSearchOffersOCRForImageOnlyPDFAndClearSearch() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-image-only"]
+        app.launch()
+        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
+        let search = app.searchFields.firstMatch
+        search.tap(); search.typeText("notpresent")
+        let ocr = app.buttons["library.searchOCR"]
+        for _ in 0..<3 where !ocr.exists || !ocr.isHittable { app.swipeUp() }
+        XCTAssertTrue(ocr.waitForExistence(timeout: 10))
+        capture("library-search-ocr-guidance", in: app)
+        ocr.tap()
+        XCTAssertTrue(app.navigationBars["Make PDF Searchable"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["pdfTool.source"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["pdfTool.source"].label, "Scan.pdf")
+        app.navigationBars["Make PDF Searchable"].buttons["Cancel"].tap()
+        let clear = app.buttons["library.clearSearch"]
+        for _ in 0..<3 where !clear.isHittable { app.swipeDown() }
+        XCTAssertTrue(clear.waitForExistence(timeout: 5))
+        clear.tap()
+        XCTAssertTrue(app.buttons["library.document.Scan.pdf"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["library.searchOCR"].exists)
+    }
+
     func testLibraryAddMenuOffersScanningAndFileImport() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-fixture"]

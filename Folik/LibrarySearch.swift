@@ -12,6 +12,7 @@ nonisolated struct LibrarySearchHit: Sendable {
 nonisolated struct LibrarySearchResult: Sendable {
     var hits: [URL: LibrarySearchHit] = [:]
     var skipped = 0
+    var noSearchableText: Set<URL> = []
 }
 nonisolated enum LibrarySearch {
     static func search(_ query: String, documents: [LibraryDocument]) throws -> LibrarySearchResult {
@@ -22,16 +23,20 @@ nonisolated enum LibrarySearch {
             try Task.checkCancellation()
             guard item.fileSize <= PDFProcessing.maximumBytes,
                   let pdf = PDFDocument(url: item.url), !pdf.isLocked, pdf.pageCount <= 500 else { result.skipped += 1; continue }
+            var hasSelectableText = false
             for index in 0..<pdf.pageCount {
                 try Task.checkCancellation()
                 guard let text = pdf.page(at: index)?.string,
-                      let range = text.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) else { continue }
+                      !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+                hasSelectableText = true
+                guard let range = text.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) else { continue }
                 let start = text.index(range.lowerBound, offsetBy: -35, limitedBy: text.startIndex) ?? text.startIndex
                 let end = text.index(range.upperBound, offsetBy: 80, limitedBy: text.endIndex) ?? text.endIndex
                 let excerpt = text[start..<end].split(whereSeparator: \.isWhitespace).joined(separator: " ")
                 result.hits[item.url] = LibrarySearchHit(page: index + 1, excerpt: excerpt)
                 break
             }
+            if !hasSelectableText { result.noSearchableText.insert(item.url) }
         }
         return result
     }

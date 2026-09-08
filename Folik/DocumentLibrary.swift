@@ -361,6 +361,18 @@ final class DocumentLibrary: ObservableObject {
                     throw CocoaError(.fileWriteUnknown)
                 }
             }
+            if ProcessInfo.processInfo.arguments.contains("--ui-test-image-only") {
+                let scanURL = documentsDirectory.appendingPathComponent("Scan.pdf")
+                let image = UIGraphicsImageRenderer(size: CGSize(width: 612, height: 792)).image { context in
+                    UIColor.white.setFill()
+                    context.fill(CGRect(x: 0, y: 0, width: 612, height: 792))
+                    NSString(string: "Paper invoice 4827").draw(at: CGPoint(x: 72, y: 96), withAttributes: [.font: UIFont.systemFont(ofSize: 28)])
+                }
+                try UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 612, height: 792)).writePDF(to: scanURL) { context in
+                    context.beginPage()
+                    image.draw(in: CGRect(x: 0, y: 0, width: 612, height: 792))
+                }
+            }
             if ProcessInfo.processInfo.arguments.contains("--ui-test-library-pair") {
                 let secondURL = documentsDirectory.appendingPathComponent("Second.pdf")
                 bookmarkStore.removeBookmarks(for: secondURL)

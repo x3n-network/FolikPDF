@@ -32,10 +32,14 @@ struct LibraryView: View {
     @State private var selectedFolder = "\u{0}"
     @State private var selectedTag = "\u{0}"
     @State private var favoritesOnly = false
+    @State private var choosingOCRSource = false
+    @State private var pendingOCRSource: LibraryDocument?
     var searchStatus: String? = nil
     var searchHits: [URL: LibrarySearchHit] = [:]
     var isSearching = false
     var hasSearchQuery = false
+    var noTextDocuments: [LibraryDocument] = []
+    var clearSearch: () -> Void = {}
     private var visibleDocuments: [LibraryDocument] {
         documents.filter {
             let value = library.metadata(for: $0)
@@ -79,6 +83,27 @@ struct LibraryView: View {
         .onChange(of: favoritesOnly) { _, _ in selection.removeAll() }
         .onChange(of: visibleDocuments.map(\.id)) { _, ids in
             selection.formIntersection(ids)
+        }
+        .sheet(isPresented: $choosingOCRSource, onDismiss: {
+            if let document = pendingOCRSource {
+                pendingOCRSource = nil
+                openDocumentTool(.searchable, document)
+            }
+        }) {
+            NavigationStack {
+                List(matchingOCRDocuments) { document in
+                    Button {
+                        pendingOCRSource = document
+                        choosingOCRSource = false
+                    } label: {
+                        Label(document.displayName, systemImage: "doc")
+                            .frame(minHeight: 44)
+                    }
+                }
+                .navigationTitle("Choose a PDF")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { choosingOCRSource = false } } }
+            }
         }
         .sheet(item: $organizing) { DocumentOrganizationView(documents: $0.documents) }
         .sheet(item: $renaming) { RenameDocumentView(document: $0) }
@@ -149,6 +174,15 @@ struct LibraryView: View {
                 .accessibilityIdentifier("library.addDocument")
                 .accessibilityHint("Scan paper, choose PDFs, or convert images and text to PDF")
             }
+        }
+    }
+
+    private var matchingOCRDocuments: [LibraryDocument] {
+        noTextDocuments.filter { document in
+            let metadata = library.metadata(for: document)
+            return (selectedFolder == "\u{0}" || metadata.folder == selectedFolder)
+                && (selectedTag == "\u{0}" || metadata.tags.contains(selectedTag))
+                && (!favoritesOnly || metadata.isFavorite)
         }
     }
 
@@ -235,12 +269,36 @@ struct LibraryView: View {
                         Text(hasFilters ? "Try another search or clear your filters to see more documents." : "Try a different filename, folder, tag, or phrase from a searchable PDF.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+                        if hasSearchQuery && !isSearching {
+                            Button("Clear search", action: clearSearch)
+                                .frame(minHeight: 44)
+                                .accessibilityIdentifier("library.clearSearch")
+                        }
                         if hasFilters {
                             Button("Clear filters", action: clearFilters)
                                 .frame(minHeight: 44)
                         }
                     }
                     .padding(.vertical, 8)
+                }
+            }
+            if hasSearchQuery && !isSearching && !matchingOCRDocuments.isEmpty {
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Some PDFs have no searchable text", systemImage: "text.viewfinder")
+                            .font(.subheadline.weight(.semibold))
+                        Text("\(matchingOCRDocuments.count) PDF\(matchingOCRDocuments.count == 1 ? "" : "s") in this view can only be found by name, folder, or tag. Make a searchable copy to find words on scanned pages.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Button("Make PDF Searchable") {
+                            if matchingOCRDocuments.count == 1, let document = matchingOCRDocuments.first {
+                                openDocumentTool(.searchable, document)
+                            } else { choosingOCRSource = true }
+                        }
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("library.searchOCR")
+                    }
+                    .padding(.vertical, 4)
                 }
             }
             Section {

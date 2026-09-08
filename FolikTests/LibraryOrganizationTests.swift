@@ -78,6 +78,26 @@ final class LibraryOrganizationTests: XCTestCase {
         try write("Replacement text", to: url)
         XCTAssertTrue(try LibrarySearch.search("4827", documents: library.documents).hits.isEmpty)
     }
+    func testSearchIdentifiesPDFsWithoutTextSeparatelyFromNoMatches() throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let textURL = root.appendingPathComponent("Text.pdf")
+        let scanURL = root.appendingPathComponent("Scan.pdf")
+        try write("A document with selectable text", to: textURL)
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 200, height: 200)).image { c in
+            UIColor.white.setFill(); c.fill(CGRect(x: 0, y: 0, width: 200, height: 200))
+            ("An image" as NSString).draw(at: CGPoint(x: 20, y: 20), withAttributes: [.font: UIFont.systemFont(ofSize: 20)])
+        }
+        try UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 200, height: 200)).writePDF(to: scanURL) { c in
+            c.beginPage(); image.draw(at: .zero)
+        }
+        let original = try Data(contentsOf: scanURL)
+        let result = try LibrarySearch.search("not present", documents: DocumentLibrary(documentsDirectory: root).documents)
+        XCTAssertTrue(result.hits.isEmpty)
+        XCTAssertEqual(result.noSearchableText, [scanURL])
+        XCTAssertEqual(result.skipped, 0)
+        XCTAssertEqual(try Data(contentsOf: scanURL), original)
+    }
+
     func testSearchCancellationPropagates() async throws {
         let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
         try write("Example", to: root.appendingPathComponent("Example.pdf"))
