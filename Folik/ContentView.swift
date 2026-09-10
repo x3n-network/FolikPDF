@@ -194,6 +194,9 @@ struct ContentView: View {
                     importDroppedPDFs([dropped])
                 }
             }
+            if arguments.contains("--ui-test-make-fillable"), let source = library.documents.first {
+                pdfToolRequest = LibraryPDFToolRequest(tool: .fillable, sourceURL: source.url)
+            }
             if arguments.contains("--open-settings") {
                 isSettingsPresented = true
             }

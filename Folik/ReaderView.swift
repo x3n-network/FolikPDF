@@ -32,6 +32,12 @@ enum ReaderPanel: String, Identifiable {
 
 struct ReaderView: View {
     @StateObject private var session: DocumentSession
+    @EnvironmentObject private var library: DocumentLibrary
+    private let startInFormBuilder: Bool
+    private let finishForm: ((LibraryDocument) -> Void)?
+    @State private var namingForm = false
+    @State private var formName = ""
+    @State private var formFinishError: String?
     @Environment(\.dismiss) private var dismiss
     @AccessibilityFocusState private var exportFocused: Bool
     @State private var leaving = false
@@ -49,7 +55,9 @@ struct ReaderView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    init(item: LibraryDocument) {
+    init(item: LibraryDocument, startInFormBuilder: Bool = false, finishForm: ((LibraryDocument) -> Void)? = nil) {
+        self.startInFormBuilder = startInFormBuilder
+        self.finishForm = finishForm
         #if DEBUG
         var failNextSave = ProcessInfo.processInfo.arguments.contains("--ui-test-save-failure")
         _session = StateObject(wrappedValue: DocumentSession(item: item, annotationSaveDelay: .milliseconds(250), deferredPreparation: true) { document, url in
@@ -80,7 +88,7 @@ struct ReaderView: View {
         .background(FolikTheme.canvas)
         .navigationTitle(session.item.displayName)
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(session.isModified || session.saveFailed || session.isSaving || leaving)
+        .navigationBarBackButtonHidden(finishForm != nil || session.isModified || session.saveFailed || session.isSaving || leaving)
         .toolbar { readerToolbar }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             ReaderBottomChrome(session: session, presentedPanel: $presentedPanel)
@@ -97,6 +105,46 @@ struct ReaderView: View {
             }
             .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
             .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $namingForm) {
+            NavigationStack {
+                Form {
+                    Section("Form name") {
+                        TextField("Filename", text: $formName)
+                            .accessibilityIdentifier("fillable.filename")
+                        Text("Your working copy is already in the library. Finish keeps your latest fields and values.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                    if let formFinishError { Section { ProcessingErrorView(message: formFinishError) } }
+                }
+                .navigationTitle("Finish Form")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Keep Editing") { namingForm = false }.disabled(leaving)
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Finish") {
+                            leaving = true
+                            Task {
+                                defer { leaving = false }
+                                guard await session.saveForSharing() else {
+                                    formFinishError = session.saveStatus
+                                    return
+                                }
+                                do {
+                                    let renamed = try library.rename(session.item, to: formName)
+                                    namingForm = false
+                                    finishForm?(renamed)
+                                } catch { formFinishError = error.localizedDescription }
+                            }
+                        }
+                        .disabled(leaving || (try? PDFConverter.fileName(formName)) == nil)
+                        .accessibilityIdentifier("fillable.finishNaming")
+                    }
+                }
+            }
+            .interactiveDismissDisabled(leaving)
         }
         .sheet(isPresented: $passwordPromptPresented) {
             PasswordPrompt(session: session)
@@ -150,6 +198,7 @@ struct ReaderView: View {
             await session.prepareForReading()
             guard !Task.isCancelled else { return }
             passwordPromptPresented = session.isLocked
+            if startInFormBuilder { presentedPanel = .forms }
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--clear-saved-signatures") {
                 session.deleteSavedSignature(for: .signature)
@@ -283,7 +332,19 @@ struct ReaderView: View {
 
     @ToolbarContentBuilder
     private var readerToolbar: some ToolbarContent {
-        if session.isModified || session.saveFailed || session.isSaving || leaving {
+        if finishForm != nil {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Finish") {
+                    session.cancelAnnotationPlacement()
+                    session.finishAnnotationEditing()
+                    formName = session.item.displayName
+                    formFinishError = nil
+                    namingForm = true
+                }
+                .disabled(session.isPreparingDocument || leaving || isExporting)
+                .accessibilityIdentifier("fillable.finish")
+            }
+        } else if session.isModified || session.saveFailed || session.isSaving || leaving {
             ToolbarItem(placement: .topBarLeading) {
                 Button {
                     leaving = true

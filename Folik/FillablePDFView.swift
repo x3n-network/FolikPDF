@@ -21,140 +21,84 @@ struct FillablePDFView: View {
     var initialURL: URL? = nil
     let complete: (LibraryDocument) -> Void
 
+    @EnvironmentObject private var library: DocumentLibrary
     @Environment(\.dismiss) private var dismiss
     @State private var loadedInitialSource = false
-    @State private var source: Data?
-    @State private var sourceName: String?
-    @State private var filename = "Fillable Document"
     @State private var showingFiles = false
     @State private var busy = false
-    @State private var status = ""
     @State private var errorMessage: String?
-    @State private var preview: OfficePreview?
+    @State private var workingCopy: LibraryDocument?
     @State private var worker: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    if let sourceName {
-                        Label(sourceName, systemImage: "doc")
-                            .font(.subheadline.weight(.semibold))
-                            .accessibilityIdentifier("fillable.source")
-                    }
-                    Button(source == nil ? "Choose PDF" : "Choose Another PDF") {
-                        showingFiles = true
-                    }
-                    .frame(minHeight: 44)
-                    .disabled(busy)
-
-                    Text("Create a separate copy, then place real text fields, checkboxes, date fields, and signature fields over a scan or any other PDF.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-
-                if source != nil {
-                    Section("New copy") {
-                        TextField("Filename", text: $filename)
+            if let workingCopy {
+                ReaderView(item: workingCopy, startInFormBuilder: true, finishForm: complete)
+            } else {
+                Form {
+                    Section {
+                        Label("Turn a PDF into a form", systemImage: "rectangle.and.pencil.and.ellipsis")
+                            .font(.headline)
+                        Text("Choose a PDF or scan from Files. Add fields directly on a separate, autosaved copy. Your source stays unchanged.")
+                            .foregroundStyle(.secondary)
+                        Button("Choose PDF") { showingFiles = true }
+                            .frame(minHeight: 44)
                             .disabled(busy)
+                            .accessibilityIdentifier("fillable.choose")
+                    }
+                    if let errorMessage {
+                        Section { ProcessingErrorView(message: errorMessage) }
                     }
                 }
-
-                if busy {
-                    Section {
-                        ProgressView(status)
-                        Button("Cancel Processing") { worker?.cancel() }
+                .navigationTitle("Make Fillable Copy")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { worker?.cancel(); dismiss() }
                     }
                 }
-
-                if let errorMessage {
-                    Section {
-                        Text(errorMessage)
-                            .foregroundStyle(.red)
-                    }
-                }
-            }
-            .navigationTitle("Make Fillable Copy")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        worker?.cancel()
-                        dismiss()
+                .safeAreaInset(edge: .bottom) {
+                    if busy {
+                        ProcessingStatusView(status: "Creating your working copy…") { worker?.cancel() }
+                            .padding().background(.regularMaterial)
                     }
                 }
             }
-            .safeAreaInset(edge: .bottom) {
-                Button("Preview Fillable Copy", action: preparePreview)
-                    .buttonStyle(.borderedProminent)
-                    .frame(maxWidth: .infinity, minHeight: 48)
-                    .padding()
-                    .background(.regularMaterial)
-                    .disabled(busy || source == nil || (try? PDFConverter.fileName(filename)) == nil)
-                    .accessibilityIdentifier("fillable.preview")
+        }
+        .interactiveDismissDisabled(busy || workingCopy != nil)
+        .fileImporter(isPresented: $showingFiles, allowedContentTypes: [.pdf]) { result in
+            switch result {
+            case .success(let url): createWorkingCopy(from: url)
+            case .failure(let error): errorMessage = error.localizedDescription
             }
-            .fileImporter(isPresented: $showingFiles, allowedContentTypes: [.pdf]) { result in
-                switch result {
-                case .success(let url): load(url)
-                case .failure(let error): errorMessage = error.localizedDescription
-                }
-            }
-            .sheet(item: $preview) {
-                OfficePreviewView(preview: $0.presentedAs("Fillable Copy", notes: "Form details"), filename: filename, complete: complete)
-            }
-            .onDisappear { worker?.cancel() }
-            .onAppear {
-                guard !loadedInitialSource else { return }
-                loadedInitialSource = true
-                if let initialURL { load(initialURL) }
-            }
+        }
+        .onDisappear { worker?.cancel() }
+        .onAppear {
+            guard !loadedInitialSource else { return }
+            loadedInitialSource = true
+            if let initialURL { createWorkingCopy(from: initialURL) }
         }
     }
 
-    private func load(_ url: URL) {
+    private func createWorkingCopy(from url: URL) {
+        guard !busy else { return }
         busy = true
-        status = "Reading PDF…"
         errorMessage = nil
-        source = nil
-        sourceName = nil
-        preview = nil
         worker = Task {
             defer { busy = false }
             do {
                 let data = try await Task.detached(priority: .userInitiated) {
-                    try PDFConverter.readFile(url, maximumBytes: PDFProcessing.maximumBytes)
-                }.value
+                    let data = try PDFConverter.readFile(url, maximumBytes: PDFProcessing.maximumBytes)
+                    _ = try PDFProcessing.document(data)
+                    return data
+                }.cancellableValue
                 try Task.checkCancellation()
-                _ = try await Task.detached(priority: .userInitiated) {
-                    try PDFProcessing.document(data).pageCount
-                }.value
-                try Task.checkCancellation()
-                source = data
-                sourceName = url.lastPathComponent
-                filename = url.deletingPathExtension().lastPathComponent + " Fillable"
+                workingCopy = try await library.importConvertedPDF(
+                    .preparedPDF(data), named: url.deletingPathExtension().lastPathComponent + " Fillable"
+                )
             } catch is CancellationError {
             } catch {
-                errorMessage = error.localizedDescription
-            }
-        }
-    }
-
-    private func preparePreview() {
-        guard let source, !busy else { return }
-        busy = true
-        status = "Preparing fillable copy…"
-        errorMessage = nil
-        worker = Task {
-            defer { busy = false }
-            do {
-                let result = try await Task.detached(priority: .userInitiated) {
-                    try FillablePDFPreparation.prepare(source)
-                }.value
-                try Task.checkCancellation()
-                preview = result
-            } catch is CancellationError {
-            } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = "Folik couldn’t create the working copy. \(error.localizedDescription)"
             }
         }
     }

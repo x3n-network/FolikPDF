@@ -169,6 +169,23 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["2 of 2"].waitForExistence(timeout: 3))
     }
 
+    func testMakeFillableOpensEditorDirectlyAndFinishesNamedCopy() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-make-fillable"]
+        app.launch()
+        XCTAssertTrue(app.buttons["reader.form.add"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.buttons["fillable.preview"].exists)
+        app.navigationBars["Forms"].buttons["Done"].tap()
+        app.buttons["fillable.finish"].tap()
+        let name = app.textFields["fillable.filename"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        XCTAssertFalse((name.value as? String ?? "").isEmpty)
+        app.buttons["fillable.finishNaming"].tap()
+        XCTAssertTrue(app.buttons["reader.export"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["fillable.finish"].exists)
+        capture("direct-form-builder-finished", in: app)
+    }
+
     func testScannedPDFCanAuthorFillableFields() {
         let app = XCUIApplication()
         app.launchArguments = [

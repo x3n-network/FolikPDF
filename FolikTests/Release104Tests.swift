@@ -34,6 +34,25 @@ final class Release104Tests: XCTestCase {
                                fileSize: Int64(values.fileSize ?? 0), modifiedAt: values.contentModificationDate ?? .distantPast)
     }
 
+    func testFormWorkingCopyCanBeRenamedAfterEditingWithoutChangingSource() async throws {
+        let source = try pdf("Source", pages: ["Original form"])
+        let data = try Data(contentsOf: source)
+        let library = DocumentLibrary(documentsDirectory: root)
+        let copy = try await library.importConvertedPDF(.preparedPDF(data), named: "Source Fillable")
+        XCTAssertNotEqual(copy.url, source)
+        let session = DocumentSession(item: copy)
+        session.beginFormFieldPlacement(.text, label: "Name", isRequired: true)
+        session.placeAnnotationAtCurrentPageCenter()
+        let saved = await session.saveForSharing()
+        XCTAssertTrue(saved)
+        let renamed = try library.rename(copy, to: "Application")
+        let reopened = DocumentSession(item: renamed)
+        XCTAssertEqual(reopened.formFields.count, 1)
+        XCTAssertEqual(reopened.formFields.first?.title, "Name")
+        XCTAssertEqual(try Data(contentsOf: source), data)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: copy.url.path))
+    }
+
     func testFailedReplacementPreservesOriginalAndRetrySavesLatestEdits() async throws {
         let url = try pdf("Recovery", pages: ["Original"])
         let original = try Data(contentsOf: url)

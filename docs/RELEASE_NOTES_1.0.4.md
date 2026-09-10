@@ -80,3 +80,9 @@ Final additional-pass validation: 139 unit tests passed with one optional fixtur
 The latest generated 150-page, 3,000-annotation simulator workload measured 3.34 ms for initial reader construction, 130.63 ms through complete preparation, and 7.07 ms for the longest eight-page metadata batch. The same run's synchronous path took 123.91 ms. These measure model preparation, not first-frame latency or a physical-device guarantee. See [PERFORMANCE_1.0.4.md](PERFORMANCE_1.0.4.md) for the workload, memory observations, and profiling limitations.
 
 Final validation for this pass: 143 unit tests passed with one optional fixture skipped. After the final instrumentation and offscreen-image cleanup, all 15 focused release-regression tests and eight affected UI workflows passed: navigation, form authoring, save failure/retry, system sharing, library search, grid tools, password protection, and processing cancellation/retry. Release simulator build and whitespace validation passed; the app and embedded share extension both report 1.0.4 (build 1).
+
+## Direct form builder entry
+
+Make Fillable Copy opens an autosaved working copy directly in the editor with Forms ready. The redundant unchanged-PDF preview and upfront naming step are removed. Finish saves pending edits and offers a final name; name conflicts and save failures retain the editor for retry. The original PDF stays unchanged.
+
+Validation: the source-preservation/save/rename regression and direct-entry/Finish UI test passed on iPhone 17e Simulator. Result: `/tmp/folik-form-entry.xcresult`.
