@@ -14,6 +14,7 @@ Folik 1.0.3 makes private document libraries faster to search, easier to manage,
 - Create a verified password-protected copy without storing its password.
 - Compare two PDFs privately and review added, removed, or changed pages.
 - Send up to 20 PDFs directly to Folik from the system share sheet.
+- Drag PDFs into the iPad library and open documents in dedicated Split View or Stage Manager windows.
 
 Your documents and search index remain on your device. No accounts, ads, analytics, or uploads.
 
@@ -73,6 +74,15 @@ Your documents and search index remain on your device. No accounts, ads, analyti
 - Keeps source files unchanged, gives duplicate names numbered suffixes, and retains failed queued files for a later retry.
 - Works entirely on-device without an account, analytics, uploads, or network access.
 
+## iPad windows and drag and drop
+
+- Adds **Open in New Window** to document actions when iPadOS supports multiple scenes.
+- Keys dedicated windows by document filename, bringing an existing window forward when the same PDF is requested again.
+- Keeps navigation and reader panels independent in each window while coordinating App Lock across every active scene.
+- Starts the App Lock relock timer only after the last Folik scene enters the background, preventing one window from locking another active window.
+- Accepts file-backed PDF drops across the full library with visible, Dynamic Type-friendly feedback and the existing Files picker as an accessible alternative.
+- Validates up to 20 readable PDFs and 100 MB total, imports off the main thread, preserves sources, and removes temporary transfer files.
+
 ## Compatibility and privacy
 
 - Documents, extracted search text, authentication state, and processing remain on-device.
@@ -83,10 +93,10 @@ Your documents and search index remain on your device. No accounts, ads, analyti
 ## Validation
 
 - Debug and Release generic iOS Simulator builds succeed, and Xcode static analysis passes.
-- The complete simulator unit suite passed 115 tests; one optional private-document fixture test was skipped.
-- The complete iPhone 17 UI suite passed 43 tests; one optional App Store screenshot fixture test was skipped.
+- The complete simulator unit suite passed 119 tests; one optional private-document fixture test was skipped.
+- The complete iPhone 17 UI suite passed 45 tests; the optional App Store screenshot fixture and iPad-only multi-window test were skipped.
 - Focused iPad mini UI checks passed for multi-page search results, document duplication, bulk recovery, and the lock-screen cover.
 - Focused iPhone and iPad mini UI checks passed for inspecting, previewing, saving, and preserving the original during sanitizing.
-- New unit coverage exercises search-index persistence and invalidation, document duplication, App Lock enrollment, startup state, relock delays, privacy reporting, catalog-level active/embedded content detection, sanitized-output structure, and share-inbox validation, naming, transfer, retry, limits, and cancellation.
+- New unit coverage exercises search-index persistence and invalidation, document duplication, App Lock enrollment, startup state, single- and multi-scene relock delays, privacy reporting, catalog-level active/embedded content detection, sanitized-output structure, share-inbox validation and transfer, and file-backed drop staging and cleanup.
 - App Lock authentication passed deterministic automated coverage and a physical-iPhone Face ID smoke test. Touch ID remains a manual release check.
 - A signed generic-device build verifies matching App Group entitlements and provisioning for Folik and its embedded share extension.

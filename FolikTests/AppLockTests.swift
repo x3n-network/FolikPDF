@@ -72,4 +72,74 @@ final class AppLockTests: XCTestCase {
         XCTAssertTrue(defaults.bool(forKey: AppLockManager.enabledKey))
         XCTAssertFalse(accepted.isLocked)
     }
+
+    func testOneBackgroundWindowDoesNotRelockWhileAnotherSceneRemainsActive() async {
+        defaults.set(true, forKey: AppLockManager.enabledKey)
+        defaults.set(AppLockDelay.oneMinute.rawValue, forKey: AppLockManager.delayKey)
+        var authenticationCount = 0
+        let lock = AppLockManager(defaults: defaults, authenticator: {
+            authenticationCount += 1
+            return true
+        })
+        await lock.authenticate()
+        let first = UUID()
+        let second = UUID()
+        let start = Date(timeIntervalSinceReferenceDate: 200)
+        lock.sceneChanged(to: .active, sceneID: first, now: start)
+        lock.sceneChanged(to: .active, sceneID: second, now: start)
+
+        lock.sceneChanged(to: .background, sceneID: first, now: start)
+        lock.sceneChanged(to: .active, sceneID: second, now: start.addingTimeInterval(120))
+        await Task.yield()
+
+        XCTAssertFalse(lock.isLocked)
+        XCTAssertEqual(authenticationCount, 1)
+    }
+
+    func testRelockDelayStartsWhenLastSceneBackgrounds() async {
+        defaults.set(true, forKey: AppLockManager.enabledKey)
+        defaults.set(AppLockDelay.oneMinute.rawValue, forKey: AppLockManager.delayKey)
+        var authenticationCount = 0
+        let lock = AppLockManager(defaults: defaults, authenticator: {
+            authenticationCount += 1
+            return true
+        })
+        await lock.authenticate()
+        let first = UUID()
+        let second = UUID()
+        let start = Date(timeIntervalSinceReferenceDate: 300)
+        lock.sceneChanged(to: .active, sceneID: first, now: start)
+        lock.sceneChanged(to: .active, sceneID: second, now: start)
+        lock.sceneChanged(to: .background, sceneID: first, now: start)
+        lock.sceneChanged(to: .background, sceneID: second, now: start.addingTimeInterval(10))
+
+        lock.sceneChanged(to: .active, sceneID: first, now: start.addingTimeInterval(71))
+        for _ in 0..<10 where lock.isLocked { await Task.yield() }
+
+        XCTAssertEqual(authenticationCount, 2)
+        XCTAssertFalse(lock.isLocked)
+    }
+
+    func testRelockDelayStartsWhenLastActiveSceneDisconnects() async {
+        defaults.set(true, forKey: AppLockManager.enabledKey)
+        defaults.set(AppLockDelay.oneMinute.rawValue, forKey: AppLockManager.delayKey)
+        var authenticationCount = 0
+        let lock = AppLockManager(defaults: defaults, authenticator: {
+            authenticationCount += 1
+            return true
+        })
+        await lock.authenticate()
+        let active = UUID()
+        let background = UUID()
+        let start = Date(timeIntervalSinceReferenceDate: 400)
+        lock.sceneChanged(to: .active, sceneID: active, now: start)
+        lock.sceneChanged(to: .background, sceneID: background, now: start)
+
+        lock.sceneDisconnected(active, now: start.addingTimeInterval(10))
+        lock.sceneChanged(to: .active, sceneID: background, now: start.addingTimeInterval(71))
+        for _ in 0..<10 where lock.isLocked { await Task.yield() }
+
+        XCTAssertEqual(authenticationCount, 2)
+        XCTAssertFalse(lock.isLocked)
+    }
 }

@@ -29,6 +29,9 @@ struct ContentView: View {
     @State private var searchingText = false
     @State private var searchIndex = LibrarySearchIndex()
     @State private var handledDebugLaunch = false
+    @State private var isDropTargeted = false
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.supportsMultipleWindows) private var supportsMultipleWindows
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -36,6 +39,18 @@ struct ContentView: View {
                 .navigationDestination(for: LibraryDocument.self) { item in
                     ReaderView(item: item)
                 }
+        }
+        .pdfDropDestination(
+            isEnabled: !library.isImporting,
+            isTargeted: $isDropTargeted,
+            action: importDroppedPDFs
+        )
+        .overlay {
+            if isDropTargeted {
+                PDFDropOverlay()
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
         }
         .task(id: LibrarySearchRequest(query: searchText, documents: library.documents)) {
             searchResult = LibrarySearchResult(); searchingText = false
@@ -160,9 +175,17 @@ struct ContentView: View {
                 if arguments.contains("--ui-test-shared-inbox") {
                     Task { await library.importSharedInbox() }
                 }
+                if arguments.contains("--ui-test-dropped-pdf"),
+                   let source = library.documents.first?.url,
+                   let dropped = try? PDFTransferItem.temporaryCopy(of: source) {
+                    importDroppedPDFs([dropped])
+                }
             }
             if arguments.contains("--open-settings") {
                 isSettingsPresented = true
+            }
+            if arguments.contains("--ui-test-drop-target") {
+                isDropTargeted = true
             }
             if arguments.contains("--ui-test-scan-fixture") {
                 Task {
@@ -226,6 +249,9 @@ struct ContentView: View {
             openSettings: { isSettingsPresented = true },
             openRecentlyDeleted: { showingDeleted = true },
             openDocument: { path.append($0) },
+            openDocumentWindow: supportsMultipleWindows ? { document in
+                openWindow(id: "pdf", value: document.url.lastPathComponent)
+            } : nil,
             deleteDocument: library.delete,
             openDocumentTool: { tool, document in
                 pdfToolRequest = LibraryPDFToolRequest(tool: tool, sourceURL: document.url)
@@ -288,6 +314,100 @@ struct ContentView: View {
             cameraPermissionAlertPresented = true
         @unknown default:
             cameraPermissionAlertPresented = true
+        }
+    }
+
+    private func importDroppedPDFs(_ items: [PDFTransferItem]) {
+        guard !items.isEmpty else { return }
+        Task {
+            defer { PDFTransferItem.removeTemporaryCopies(items) }
+            let urls = items.map(\.url)
+            do {
+                let validation = Task.detached(priority: .userInitiated) {
+                    try SharedPDFInbox.validate(urls)
+                }
+                try await withTaskCancellationHandler(
+                    operation: { try await validation.value },
+                    onCancel: { validation.cancel() }
+                )
+                let imported = await library.importDocuments(at: urls)
+                if imported.count == 1, let document = imported.first {
+                    path.append(document)
+                } else if imported.isEmpty, library.errorMessage == nil {
+                    library.errorMessage = "Folik is finishing another import. Drop those PDFs again in a moment."
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                library.errorMessage = "Folik couldn’t import those dropped PDFs. \(error.localizedDescription)"
+            }
+        }
+    }
+}
+
+private struct PDFDropOverlay: View {
+    var body: some View {
+        ZStack {
+            Rectangle().fill(.regularMaterial)
+            VStack(spacing: 12) {
+                Image(systemName: "arrow.down.document.fill")
+                    .font(.largeTitle)
+                    .foregroundStyle(FolikTheme.cobalt)
+                Text("Drop PDFs to Import")
+                    .font(.title2.weight(.bold))
+                Text("Your originals stay unchanged.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+            }
+            .multilineTextAlignment(.center)
+            .padding(24)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Drop PDFs to import. Your originals stay unchanged.")
+        .accessibilityIdentifier("library.dropTarget")
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func pdfDropDestination(
+        isEnabled: Bool,
+        isTargeted: Binding<Bool>,
+        action: @escaping ([PDFTransferItem]) -> Void
+    ) -> some View {
+        if #available(iOS 26.0, *) {
+            dropDestination(for: PDFTransferItem.self, isEnabled: isEnabled) { items, session in
+                switch session.phase {
+                case .entering, .active:
+                    isTargeted.wrappedValue = true
+                case .dataTransferCompleted:
+                    isTargeted.wrappedValue = false
+                    action(items)
+                case .exiting, .ended:
+                    isTargeted.wrappedValue = false
+                @unknown default:
+                    isTargeted.wrappedValue = false
+                }
+            }
+        } else {
+            modifier(LegacyPDFDropDestination(isEnabled: isEnabled, isTargeted: isTargeted, action: action))
+        }
+    }
+}
+
+@available(iOS, introduced: 16.0, obsoleted: 26.0)
+private struct LegacyPDFDropDestination: ViewModifier {
+    let isEnabled: Bool
+    @Binding var isTargeted: Bool
+    let action: ([PDFTransferItem]) -> Void
+
+    func body(content: Content) -> some View {
+        content.dropDestination(for: PDFTransferItem.self) { items, _ in
+            guard isEnabled, !items.isEmpty else { return false }
+            action(items)
+            return true
+        } isTargeted: { targeted in
+            isTargeted = isEnabled && targeted
         }
     }
 }

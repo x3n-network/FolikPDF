@@ -67,6 +67,7 @@ struct LibraryView: View {
     let openSettings: () -> Void
     var openRecentlyDeleted: () -> Void = {}
     let openDocument: (LibraryDocument) -> Void
+    var openDocumentWindow: ((LibraryDocument) -> Void)? = nil
     let deleteDocument: (LibraryDocument) -> Void
     let openDocumentTool: (LibraryPDFTool, LibraryDocument) -> Void
 
@@ -486,6 +487,9 @@ struct LibraryView: View {
                 },
                 toggleFavorite: { updateFavorites(!library.metadata(for: document).isFavorite, for: [document]) },
                 open: { openDocument(document) },
+                openInNewWindow: openDocumentWindow.map { action in
+                    { action(document) }
+                },
                 delete: { deleteDocument(document) },
                 openTool: { openDocumentTool($0, document) }
             )
@@ -670,6 +674,7 @@ private struct DocumentRow: View {
     let duplicate: () -> Void
     let toggleFavorite: () -> Void
     let open: () -> Void
+    let openInNewWindow: (() -> Void)?
     let delete: () -> Void
     let openTool: (LibraryPDFTool) -> Void
 
@@ -751,6 +756,11 @@ private struct DocumentRow: View {
                         Label("Duplicate", systemImage: "plus.square.on.square")
                     }
                     Button("Organize", action: organize)
+                    if let openInNewWindow {
+                        Button(action: openInNewWindow) {
+                            Label("Open in New Window", systemImage: "macwindow.badge.plus")
+                        }
+                    }
                     Menu {
                         ForEach(LibraryPDFTool.allCases) { tool in
                             Button { openTool(tool) } label: {

@@ -32,6 +32,7 @@ final class AppLockManager: ObservableObject {
     private let authenticator: () async throws -> Bool
     private let waitsForManualAuthentication: Bool
     private var backgroundedAt: Date?
+    private var scenePhases: [UUID: ScenePhase] = [:]
 
     init(
         defaults: UserDefaults = .standard,
@@ -96,6 +97,39 @@ final class AppLockManager: ObservableObject {
         @unknown default:
             obscuresContent = true
         }
+    }
+
+    func sceneChanged(to phase: ScenePhase, sceneID: UUID, now: Date = Date()) {
+        scenePhases[sceneID] = phase
+        guard isEnabled else { return }
+        switch phase {
+        case .inactive:
+            break
+        case .background:
+            if !scenePhases.values.contains(.active) {
+                backgroundedAt = backgroundedAt ?? now
+            }
+        case .active:
+            if let backgroundedAt,
+               now.timeIntervalSince(backgroundedAt) >= TimeInterval(delay.rawValue) {
+                isLocked = true
+            }
+            self.backgroundedAt = nil
+            obscuresContent = isLocked
+            if isLocked, !waitsForManualAuthentication {
+                Task { await authenticate() }
+            }
+        @unknown default:
+            break
+        }
+    }
+
+    func sceneDisconnected(_ sceneID: UUID, now: Date = Date()) {
+        scenePhases.removeValue(forKey: sceneID)
+        guard isEnabled,
+              !scenePhases.values.contains(.active),
+              scenePhases.values.contains(.background) else { return }
+        backgroundedAt = backgroundedAt ?? now
     }
 
     func authenticate() async {

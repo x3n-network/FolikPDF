@@ -20,6 +20,7 @@ The updated library in **Folik 1.0.2**. Browse in a list or grid, resume reading
 
 - Import one or more PDFs from Files
 - Use **Add to Folik** from the system share sheet in Files, Mail, Safari, and other apps to privately queue up to 20 PDFs for the local library
+- Drag PDFs from Files or another app into the Folik library on iPad, with file-backed transfer and visible drop feedback
 - Make existing scanned PDFs searchable with on-device OCR, progress, cancellation, and review before saving a new copy
 - Find literal text, email addresses, phone numbers, and Social Security numbers on-device, review each match, and add selected matches to a redacted copy
 - Inspect PDFs for metadata, filled forms, comments, links, outlines, attachments, scripts/actions, and digital-signature fields, then review and save a sanitized image-only copy
@@ -57,6 +58,7 @@ The updated library in **Folik 1.0.2**. Browse in a list or grid, resume reading
 - Create a handwritten or typed signature/initials, keep it locally on-device, and reuse it across PDFs
 - Share the original, create an editable copy, or export a flattened copy that makes forms, signatures, and annotations part of the page
 - Adapt navigation for compact iPhone and regular iPad layouts
+- Open different PDFs in dedicated iPad windows for Split View and Stage Manager workflows
 - Support Dynamic Type, VoiceOver labels, light mode, and dark mode
 - Open Folik settings for the [Folik open-source project website](https://www.x3n.network/opensource/folik/), X3N website, team feedback email, privacy details, version, and Apple Standard EULA
 
@@ -95,6 +97,12 @@ This is a text-and-page-structure comparison, not a visual or cryptographic comp
 Choose **Add to Folik** in the system share sheet to send PDFs from Files, Mail, Safari, and other apps into Folik without first navigating through an import picker. The extension checks that every item is a readable PDF, then copies up to 20 files and 100 MB total into Folik's private shared container. The source files remain unchanged.
 
 Queued PDFs move into the local Folik library the next time the app is active. Duplicate names receive a numbered suffix. A file that cannot be moved safely remains in the private queue for a later retry, while valid files continue importing. Sharing and import are entirely on-device and require no Folik account or network connection.
+
+### iPad windows and drag and drop
+
+On iPad, choose **Open in New Window** from a document's actions to place that PDF in a dedicated window. Open different documents side by side with Split View or arrange them with Stage Manager. Requesting the same PDF again brings its existing dedicated window forward instead of creating duplicates. Each window keeps its own reader navigation and panels.
+
+Drop one or more PDFs from Files or another app anywhere over the Folik library to import them. Folik shows a full-library drop target, validates up to 20 readable PDFs and 100 MB total, copies them off the main thread, and removes temporary transfer files afterward. A single imported PDF opens immediately, matching the Files picker. The visible **Choose PDFs from Files** action remains available without dragging, and source files stay unchanged.
 
 ### Batch conversion
 
@@ -170,6 +178,7 @@ The app icon uses Folik's folded-page **F** in standard, dark, and tinted appear
 ```text
 DocumentLibrary    Imports and owns local PDF copies
 SharedPDFInbox     Validates and atomically transfers share-extension PDFs
+PDFTransferItem    File-backed iPad drag-and-drop import staging
 LibrarySearchIndex Bounded, disposable on-device cache for cross-library text search
 PDFPrivacy         On-device document inspection and image-only sanitizing
 PDFProtection      Verified password-protected PDF copy generation

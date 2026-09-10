@@ -6,6 +6,50 @@ final class FolikUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testDroppedPDFImportsCopyAndPreservesOriginal() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-dropped-pdf"]
+        app.launch()
+
+        XCTAssertTrue(app.navigationBars["Folik UI Test 2"].waitForExistence(timeout: 8))
+        app.navigationBars.buttons["Library"].tap()
+        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["library.document.Folik UI Test 2.pdf"].exists)
+        XCTAssertTrue(app.buttons["library.document.Folik UI Test.pdf"].exists)
+    }
+
+    func testPDFDropTargetProvidesVisiblePrivateImportFeedback() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--ui-test-fixture",
+            "--ui-test-drop-target",
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL"
+        ]
+        app.launch()
+
+        let target = app.descendants(matching: .any)["library.dropTarget"]
+        XCTAssertTrue(target.waitForExistence(timeout: 5))
+        XCTAssertEqual(target.label, "Drop PDFs to import. Your originals stay unchanged.")
+    }
+
+    func testOpenDocumentInNewWindowOnIPad() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture"]
+        app.launch()
+
+        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
+        app.buttons["Document actions"].firstMatch.tap()
+        let openInNewWindow = app.buttons["Open in New Window"]
+        guard openInNewWindow.waitForExistence(timeout: 2) else {
+            throw XCTSkip("Open in New Window is available when iPadOS supports multiple scenes.")
+        }
+        openInNewWindow.tap()
+
+        XCTAssertTrue(app.navigationBars["Folik UI Test"].waitForExistence(timeout: 8))
+        XCTAssertGreaterThanOrEqual(app.windows.count, 2)
+    }
+
     func testSharedInboxPDFAppearsInLibrary() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-fixture", "--ui-test-shared-inbox"]
