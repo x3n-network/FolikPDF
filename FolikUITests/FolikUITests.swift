@@ -1588,6 +1588,41 @@ final class FolikUITests: XCTestCase {
         capture("05-annotations", in: annotations)
     }
 
+    func testTemplateGalleryFromPopulatedLibrary() {
+        let app = launchApp(additionalArguments: ["--ui-test-fixture"])
+        XCTAssertTrue(app.buttons["library.addDocument"].waitForExistence(timeout: 8))
+        app.buttons["library.addDocument"].tap()
+        app.buttons["Form Templates"].tap()
+        XCTAssertTrue(app.navigationBars["Form Templates"].waitForExistence(timeout: 5))
+        for id in ["inspectionChecklist", "meetingNotes"] {
+            app.buttons["template." + id].tap()
+            XCTAssertTrue(app.buttons["template.start"].waitForExistence(timeout: 5))
+            capture("template-" + id + "-preview", in: app)
+            let title = id == "inspectionChecklist" ? "Inspection Checklist" : "Meeting Notes"
+            app.navigationBars[title].buttons.element(boundBy: 0).tap()
+            XCTAssertTrue(app.navigationBars["Form Templates"].waitForExistence(timeout: 5))
+        }
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
+    }
+
+    func testOfflineTemplatePreviewAndStart() {
+        let app = launchApp(additionalArguments: ["--ui-test-fixture", "--ui-test-empty-library"])
+        let browse = app.buttons["library.templates"]
+        XCTAssertTrue(browse.waitForExistence(timeout: 8))
+        if !browse.isHittable { app.swipeUp() }
+        browse.tap()
+        XCTAssertTrue(app.navigationBars["Form Templates"].waitForExistence(timeout: 5))
+        capture("templates-gallery", in: app)
+        app.buttons["template.workOrder"].tap()
+        XCTAssertTrue(app.buttons["template.start"].waitForExistence(timeout: 5))
+        capture("template-work-order-preview", in: app)
+        app.buttons["template.start"].tap()
+        XCTAssertTrue(app.buttons["reader.sign"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.segmentedControls["reader.form.mode"].buttons["Fill"].isSelected)
+        capture("template-fill-ready", in: app)
+    }
+
     private func launchApp(
         opening filename: String? = nil,
         additionalArguments: [String] = []

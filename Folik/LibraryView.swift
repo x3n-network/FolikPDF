@@ -63,6 +63,7 @@ struct LibraryView: View {
     let openImporter: () -> Void
     let openScanner: () -> Void
     var openSample: () -> Void = {}
+    var openTemplates: () -> Void = {}
     let openTools: () -> Void
     let openSettings: () -> Void
     var openRecentlyDeleted: () -> Void = {}
@@ -574,6 +575,16 @@ struct LibraryView: View {
                 .disabled(isImporting)
                 .padding(.horizontal, 32)
                 .padding(.top, 10)
+
+                Button(action: openTemplates) {
+                    Label("Browse Form Templates", systemImage: "doc.on.doc")
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.bordered)
+                .disabled(isImporting)
+                .padding(.horizontal, 32)
+                .padding(.top, 10)
+                .accessibilityIdentifier("library.templates")
 
                 Button(action: openSample) {
                     Label("Try a Sample Form", systemImage: "doc.text")

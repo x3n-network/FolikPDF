@@ -1,7 +1,7 @@
 import SwiftUI
 
 nonisolated enum LibraryTool: String, Identifiable {
-    case scan, importPDF, images, documents, text, searchable, fillable, compress, batch, redact, sanitize, protect, compare, sample
+    case scan, importPDF, images, documents, text, searchable, fillable, compress, batch, redact, sanitize, protect, compare, sample, templates
     var id: Self { self }
 }
 
@@ -41,6 +41,7 @@ struct LibraryToolsView: View {
         NavigationStack {
             List {
                 Section("Add a document") {
+                    tool(.templates, title: "Form Templates", subtitle: "Start a ready-made form, available offline", icon: "doc.on.doc")
                     tool(.scan, title: "Scan Document", subtitle: "Capture paper with automatic edge detection", icon: "doc.viewfinder")
                         .disabled(!canScan)
                     tool(.importPDF, title: "Choose PDFs", subtitle: "Add one or more PDFs from Files", icon: "folder")

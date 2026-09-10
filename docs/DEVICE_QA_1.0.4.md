@@ -26,3 +26,10 @@ The reader batching, form-value refresh, cache release, and detached-worker canc
 ## New form workflow checks
 
 The direct builder, Build/Fill modes, repeated placement, properties, duplication, and sample flow have simulator coverage. On a physical iPhone and iPad, create a five-field form using only touch, then repeat using VoiceOver and Place center/Move/Size controls. Check dragging and snapping near page edges at different zoom levels. Switch to Fill, enter distinct values, finish naming, reopen, and share to another PDF reader. Confirm field independence, required flags, and checkbox states. Verify an interrupted working copy remains in the library and the source is unchanged. Try the optional sample from an empty library, fill it, sign on the line, and share it. These hands-on checks are not yet marked complete.
+
+### Offline template library — physical-device follow-up
+
+- In airplane mode, open Form Templates from both an empty library and Add & Tools. Preview all three templates and start each one.
+- Fill single-line and multiline text, check a box, close and reopen, and export. Confirm values remain editable in the exported PDF.
+- Start the same template again; confirm it is blank and the previously filled copy is unchanged.
+- With VoiceOver and larger text, confirm template descriptions, Back, and Start Form remain accessible. Check iPad split view and landscape.

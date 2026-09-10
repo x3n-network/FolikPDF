@@ -231,3 +231,9 @@ Folik is available under the [MIT License](LICENSE).
 ### Sample form asset
 
 The practice PDF is bundled at `Folik/Resources/SampleForm.pdf` and copied only when requested. Rebuild it with `python3 Tools/create_sample_form.py` in a development environment with ReportLab installed. ReportLab is not an app runtime dependency. Tests verify field independence, saved canonical form values, fresh blank copies, and the sample UI workflow.
+
+### Offline form templates
+
+Choose **Add & Tools → Form Templates** (or **Browse Form Templates** in an empty library) to preview a Work Order, Inspection Checklist, or Meeting Notes form. **Start Form** saves an independent fillable copy and opens Fill mode. Templates are bundled, require no download, and stay blank for next time. Use Build to customize your copy.
+
+Rebuild the three PDF masters with `python3 Tools/create_form_templates.py` using ReportLab in the development environment. The app has no additional runtime dependency.

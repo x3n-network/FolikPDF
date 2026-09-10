@@ -14,12 +14,13 @@ struct ContentView: View {
     @State private var showingDeleted = false
     @EnvironmentObject private var library: DocumentLibrary
     @State private var path: [LibraryDocument] = []
-    @State private var sampleDocumentID: UUID?
+    @State private var initialFormDocumentID: UUID?
     @State private var isImporterPresented = false
     @State private var isScannerPresented = false
     @State private var cameraPermissionAlertPresented = false
     @State private var isSettingsPresented = false
     @State private var toolsPresented = false
+    @State private var templatesPresented = false
     @State private var pendingTool: LibraryTool?
     @State private var conversionMode: PDFConversionView.Mode?
     @State private var convertedDocument: LibraryDocument?
@@ -39,7 +40,7 @@ struct ContentView: View {
         NavigationStack(path: $path) {
             libraryRoot
                 .navigationDestination(for: LibraryDocument.self) { item in
-                    ReaderView(item: item, initialPanel: item.id == sampleDocumentID ? .forms : nil)
+                    ReaderView(item: item, initialPanel: item.id == initialFormDocumentID ? .forms : nil)
                 }
         }
         .pdfDropDestination(
@@ -111,6 +112,18 @@ struct ContentView: View {
             LibraryToolsView(canScan: DocumentScannerView.isSupported) { tool in
                 pendingTool = tool
                 toolsPresented = false
+            }
+        }
+        .sheet(isPresented: $templatesPresented, onDismiss: {
+            if let document = convertedDocument {
+                convertedDocument = nil
+                initialFormDocumentID = document.id
+                path.append(document)
+            }
+        }) {
+            FormTemplatesView { document in
+                convertedDocument = document
+                templatesPresented = false
             }
         }
         .sheet(item: $conversionMode, onDismiss: {
@@ -263,6 +276,7 @@ struct ContentView: View {
             openImporter: { isImporterPresented = true },
             openScanner: beginScanning,
             openSample: openSample,
+            openTemplates: { templatesPresented = true },
             openTools: { toolsPresented = true },
             openSettings: { isSettingsPresented = true },
             openRecentlyDeleted: { showingDeleted = true },
@@ -302,6 +316,7 @@ struct ContentView: View {
         pendingTool = nil
         switch tool {
         case .sample: openSample()
+        case .templates: templatesPresented = true
         case .scan: beginScanning()
         case .importPDF: isImporterPresented = true
         case .images: conversionMode = .images
@@ -323,7 +338,7 @@ struct ContentView: View {
         Task {
             do {
                 let document = try await library.importConvertedPDF(.preparedPDF(SampleForm.data()), named: "Try a Sample Form")
-                sampleDocumentID = document.id
+                initialFormDocumentID = document.id
                 path.append(document)
             } catch { library.errorMessage = "Folik couldn’t create the sample. \(error.localizedDescription)" }
         }
