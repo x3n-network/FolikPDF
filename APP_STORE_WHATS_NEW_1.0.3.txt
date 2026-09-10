@@ -1,0 +1,14 @@
+Folik 1.0.3 is our biggest update yet, with powerful new tools that remain private and on your device.
+
+- Search your library faster with a private text index, matching-page counts, and highlighted excerpts.
+- Protect Folik with Face ID, Touch ID, or your device passcode.
+- Turn scans and PDFs into fillable copies. Folik can suggest likely fields on-device, and you can review, arrange, resize, or delete them.
+- Inspect PDFs for metadata, forms, comments, links, attachments, scripts, and signature fields, then create a sanitized image-only copy.
+- Run Sanitize PDF from Shortcuts, Siri, Spotlight, or an automation.
+- Create verified password-protected copies without storing your password.
+- Compare the selectable text of two PDFs and review added, removed, or changed pages.
+- Send PDFs to Folik directly from the system share sheet.
+- Duplicate documents and restore or permanently delete several removed documents at once.
+- Drag PDFs into the iPad library and open documents in separate Split View or Stage Manager windows.
+
+Folik remains free and open source, with no accounts, ads, analytics, in-app purchases, or document uploads.
