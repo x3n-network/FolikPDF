@@ -22,3 +22,7 @@ Artifacts: `/tmp/folik104-device.xcresult`, `/tmp/folik104-device-final.xcresult
 ## Additional optimization profiling
 
 The reader batching, form-value refresh, cache release, and detached-worker cancellation pass has simulator coverage. Instruments reported the physical iPhone offline during this pass; the earlier device save results above predate these changes. Reinstall the latest isolated QA build before checking them on the phone. Capture Allocations and Time Profiler while opening an annotation-heavy PDF, filling/saving a large form, and running OCR on a real scan. Compare peak allocations and main-thread pauses with the prior build. See [PERFORMANCE_1.0.4.md](PERFORMANCE_1.0.4.md) for measured simulator results and limitations.
+
+## New form workflow checks
+
+The direct builder, Build/Fill modes, repeated placement, properties, duplication, and sample flow have simulator coverage. On a physical iPhone and iPad, create a five-field form using only touch, then repeat using VoiceOver and Place center/Move/Size controls. Check dragging and snapping near page edges at different zoom levels. Switch to Fill, enter distinct values, finish naming, reopen, and share to another PDF reader. Confirm field independence, required flags, and checkbox states. Verify an interrupted working copy remains in the library and the source is unchanged. Try the optional sample from an empty library, fill it, sign on the line, and share it. These hands-on checks are not yet marked complete.

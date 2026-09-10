@@ -249,6 +249,30 @@ final class FolikUITests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
     }
 
+    func testEmptyLibrarySampleCanBeSignedAndShared() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-empty-library", "--clear-saved-signatures"]
+        app.launch()
+        let sample = app.buttons["library.sample"]
+        XCTAssertTrue(sample.waitForExistence(timeout: 8))
+        if !sample.isHittable { app.swipeUp() }
+        sample.tap()
+        XCTAssertTrue(app.buttons["reader.sign"].waitForExistence(timeout: 10))
+        capture("sample-form-fill", in: app)
+        app.buttons["reader.sign"].tap()
+        app.buttons["Type"].tap()
+        let signature = app.textFields["signature.typedText"]
+        XCTAssertTrue(signature.waitForExistence(timeout: 3))
+        signature.tap(); signature.typeText("Pat Example")
+        app.buttons["signature.save"].tap()
+        XCTAssertTrue(app.buttons["reader.annotation.placeCenter"].waitForExistence(timeout: 4))
+        app.buttons["reader.annotation.placeCenter"].tap()
+        capture("sample-form-page", in: app)
+        app.buttons["reader.export"].tap()
+        XCTAssertTrue(app.navigationBars["Share PDF"].waitForExistence(timeout: 4))
+        capture("sample-form-share", in: app)
+    }
+
     func testScannedPDFCanAuthorFillableFields() {
         let app = XCUIApplication()
         app.launchArguments = [

@@ -62,6 +62,7 @@ struct LibraryView: View {
     let canScan: Bool
     let openImporter: () -> Void
     let openScanner: () -> Void
+    var openSample: () -> Void = {}
     let openTools: () -> Void
     let openSettings: () -> Void
     var openRecentlyDeleted: () -> Void = {}
@@ -573,6 +574,16 @@ struct LibraryView: View {
                 .disabled(isImporting)
                 .padding(.horizontal, 32)
                 .padding(.top, 10)
+
+                Button(action: openSample) {
+                    Label("Try a Sample Form", systemImage: "doc.text")
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .disabled(isImporting)
+                .padding(.horizontal, 32)
+                .padding(.top, 10)
+                .accessibilityIdentifier("library.sample")
+                .accessibilityHint("Adds a local practice PDF for filling, signing, and sharing")
 
                 Label("No account · No ads · No uploads", systemImage: "lock.shield")
                     .font(.footnote.weight(.medium))

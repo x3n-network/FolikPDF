@@ -1,7 +1,7 @@
 import SwiftUI
 
 nonisolated enum LibraryTool: String, Identifiable {
-    case scan, importPDF, images, documents, text, searchable, fillable, compress, batch, redact, sanitize, protect, compare
+    case scan, importPDF, images, documents, text, searchable, fillable, compress, batch, redact, sanitize, protect, compare, sample
     var id: Self { self }
 }
 
@@ -45,6 +45,9 @@ struct LibraryToolsView: View {
                         .disabled(!canScan)
                     tool(.importPDF, title: "Choose PDFs", subtitle: "Add one or more PDFs from Files", icon: "folder")
                     tool(.images, title: "Images to PDF", subtitle: "Create an ordered, searchable PDF", icon: "photo.on.rectangle")
+                }
+                Section("Try Folik") {
+                    tool(.sample, title: "Try a Sample Form", subtitle: "Practice filling, signing, and sharing", icon: "doc.text")
                 }
                 Section("More ways to convert") {
                     tool(.documents, title: "Documents to PDF", subtitle: "Convert DOCX, ODT, DOC, or Pages previews", icon: "doc.richtext")

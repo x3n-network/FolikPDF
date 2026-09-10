@@ -14,6 +14,7 @@ struct ContentView: View {
     @State private var showingDeleted = false
     @EnvironmentObject private var library: DocumentLibrary
     @State private var path: [LibraryDocument] = []
+    @State private var sampleDocumentID: UUID?
     @State private var isImporterPresented = false
     @State private var isScannerPresented = false
     @State private var cameraPermissionAlertPresented = false
@@ -38,7 +39,7 @@ struct ContentView: View {
         NavigationStack(path: $path) {
             libraryRoot
                 .navigationDestination(for: LibraryDocument.self) { item in
-                    ReaderView(item: item)
+                    ReaderView(item: item, initialPanel: item.id == sampleDocumentID ? .forms : nil)
                 }
         }
         .pdfDropDestination(
@@ -261,6 +262,7 @@ struct ContentView: View {
             canScan: DocumentScannerView.isSupported,
             openImporter: { isImporterPresented = true },
             openScanner: beginScanning,
+            openSample: openSample,
             openTools: { toolsPresented = true },
             openSettings: { isSettingsPresented = true },
             openRecentlyDeleted: { showingDeleted = true },
@@ -299,6 +301,7 @@ struct ContentView: View {
         guard let tool = pendingTool else { return }
         pendingTool = nil
         switch tool {
+        case .sample: openSample()
         case .scan: beginScanning()
         case .importPDF: isImporterPresented = true
         case .images: conversionMode = .images
@@ -312,6 +315,17 @@ struct ContentView: View {
         case .sanitize: pdfToolRequest = LibraryPDFToolRequest(tool: .sanitize)
         case .protect: pdfToolRequest = LibraryPDFToolRequest(tool: .protect)
         case .compare: pdfToolRequest = LibraryPDFToolRequest(tool: .compare)
+        }
+    }
+
+    private func openSample() {
+        guard !library.isImporting else { return }
+        Task {
+            do {
+                let document = try await library.importConvertedPDF(.preparedPDF(SampleForm.data()), named: "Try a Sample Form")
+                sampleDocumentID = document.id
+                path.append(document)
+            } catch { library.errorMessage = "Folik couldn’t create the sample. \(error.localizedDescription)" }
         }
     }
 

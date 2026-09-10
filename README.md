@@ -20,6 +20,8 @@ Current development version: **1.0.4**. See the [1.0.4 release notes](docs/RELEA
 
 ## Current capabilities
 
+- Try an optional local sample form from the empty library or Add tools to practice filling, signing, and sharing
+
 - Import one or more PDFs from Files
 - Use **Add to Folik** from the system share sheet in Files, Mail, Safari, and other apps to privately queue up to 20 PDFs for the local library
 - Drag PDFs from Files or another app into the Folik library on iPad, with file-backed transfer and visible drop feedback
@@ -225,3 +227,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Small, focused changes with reproducible
 ## License
 
 Folik is available under the [MIT License](LICENSE).
+
+### Sample form asset
+
+The practice PDF is bundled at `Folik/Resources/SampleForm.pdf` and copied only when requested. Rebuild it with `python3 Tools/create_sample_form.py` in a development environment with ReportLab installed. ReportLab is not an app runtime dependency. Tests verify field independence, saved canonical form values, fresh blank copies, and the sample UI workflow.

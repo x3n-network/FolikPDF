@@ -98,3 +98,11 @@ Validation: mode-switch value preservation, Build/Fill UI separation, and scanne
 Build keeps field tools beside the page. Choose a type once and tap repeatedly, or use Place center. Arrange supports editing labels and required flags after placement, independent blank duplicates, and undo/redo. Field sizes are reused within the editing session. Dragged fields snap nearby matching edges and show alignment guides. Form layout supports page scrolling and pinch zoom; Fill hides the authoring outlines.
 
 Validation: repeat placement, independent duplicates, required/label undo and redo, remembered sizes, save/reopen, and edge snapping passed unit checks. iPhone UI checks passed after fixing a largest-text landscape overflow. iPad placement, large-text rotation, and suggested-field zoom checks passed; screenshots reviewed. Results: `/tmp/folik-form-quick.xcresult`, `/tmp/folik-form-quick-fixed.xcresult`, `/tmp/folik-form-quick-ipad.xcresult`.
+
+## Optional sample form
+
+Try a Sample Form is available in the empty library and Add tools. It creates a local practice PDF and opens Fill with text, multiline, and checkbox fields plus guidance for signing and sharing. Each request creates a fresh blank copy without changing prior samples. No sample is inserted automatically and no network access is needed.
+
+Validation for this form workflow pass: 148 unique unit tests passed across the full regression and focused correction runs, with one optional private fixture skipped. Eight affected iPhone UI workflows passed; iPad placement, suggestions/zoom, large-text rotation, and dark-mode sample/builder checks also passed. The original sample generator exposed missing untouched fields in PDFKit's form catalog. The final bundled sample has four independent canonical fields; native save/reopen tests verify all field names plus text and checkbox values, and pypdf independently verifies the asset's field/widget values and normal appearances. The final blank page render was visually reviewed.
+
+Results: `/tmp/folik-forms-regression.xcresult` (the sample structure failure before correction), `/tmp/folik-sample-bundled.xcresult` (final sample regression), `/tmp/folik-form-dark-ipad.xcresult`, and `/tmp/folik-form-release-bundled.log`. New form workflows are simulator-validated; physical VoiceOver and touch testing remain in the device QA checklist.

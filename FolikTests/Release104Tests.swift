@@ -134,6 +134,76 @@ final class Release104Tests: XCTestCase {
         XCTAssertEqual(session.alignedFormBounds(distant, excluding: selected.annotation, on: page), distant)
     }
 
+    func testSampleFormValuesSurviveSaveAndNewSamplesStartBlank() async throws {
+        let library = DocumentLibrary(documentsDirectory: root)
+        let data = try SampleForm.data()
+        let blankPage = try XCTUnwrap(PDFDocument(data: data)?.page(at: 0))
+        let preview = XCTAttachment(image: blankPage.thumbnail(of: CGSize(width: 1224, height: 1584), for: .mediaBox))
+        preview.name = "sample-form-blank-page"; preview.lifetime = .keepAlways; add(preview)
+        let first = try await library.importConvertedPDF(.preparedPDF(data), named: "Sample")
+        let session = DocumentSession(item: first)
+        XCTAssertEqual(session.formFields.count, 4)
+        XCTAssertEqual(Set(session.formFields.compactMap { $0.annotation.fieldName }).count, 4)
+        XCTAssertEqual(session.pageCount, 1)
+        let name = try XCTUnwrap(session.formFields.first { $0.title == "Name" })
+        name.annotation.widgetStringValue = "Pat Example"
+        let checkbox = try XCTUnwrap(session.formFields.first { $0.kind == .checkbox })
+        checkbox.annotation.buttonWidgetState = .onState
+        session.noteFormEditing()
+        let saved = await session.saveForSharing()
+        XCTAssertTrue(saved)
+        let reopened = DocumentSession(item: first)
+        XCTAssertEqual(reopened.completedFormFieldCount, 2)
+        XCTAssertEqual(reopened.formFields.first { $0.title == "Name" }?.annotation.widgetStringValue, "Pat Example")
+        let second = try await library.importConvertedPDF(.preparedPDF(SampleForm.data()), named: "Sample")
+        XCTAssertNotEqual(first.url, second.url)
+        XCTAssertEqual(DocumentSession(item: second).completedFormFieldCount, 0)
+        let document = try XCTUnwrap(PDFDocument(url: first.url))
+        let catalog = try XCTUnwrap(document.documentRef?.catalog)
+        var acroForm: CGPDFDictionaryRef?
+        XCTAssertTrue(CGPDFDictionaryGetDictionary(catalog, "AcroForm", &acroForm))
+        var fields: CGPDFArrayRef?
+        XCTAssertTrue(CGPDFDictionaryGetArray(try XCTUnwrap(acroForm), "Fields", &fields))
+        // PDFKit may group fields under nonterminal parent dictionaries.
+        // Follow Kids and inherited values instead of assuming a flat Fields array.
+        var canonicalFields: [String: String] = [:]
+        func visit(_ dictionary: CGPDFDictionaryRef, inheritedName: String = "", inheritedValue: String = "", depth: Int = 0) throws {
+            XCTAssertLessThan(depth, 10)
+            guard depth < 10 else { return }
+            var nameString: CGPDFStringRef?
+            let name = CGPDFDictionaryGetString(dictionary, "T", &nameString)
+                ? (nameString.flatMap { CGPDFStringCopyTextString($0) as String? } ?? inheritedName) : inheritedName
+            var valueString: CGPDFStringRef?
+            var valueName: UnsafePointer<CChar>?
+            let value: String
+            if CGPDFDictionaryGetString(dictionary, "V", &valueString), let valueString {
+                value = CGPDFStringCopyTextString(valueString) as String? ?? ""
+            } else if CGPDFDictionaryGetName(dictionary, "V", &valueName), let valueName {
+                value = String(cString: valueName)
+            } else { value = inheritedValue }
+            var kids: CGPDFArrayRef?
+            if CGPDFDictionaryGetArray(dictionary, "Kids", &kids), let kids, CGPDFArrayGetCount(kids) > 0 {
+                for index in 0..<CGPDFArrayGetCount(kids) {
+                    var child: CGPDFDictionaryRef?
+                    XCTAssertTrue(CGPDFArrayGetDictionary(kids, index, &child))
+                    try visit(XCTUnwrap(child), inheritedName: name, inheritedValue: value, depth: depth + 1)
+                }
+            } else { canonicalFields[name] = value }
+        }
+        let roots = try XCTUnwrap(fields)
+        for index in 0..<CGPDFArrayGetCount(roots) {
+            var field: CGPDFDictionaryRef?
+            XCTAssertTrue(CGPDFArrayGetDictionary(roots, index, &field))
+            try visit(XCTUnwrap(field))
+        }
+        XCTAssertEqual(Set(canonicalFields.keys), Set(reopened.formFields.map(\.title)))
+        XCTAssertEqual(canonicalFields["Name"], "Pat Example")
+        XCTAssertEqual(canonicalFields["I have tried a PDF checkbox"], "Yes")
+        for field in reopened.formFields {
+            XCTAssertTrue(try XCTUnwrap(document.page(at: 0)).bounds(for: .cropBox).contains(field.annotation.bounds))
+        }
+    }
+
     func testFailedReplacementPreservesOriginalAndRetrySavesLatestEdits() async throws {
         let url = try pdf("Recovery", pages: ["Original"])
         let original = try Data(contentsOf: url)

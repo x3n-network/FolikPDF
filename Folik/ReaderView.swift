@@ -33,6 +33,7 @@ enum ReaderPanel: String, Identifiable {
 struct ReaderView: View {
     @StateObject private var session: DocumentSession
     @EnvironmentObject private var library: DocumentLibrary
+    private let initialPanel: ReaderPanel?
     private let startInFormBuilder: Bool
     private let finishForm: ((LibraryDocument) -> Void)?
     @State private var namingForm = false
@@ -55,7 +56,8 @@ struct ReaderView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    init(item: LibraryDocument, startInFormBuilder: Bool = false, finishForm: ((LibraryDocument) -> Void)? = nil) {
+    init(item: LibraryDocument, startInFormBuilder: Bool = false, finishForm: ((LibraryDocument) -> Void)? = nil, initialPanel: ReaderPanel? = nil) {
+        self.initialPanel = initialPanel
         self.startInFormBuilder = startInFormBuilder
         self.finishForm = finishForm
         #if DEBUG
@@ -199,6 +201,7 @@ struct ReaderView: View {
             guard !Task.isCancelled else { return }
             passwordPromptPresented = session.isLocked
             if startInFormBuilder { session.setFormMode(.build); session.beginFormLayoutEditing() }
+            else if let initialPanel { presentedPanel = initialPanel }
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--clear-saved-signatures") {
                 session.deleteSavedSignature(for: .signature)
