@@ -20,9 +20,26 @@ struct FolikApp: App {
                 }
             }
             .environmentObject(appLock)
+            .task {
+                await importSharedPDFsIfAppropriate()
+            }
             .onChange(of: scenePhase) { _, phase in
                 appLock.sceneChanged(to: phase)
+                if phase == .active {
+                    Task { await importSharedPDFsIfAppropriate() }
+                }
             }
         }
+    }
+
+    @MainActor
+    private func importSharedPDFsIfAppropriate() async {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--ui-test-fixture") &&
+            !ProcessInfo.processInfo.arguments.contains("--ui-test-shared-inbox") {
+            return
+        }
+        #endif
+        await library.importSharedInbox()
     }
 }

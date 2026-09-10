@@ -19,6 +19,7 @@ The updated library in **Folik 1.0.2**. Browse in a list or grid, resume reading
 ## Current capabilities
 
 - Import one or more PDFs from Files
+- Use **Add to Folik** from the system share sheet in Files, Mail, Safari, and other apps to privately queue up to 20 PDFs for the local library
 - Make existing scanned PDFs searchable with on-device OCR, progress, cancellation, and review before saving a new copy
 - Find literal text, email addresses, phone numbers, and Social Security numbers on-device, review each match, and add selected matches to a redacted copy
 - Inspect PDFs for metadata, filled forms, comments, links, outlines, attachments, scripts/actions, and digital-signature fields, then review and save a sanitized image-only copy
@@ -88,6 +89,12 @@ Choose **Add (+) → Protect PDF** to create a new PDF that requires a password 
 Choose **Add (+) → Compare PDFs**, or begin from a document's **… → Tools** menu, to compare selectable text in two PDFs entirely on-device. Folik aligns identical pages using their normalized extracted text so inserted or removed pages do not automatically make every later page look changed. The report counts aligned, added, removed, and changed pages and provides bounded before/after excerpts.
 
 This is a text-and-page-structure comparison, not a visual or cryptographic comparison. It does not detect changes limited to images, positioning, fonts, colors, annotations, or other appearance details. Scanned PDFs need searchable copies from OCR first. Protected PDFs are rejected. Each input is limited to 100 MB, 500 pages, and 16 MB of extracted text; nothing is uploaded or retained as a comparison history.
+
+### Add to Folik share extension
+
+Choose **Add to Folik** in the system share sheet to send PDFs from Files, Mail, Safari, and other apps into Folik without first navigating through an import picker. The extension checks that every item is a readable PDF, then copies up to 20 files and 100 MB total into Folik's private shared container. The source files remain unchanged.
+
+Queued PDFs move into the local Folik library the next time the app is active. Duplicate names receive a numbered suffix. A file that cannot be moved safely remains in the private queue for a later retry, while valid files continue importing. Sharing and import are entirely on-device and require no Folik account or network connection.
 
 ### Batch conversion
 
@@ -162,6 +169,7 @@ The app icon uses Folik's folded-page **F** in standard, dark, and tinted appear
 
 ```text
 DocumentLibrary    Imports and owns local PDF copies
+SharedPDFInbox     Validates and atomically transfers share-extension PDFs
 LibrarySearchIndex Bounded, disposable on-device cache for cross-library text search
 PDFPrivacy         On-device document inspection and image-only sanitizing
 PDFProtection      Verified password-protected PDF copy generation

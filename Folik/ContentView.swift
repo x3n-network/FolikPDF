@@ -157,6 +157,9 @@ struct ContentView: View {
             let arguments = ProcessInfo.processInfo.arguments
             if arguments.contains("--ui-test-fixture") {
                 library.prepareUITestFixture()
+                if arguments.contains("--ui-test-shared-inbox") {
+                    Task { await library.importSharedInbox() }
+                }
             }
             if arguments.contains("--open-settings") {
                 isSettingsPresented = true

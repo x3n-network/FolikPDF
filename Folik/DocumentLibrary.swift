@@ -81,6 +81,40 @@ final class DocumentLibrary: ObservableObject {
     }
 
     @discardableResult
+    func importSharedInbox(
+        from inboxDirectory: URL? = SharedPDFInbox.defaultInboxDirectory()
+    ) async -> [LibraryDocument] {
+        guard let inboxDirectory, !isImporting else { return [] }
+        let pending = (try? SharedPDFInbox.pendingFiles(in: inboxDirectory, fileManager: fileManager)) ?? []
+        guard !pending.isEmpty else { return [] }
+        isImporting = true
+        importStatus = pending.count == 1 ? "Adding shared PDF…" : "Adding shared PDFs…"
+        defer {
+            isImporting = false
+            importStatus = nil
+        }
+
+        do {
+            let destinationDirectory = documentsDirectory
+            let result = try await Task.detached(priority: .userInitiated) {
+                try SharedPDFInbox.consume(from: inboxDirectory, into: destinationDirectory)
+            }.value
+            refresh()
+            if !result.failedFilenames.isEmpty {
+                let count = result.failedFilenames.count
+                errorMessage = "Folik couldn’t add \(count) shared PDF\(count == 1 ? "" : "s"). The original shared file\(count == 1 ? " is" : "s are") still available to retry."
+            }
+            let importedPaths = Set(result.importedURLs.map(\.standardizedFileURL))
+            return documents.filter { importedPaths.contains($0.url.standardizedFileURL) }
+        } catch is CancellationError {
+            return []
+        } catch {
+            errorMessage = "Folik couldn’t add the shared PDFs. \(error.localizedDescription)"
+            return []
+        }
+    }
+
+    @discardableResult
     func importScannedPages(_ pageImageData: [Data], createdAt: Date = Date()) async -> LibraryDocument? {
         guard !isImporting else { return nil }
         guard !pageImageData.isEmpty else {
@@ -473,9 +507,30 @@ final class DocumentLibrary: ObservableObject {
                     NSString(string: "SECOND LIBRARY DOCUMENT").draw(at: CGPoint(x: 72, y: 96), withAttributes: [.font: UIFont.systemFont(ofSize: 24)])
                 }
             }
+            if ProcessInfo.processInfo.arguments.contains("--ui-test-shared-inbox") {
+                try prepareSharedInboxUITestFixture()
+            }
             refresh()
         } catch {
             errorMessage = "Folik couldn’t prepare its UI test document. \(error.localizedDescription)"
+        }
+    }
+
+    private func prepareSharedInboxUITestFixture() throws {
+        guard let inbox = SharedPDFInbox.defaultInboxDirectory(fileManager: fileManager) else {
+            throw SharedPDFInboxError.unavailable
+        }
+        try fileManager.createDirectory(at: inbox, withIntermediateDirectories: true)
+        for url in try SharedPDFInbox.pendingFiles(in: inbox, fileManager: fileManager) {
+            try fileManager.removeItem(at: url)
+        }
+        let sharedPDF = inbox.appendingPathComponent("Shared from Files.pdf")
+        try UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 612, height: 792)).writePDF(to: sharedPDF) { context in
+            context.beginPage()
+            NSString(string: "Shared privately with Folik").draw(
+                at: CGPoint(x: 72, y: 96),
+                withAttributes: [.font: UIFont.systemFont(ofSize: 24, weight: .semibold)]
+            )
         }
     }
 

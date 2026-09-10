@@ -6,6 +6,16 @@ final class FolikUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testSharedInboxPDFAppearsInLibrary() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-shared-inbox"]
+        app.launch()
+
+        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["library.document.Shared from Files.pdf"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["library.document.Folik UI Test.pdf"].exists)
+    }
+
     func testRecentlyDeletedRestoresLastPDFAndConfirmsPermanentDeletion() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-fixture"]
