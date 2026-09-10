@@ -77,7 +77,13 @@ nonisolated enum PDFProcessing {
         }
         guard recognized > 0 else { throw PDFProcessingError.nothingToRecognize }
         guard let output = pdf.dataRepresentation(), output.count <= maximumBytes else { throw PDFProcessingError.tooLarge }
+        var summary = ["\(recognized) \(recognized == 1 ? "page" : "pages") made searchable"]
+        if existing > 0 { summary.append("\(existing) already searchable") }
+        if annotated > 0 { summary.append("\(annotated) annotated \(annotated == 1 ? "page" : "pages") preserved") }
+        if empty > 0 { summary.append("\(empty) without recognized text") }
         return OfficePreview(data: output, warnings: ["Added text to \(recognized) pages. Preserved \(existing) pages with text and \(annotated) pages with annotations. No text recognized on \(empty) pages.", "OCR can make mistakes. Review the searchable copy. Page destinations and document outlines may change."], pageCount: pdf.pageCount,
-                             recoveryNotice: "Searchable copy. Your source PDF is unchanged.")
+                             recoveryNotice: "Review the recognized text before saving. Your source PDF stays unchanged.",
+                             previewTitle: "Searchable Copy", notesTitle: "Recognition details",
+                             resultSummary: summary.joined(separator: " · "))
     }
 }

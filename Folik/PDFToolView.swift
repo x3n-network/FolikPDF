@@ -41,17 +41,22 @@ struct PDFToolView: View {
                 if source != nil {
                     Section("New copy") { TextField("Filename", text: $filename).disabled(busy) }
                 }
-                if busy { Section { ProgressView(status); Button("Cancel Processing") { task?.cancel() } } }
-                if let error { Section { Text(error).foregroundStyle(.red) } }
+                if let error { Section { ProcessingErrorView(message: error) } }
             }
             .navigationTitle(compress ? "Compress PDF" : "Make PDF Searchable")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { task?.cancel(); dismiss() } } }
             .safeAreaInset(edge: .bottom) {
-                Button(compress ? "Preview Compressed Copy" : "Preview Searchable Copy", action: process)
-                    .buttonStyle(.borderedProminent).frame(minHeight: 48).padding()
-                    .disabled(busy || source == nil || (try? PDFConverter.fileName(filename)) == nil)
-                    .accessibilityIdentifier("pdfTool.preview")
+                VStack(spacing: 8) {
+                    if busy { ProcessingStatusView(status: status) { task?.cancel() } }
+                    Button(compress ? "Preview Compressed Copy" : "Preview Searchable Copy", action: process)
+                        .buttonStyle(.borderedProminent).frame(minHeight: 48)
+                        .disabled(busy || source == nil || (try? PDFConverter.fileName(filename)) == nil)
+                        .accessibilityIdentifier("pdfTool.preview")
+                }
+                .padding()
+                .frame(maxWidth: .infinity)
+                .background(.regularMaterial)
             }
             .fileImporter(isPresented: $showFiles, allowedContentTypes: [.pdf]) { result in
                 switch result {
@@ -82,7 +87,7 @@ struct PDFToolView: View {
         task = Task {
             defer { busy = false }
             do {
-                let data = try await Task.detached { try PDFConverter.readFile(url, maximumBytes: PDFProcessing.maximumBytes) }.value
+                let data = try await Task.detached { try PDFConverter.readFile(url, maximumBytes: PDFProcessing.maximumBytes) }.cancellableValue
                 try Task.checkCancellation()
                 source = data; sourceName = url.lastPathComponent; filename = url.deletingPathExtension().lastPathComponent + (compress ? " Compressed" : " Searchable")
             } catch is CancellationError { } catch { self.error = error.localizedDescription }
@@ -96,6 +101,9 @@ struct PDFToolView: View {
         task = Task {
             defer { busy = false }
             let worker = Task.detached {
+                #if DEBUG
+                if ProcessInfo.processInfo.arguments.contains("--ui-test-processing-delay") { try await Task.sleep(for: .seconds(5)) }
+                #endif
                 if isCompression { return try PDFCompression.compress(source, preset: selectedPreset) }
                 return try await PDFProcessing.searchable(source) { page, count in
                     await MainActor.run { status = "Recognizing page \(page) of \(count)…" }

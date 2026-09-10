@@ -32,10 +32,17 @@ enum ReaderPanel: String, Identifiable {
 
 struct ReaderView: View {
     @StateObject private var session: DocumentSession
+    @Environment(\.dismiss) private var dismiss
+    @AccessibilityFocusState private var exportFocused: Bool
+    @State private var leaving = false
     @State private var presentedPanel: ReaderPanel?
     @State private var passwordPromptPresented = false
     @State private var isExporting = false
+    @State private var exportTask: Task<Void, Never>?
+    @State private var cancellingExport = false
     @State private var preparedExport: PreparedExport?
+    @State private var showingShareOptions = false
+    @State private var pendingExportMode: DocumentExportMode?
     @State private var pageOrganizerPresented = false
     @State private var pageOrganizerPending = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -43,7 +50,15 @@ struct ReaderView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     init(item: LibraryDocument) {
-        _session = StateObject(wrappedValue: DocumentSession(item: item))
+        #if DEBUG
+        var failNextSave = ProcessInfo.processInfo.arguments.contains("--ui-test-save-failure")
+        _session = StateObject(wrappedValue: DocumentSession(item: item, annotationSaveDelay: .milliseconds(250), deferredPreparation: true) { document, url in
+            if failNextSave { failNextSave = false; throw CocoaError(.fileWriteOutOfSpace) }
+            try PDFDocumentPersistence.save(document, to: url)
+        })
+        #else
+        _session = StateObject(wrappedValue: DocumentSession(item: item, annotationSaveDelay: .milliseconds(250), deferredPreparation: true))
+        #endif
     }
 
     var body: some View {
@@ -60,13 +75,16 @@ struct ReaderView: View {
             }
 
             documentCanvas
+                .allowsHitTesting(!isExporting && !session.isPreparingDocument)
         }
         .background(FolikTheme.canvas)
         .navigationTitle(session.item.displayName)
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(session.isModified || session.saveFailed || session.isSaving || leaving)
         .toolbar { readerToolbar }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             ReaderBottomChrome(session: session, presentedPanel: $presentedPanel)
+                .disabled(isExporting || session.isPreparingDocument)
         }
         .sheet(item: compactPanelBinding, onDismiss: presentPendingPageOrganizer) { panel in
             NavigationStack {
@@ -84,14 +102,53 @@ struct ReaderView: View {
             PasswordPrompt(session: session)
                 .interactiveDismissDisabled(session.isLocked)
         }
-        .sheet(item: $preparedExport) { export in
-            ActivityView(items: [export.url])
+        .sheet(isPresented: $showingShareOptions, onDismiss: {
+            if pendingExportMode == nil { exportFocused = true }
+            if let mode = pendingExportMode {
+                pendingExportMode = nil
+                prepareExport(mode)
+            }
+        }) {
+            NavigationStack {
+                List {
+                    Section {
+                        Label(session.item.url.lastPathComponent, systemImage: "doc")
+                            .font(.headline)
+                            .textSelection(.enabled)
+                    } footer: {
+                        Text("Your latest changes are saved before sharing.")
+                    }
+                    Section {
+                        shareOption("Share PDF", detail: "Keep annotations and form fields editable.", icon: "square.and.arrow.up", mode: .editable)
+                        shareOption("Share flattened copy", detail: "Bake visible annotations and filled values into the pages.", icon: "checkmark.seal", mode: .flattened)
+                    }
+                }
+                .navigationTitle("Share PDF")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { showingShareOptions = false }
+                    }
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
+        .sheet(item: $preparedExport, onDismiss: { exportFocused = true }) { export in
+            ActivityView(exportURL: export.url)
                 .ignoresSafeArea()
         }
         .fullScreenCover(isPresented: $pageOrganizerPresented) {
             PageOrganizerView(sourceURL: session.item.url)
         }
-        .onAppear {
+        .overlay(alignment: .top) {
+            if session.isPreparingDocument {
+                ProgressView("Preparing document tools…").padding(12).background(.regularMaterial, in: Capsule())
+                    .accessibilityIdentifier("reader.preparingTools")
+            }
+        }
+        .task {
+            await session.prepareForReading()
+            guard !Task.isCancelled else { return }
             passwordPromptPresented = session.isLocked
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--clear-saved-signatures") {
@@ -162,7 +219,7 @@ struct ReaderView: View {
             passwordPromptPresented = isLocked
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase != .active, session.isModified { session.requestSave() }
+            if phase != .active, !session.isLocked, session.document != nil { session.requestSave() }
         }
         .onDisappear {
             if session.isModified { session.requestSave() }
@@ -175,11 +232,14 @@ struct ReaderView: View {
     }
 
     private func requestPageOrganizer() {
-        if horizontalSizeClass == .compact {
-            pageOrganizerPending = true
-            presentedPanel = nil
-        } else {
-            pageOrganizerPresented = true
+        Task {
+            guard await session.saveForSharing() else { return }
+            if horizontalSizeClass == .compact {
+                pageOrganizerPending = true
+                presentedPanel = nil
+            } else {
+                pageOrganizerPresented = true
+            }
         }
     }
 
@@ -223,13 +283,31 @@ struct ReaderView: View {
 
     @ToolbarContentBuilder
     private var readerToolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .topBarTrailing) {
-            if !session.formFields.isEmpty {
-                Button("Save", action: session.requestSave)
-                    .disabled(!session.isModified)
-                    .accessibilityHint(session.isModified ? "Saves form and annotation changes" : "No unsaved changes")
+        if session.isModified || session.saveFailed || session.isSaving || leaving {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    leaving = true
+                    Task {
+                        if await session.saveForSharing() { dismiss() }
+                        leaving = false
+                    }
+                } label: {
+                    Label("Back", systemImage: "chevron.left").frame(minHeight: 44)
+                }
+                .disabled(leaving || isExporting)
+                .accessibilityIdentifier("reader.saveAndBack")
+                .accessibilityHint("Saves your changes before returning")
             }
-
+        }
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            if isExporting {
+                Button(cancellingExport ? "Stopping…" : "Cancel Export") {
+                    cancellingExport = true
+                    exportTask?.cancel()
+                }
+                .disabled(cancellingExport)
+                .accessibilityIdentifier("reader.cancelExport")
+            }
             Menu {
                 ForEach(ReaderLayout.allCases) { layout in
                     Button {
@@ -247,31 +325,16 @@ struct ReaderView: View {
             }
             .accessibilityLabel("Page layout")
 
-            Menu {
-                Section("Keep editable") {
-                    Button { prepareExport(.original) } label: {
-                        Label("Share Original", systemImage: "doc")
-                    }
-                    Button { prepareExport(.editable) } label: {
-                        Label("Editable Copy", systemImage: "doc.on.doc")
-                    }
-                }
-                Section("Make marks permanent") {
-                    Button { prepareExport(.flattened) } label: {
-                        Label("Flattened Copy", systemImage: "doc.badge.checkmark")
-                    }
-                }
-            } label: {
+            Button { showingShareOptions = true } label: {
                 Group {
-                    if isExporting {
-                        ProgressView()
-                    } else {
-                        Image(systemName: "square.and.arrow.up")
-                    }
+                    if isExporting { ProgressView() }
+                    else { Image(systemName: "square.and.arrow.up") }
                 }
                 .frame(width: 44, height: 44)
             }
-            .disabled(isExporting)
+            .disabled(isExporting || session.isPreparingDocument || session.isLocked || session.document == nil)
+            .keyboardShortcut("e", modifiers: [.command, .shift])
+            .accessibilityFocused($exportFocused)
             .accessibilityIdentifier("reader.export")
             .accessibilityLabel(isExporting ? "Preparing PDF" : "Export and share")
         }
@@ -280,20 +343,36 @@ struct ReaderView: View {
     private func prepareExport(_ mode: DocumentExportMode) {
         guard !isExporting else { return }
         isExporting = true
-        session.requestSave()
-        Task {
-            try? await Task.sleep(for: .milliseconds(200))
+        cancellingExport = false
+        exportTask = Task {
+            defer { isExporting = false }
             do {
-                let sourceURL = session.item.url
-                let url = try await Task.detached(priority: .userInitiated) {
-                    try DocumentExporter.export(sourceURL: sourceURL, mode: mode)
-                }.value
+                let url = try await session.prepareShare(mode: mode)
                 preparedExport = PreparedExport(url: url)
+            } catch is CancellationError {
             } catch {
-                session.errorMessage = "Folik couldn’t prepare this PDF copy. \(error.localizedDescription)"
+                if !session.saveFailed {
+                    session.errorMessage = "Folik couldn’t prepare this PDF copy. \(error.localizedDescription)"
+                }
             }
-            isExporting = false
         }
+    }
+
+    private func shareOption(_ title: String, detail: String, icon: String, mode: DocumentExportMode) -> some View {
+        Button {
+            showingShareOptions = false
+            pendingExportMode = mode
+        } label: {
+            Label {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title).foregroundStyle(FolikTheme.ink)
+                    Text(detail).font(.footnote).foregroundStyle(FolikTheme.mutedInk)
+                }
+            } icon: { Image(systemName: icon) }
+            .frame(minHeight: 52)
+        }
+        .accessibilityLabel(title)
+        .accessibilityHint(detail)
     }
 
     private var compactPanelBinding: Binding<ReaderPanel?> {
@@ -328,18 +407,44 @@ private struct PreparedExport: Identifiable {
 }
 
 private struct ActivityView: UIViewControllerRepresentable {
-    let items: [Any]
+    let exportURL: URL
 
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    @MainActor
+    final class Coordinator {
+        let url: URL
+        private var completed = false
+        init(url: URL) { self.url = url }
+        func finish() {
+            guard !completed else { return }
+            completed = true
+            let url = url
+            Task.detached {
+                // Give receiving apps a grace period after the system reports completion.
+                try? await Task.sleep(for: .seconds(60))
+                DocumentExporter.removeExport(at: url)
+            }
+        }
     }
 
+    func makeCoordinator() -> Coordinator { Coordinator(url: exportURL) }
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: [exportURL], applicationActivities: nil)
+        let coordinator = context.coordinator
+        controller.completionWithItemsHandler = { _, _, _, _ in
+            Task { @MainActor in coordinator.finish() }
+        }
+        return controller
+    }
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+    static func dismantleUIViewController(_ uiViewController: UIActivityViewController, coordinator: Coordinator) {
+        coordinator.finish()
+    }
 }
 
 private struct ReaderBottomChrome: View {
     @ObservedObject var session: DocumentSession
     @Binding var presentedPanel: ReaderPanel?
+    @AccessibilityFocusState private var focusedPanel: ReaderPanel?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
@@ -354,13 +459,25 @@ private struct ReaderBottomChrome: View {
                 .accessibilityIdentifier("reader.previousPage")
                 .accessibilityLabel("Previous page")
 
-                Text(session.pageLabel)
-                    .font(.subheadline.monospacedDigit().weight(.semibold))
-                    .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-                    .foregroundStyle(FolikTheme.ink)
-                    .frame(maxWidth: .infinity)
-                    .accessibilityIdentifier("reader.pageStatus")
-                    .accessibilityLabel("Page \(session.pageLabel)")
+                VStack(spacing: 2) {
+                    Text(session.pageLabel)
+                        .font(.subheadline.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(FolikTheme.ink)
+                        .accessibilityIdentifier("reader.pageStatus")
+                        .accessibilityLabel("Page \(session.pageLabel)")
+                    if session.hasSavedChanges || session.isModified || session.isSaving || session.saveFailed {
+                        Button(action: session.requestSave) {
+                            Text(session.saveStatus)
+                                .font(.caption)
+                                .foregroundStyle(session.saveFailed ? Color.red : FolikTheme.mutedInk)
+                                .frame(minHeight: 44)
+                        }
+                        .disabled(session.isSaving || (!session.isModified && !session.saveFailed))
+                        .keyboardShortcut("s", modifiers: .command)
+                        .accessibilityIdentifier("reader.saveStatus")
+                    }
+                }
+                .frame(maxWidth: .infinity, minHeight: 44)
 
                 Button(action: session.toggleCurrentPageBookmark) {
                     Image(systemName: session.isCurrentPageBookmarked ? "bookmark.fill" : "bookmark")
@@ -408,6 +525,9 @@ private struct ReaderBottomChrome: View {
                     .padding(.bottom, 6)
             }
         }
+        .onChange(of: presentedPanel) { previous, current in
+            if current == nil { focusedPanel = previous }
+        }
         .background(FolikTheme.raisedSurface.opacity(0.98))
         .overlay(alignment: .top) { Divider() }
     }
@@ -438,12 +558,16 @@ private struct ReaderBottomChrome: View {
             ) {
                 presentedPanel = presentedPanel == panel ? nil : panel
             }
+            .accessibilityFocused($focusedPanel, equals: panel)
+            .keyboardShortcut(panel == .search ? KeyboardShortcut("f", modifiers: .command) : nil)
         }
 
     }
 
     private var availablePanels: [ReaderPanel] {
-        [.pages, .outline, .search, .annotations, .forms]
+        session.formFields.isEmpty
+            ? [.pages, .search, .annotations, .forms]
+            : [.pages, .search, .forms, .annotations]
     }
 }
 

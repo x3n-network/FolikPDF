@@ -21,10 +21,15 @@ actor LibrarySearchIndex {
 
     private static let maximumCachedTextBytes = 8 * 1024 * 1024
     private static let maximumArchiveTextBytes = 48 * 1024 * 1024
+    private let documentCacheLimit: Int
+    private let archiveCacheLimit: Int
+    private(set) var peakRetainedDocumentTextBytes = 0
     private let cacheURL: URL
     private var inMemoryArchive: Archive?
 
-    init(cacheURL: URL? = nil) {
+    init(cacheURL: URL? = nil, documentCacheLimit: Int = 8 * 1024 * 1024, archiveCacheLimit: Int = 48 * 1024 * 1024) {
+        self.documentCacheLimit = max(0, min(documentCacheLimit, Self.maximumCachedTextBytes))
+        self.archiveCacheLimit = max(0, min(archiveCacheLimit, Self.maximumArchiveTextBytes))
         if let cacheURL {
             self.cacheURL = cacheURL
         } else {
@@ -35,69 +40,87 @@ actor LibrarySearchIndex {
     }
 
     func search(_ query: String, documents: [LibraryDocument]) throws -> LibrarySearchResult {
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return LibrarySearchResult() }
+        try Task.checkCancellation()
+        peakRetainedDocumentTextBytes = 0
         var archive = inMemoryArchive ?? load()
         let validKeys = Set(documents.map { key(for: $0) })
         let originalKeys = Set(archive.records.keys)
         archive.records = archive.records.filter { validKeys.contains($0.key) }
         var changed = originalKeys != Set(archive.records.keys)
-        var indexed: [(document: LibraryDocument, pages: [String])] = []
-        var skipped = 0
+        var totalCachedBytes = archive.records.values.reduce(0) { $0 + $1.textBytes }
+        var result = LibrarySearchResult()
 
         for document in documents {
             try Task.checkCancellation()
-            guard document.fileSize <= PDFProcessing.maximumBytes,
-                  document.pageCount <= 500 else {
-                skipped += 1
-                continue
-            }
-
             let recordKey = key(for: document)
-            if let cached = archive.records[recordKey], cached.matches(document) {
-                indexed.append((document, cached.pages))
-                continue
-            }
-
-            guard let pdf = PDFDocument(url: document.url), !pdf.isLocked else {
-                skipped += 1
-                archive.records.removeValue(forKey: recordKey)
-                changed = true
-                continue
-            }
-
-            var pages: [String] = []
-            var cachedBytes = 0
-            for index in 0..<pdf.pageCount {
-                try Task.checkCancellation()
-                let text = pdf.page(at: index)?.string ?? ""
-                cachedBytes += text.utf8.count
-                pages.append(text)
-            }
-            indexed.append((document, pages))
-
-            if cachedBytes <= Self.maximumCachedTextBytes {
-                let previousBytes = archive.records[recordKey]?.textBytes ?? 0
-                let archiveBytes = archive.records.values.reduce(0) { $0 + $1.textBytes } - previousBytes
-                if archiveBytes + cachedBytes <= Self.maximumArchiveTextBytes {
-                    archive.records[recordKey] = Record(
-                        fileSize: document.fileSize,
-                        modifiedAt: document.modifiedAt.timeIntervalSinceReferenceDate,
-                        textBytes: cachedBytes,
-                        pages: pages
-                    )
-                } else {
-                    archive.records.removeValue(forKey: recordKey)
+            guard document.fileSize <= PDFProcessing.maximumBytes, document.pageCount <= 500 else {
+                result.skipped += 1
+                if let removed = archive.records.removeValue(forKey: recordKey) {
+                    totalCachedBytes -= removed.textBytes
+                    changed = true
                 }
-            } else {
-                archive.records.removeValue(forKey: recordKey)
+                continue
             }
-            changed = true
-        }
+            if let cached = archive.records[recordKey], cached.matches(document) {
+                var matches = LibrarySearch.DocumentMatches(query: query)
+                for (index, text) in cached.pages.enumerated() {
+                    try Task.checkCancellation()
+                    matches.consume(text, page: index + 1)
+                }
+                matches.append(document: document, to: &result)
+                continue
+            }
 
-        // The index is disposable. A cache write failure must never make search itself fail.
+            if let removed = archive.records.removeValue(forKey: recordKey) { totalCachedBytes -= removed.textBytes }
+            changed = true
+            // Each uncached document is matched as it is read. Only cache-eligible text is retained.
+            try autoreleasepool {
+                guard let pdf = PDFDocument(url: document.url), !pdf.isLocked, pdf.pageCount <= 500 else {
+                    result.skipped += 1
+                    return
+                }
+                let budget = min(documentCacheLimit, max(0, archiveCacheLimit - totalCachedBytes))
+                var pages: [String] = []
+                var retainedBytes = 0
+                var canCache = budget > 0
+                var matches = LibrarySearch.DocumentMatches(query: query)
+                for pageIndex in 0..<pdf.pageCount {
+                    try Task.checkCancellation()
+                    try autoreleasepool {
+                        let text = pdf.page(at: pageIndex)?.string ?? ""
+                        try Task.checkCancellation()
+                        matches.consume(text, page: pageIndex + 1)
+                        guard canCache else { return }
+                        let size = text.utf8.count
+                        if size <= budget - retainedBytes {
+                            pages.append(text)
+                            retainedBytes += size
+                            peakRetainedDocumentTextBytes = max(peakRetainedDocumentTextBytes, retainedBytes)
+                        } else {
+                            canCache = false
+                            pages.removeAll(keepingCapacity: false)
+                            retainedBytes = 0
+                        }
+                    }
+                }
+                matches.append(document: document, to: &result)
+                if canCache {
+                    archive.records[recordKey] = Record(fileSize: document.fileSize, modifiedAt: document.modifiedAt.timeIntervalSinceReferenceDate, textBytes: retainedBytes, pages: pages)
+                    totalCachedBytes += retainedBytes
+                }
+            }
+        }
+        try Task.checkCancellation()
         inMemoryArchive = archive
         if changed { try? save(archive) }
-        return try LibrarySearch.search(query, indexedPages: indexed, skipped: skipped)
+        return result
     }
+
+    /// Discard only the disposable in-memory archive; the on-disk index is reusable.
+    func releaseMemory() { inMemoryArchive = nil }
+    var retainedTextBytes: Int { inMemoryArchive?.records.values.reduce(0) { $0 + $1.textBytes } ?? 0 }
 
     func removeAll() throws {
         inMemoryArchive = Archive()
@@ -110,7 +133,9 @@ actor LibrarySearchIndex {
     }
 
     private func load() -> Archive {
-        guard let data = try? Data(contentsOf: cacheURL),
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: cacheURL.path),
+              let size = attributes[.size] as? NSNumber, size.int64Value <= 64 * 1024 * 1024,
+              let data = try? Data(contentsOf: cacheURL),
               data.count <= 64 * 1024 * 1024,
               let archive = try? JSONDecoder().decode(Archive.self, from: data),
               archive.version == 1,

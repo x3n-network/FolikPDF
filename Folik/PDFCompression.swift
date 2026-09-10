@@ -31,6 +31,8 @@ nonisolated enum PDFCompression {
         let after = ByteCountFormatter.string(fromByteCount: Int64(output.count), countStyle: .file)
         let percent = Int((1 - Double(output.count) / Double(data.count)) * 100)
         let notice = output.count < data.count ? "\(before) → \(after) · \(percent)% smaller" : "\(before) → \(after) · Already optimized; original bytes retained."
-        return OfficePreview(data: output, warnings: ["\(preset.rawValue): \(preset.detail)", "Image quality may change. Text and annotations are not intentionally flattened. Review the new copy before saving."], pageCount: verified.pageCount, recoveryNotice: notice)
+        return OfficePreview(data: output, warnings: ["\(preset.rawValue): \(preset.detail)", "Image quality may change. Text and annotations are not intentionally flattened. Review the new copy before saving."], pageCount: verified.pageCount,
+                             recoveryNotice: "Review image quality before saving. Your source PDF stays unchanged.",
+                             previewTitle: "Compressed Copy", notesTitle: "Compression details", resultSummary: notice)
     }
 }

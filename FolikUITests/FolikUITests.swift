@@ -447,8 +447,8 @@ final class FolikUITests: XCTestCase {
         addDocument.tap()
 
         XCTAssertTrue(app.navigationBars["Add & Tools"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["Capture and import"].exists)
-        XCTAssertTrue(app.staticTexts["Convert to PDF"].exists)
+        XCTAssertTrue(app.staticTexts["Add a document"].exists)
+        XCTAssertTrue(app.staticTexts["More ways to convert"].exists)
         XCTAssertTrue(app.staticTexts["Improve and protect"].exists)
         XCTAssertTrue(app.buttons["Scan Document"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["Choose PDFs"].exists)
@@ -593,7 +593,7 @@ final class FolikUITests: XCTestCase {
         app.buttons["Compress PDF"].tap()
         XCTAssertTrue(app.staticTexts["pdfTool.source"].waitForExistence(timeout: 10))
         app.buttons["pdfTool.preview"].tap()
-        XCTAssertTrue(app.navigationBars["Conversion Preview"].waitForExistence(timeout: 30))
+        XCTAssertTrue(app.navigationBars["Compressed Copy"].waitForExistence(timeout: 30))
         app.buttons["office.save"].tap()
         XCTAssertTrue(app.navigationBars["Folik UI Test Compressed"].waitForExistence(timeout: 10))
         app.navigationBars.buttons["Library"].tap()
@@ -613,7 +613,7 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Inspect & Sanitize"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Form fields"].waitForExistence(timeout: 10))
         app.buttons["privacy.preview"].tap()
-        XCTAssertTrue(app.navigationBars["Conversion Preview"].waitForExistence(timeout: 30))
+        XCTAssertTrue(app.navigationBars["Sanitized Copy"].waitForExistence(timeout: 30))
         XCTAssertTrue(app.staticTexts["Sanitized image-only copy. Your original is unchanged and still contains its original information."].exists)
         app.buttons["office.save"].tap()
         XCTAssertTrue(app.navigationBars["Folik UI Test Sanitized"].waitForExistence(timeout: 10))
@@ -753,7 +753,7 @@ final class FolikUITests: XCTestCase {
         let addArea = app.buttons["redaction.addArea"]
         XCTAssertTrue(addArea.waitForExistence(timeout: 10)); if !addArea.isHittable { app.swipeUp() }; addArea.tap()
         let create = app.buttons["redaction.preview"]; XCTAssertTrue(create.isEnabled); create.tap()
-        XCTAssertTrue(app.navigationBars["Conversion Preview"].waitForExistence(timeout: 30))
+        XCTAssertTrue(app.navigationBars["Redacted Copy"].waitForExistence(timeout: 30))
         let attachment = XCTAttachment(screenshot: app.screenshot()); attachment.lifetime = .keepAlways; add(attachment)
         app.buttons["office.save"].tap()
         XCTAssertTrue(app.navigationBars["Redacted Test"].waitForExistence(timeout: 10))
@@ -837,10 +837,14 @@ final class FolikUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-fixture", "--ui-test-pdf-source", data.base64EncodedString()]
         app.launch()
-        app.buttons["library.addDocument"].tap(); app.buttons["Make PDF Searchable"].tap()
+        app.buttons["library.addDocument"].tap()
+        let searchable = app.buttons["Make PDF Searchable"]
+        for _ in 0..<4 where !searchable.exists || !searchable.isHittable { app.swipeUp() }
+        XCTAssertTrue(searchable.waitForExistence(timeout: 5))
+        searchable.tap()
         XCTAssertTrue(app.buttons["pdfTool.preview"].waitForExistence(timeout: 5))
         app.buttons["pdfTool.preview"].tap()
-        XCTAssertTrue(app.navigationBars["Conversion Preview"].waitForExistence(timeout: 30))
+        XCTAssertTrue(app.navigationBars["Searchable Copy"].waitForExistence(timeout: 30))
         let attachment = XCTAttachment(screenshot: app.screenshot()); attachment.lifetime = .keepAlways; add(attachment)
         app.buttons["office.save"].tap()
         XCTAssertTrue(app.navigationBars["Searchable Test"].waitForExistence(timeout: 10))
@@ -865,7 +869,7 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Compress PDF"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["pdfTool.preview"].waitForExistence(timeout: 5))
         app.buttons["pdfTool.preview"].tap()
-        XCTAssertTrue(app.navigationBars["Conversion Preview"].waitForExistence(timeout: 30))
+        XCTAssertTrue(app.navigationBars["Compressed Copy"].waitForExistence(timeout: 30))
         let attachment = XCTAttachment(screenshot: app.screenshot()); attachment.lifetime = .keepAlways; add(attachment)
         app.buttons["office.save"].tap()
         XCTAssertTrue(app.navigationBars["Compressed Test"].waitForExistence(timeout: 10))
@@ -1045,9 +1049,7 @@ final class FolikUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(app.navigationBars["Annotations"].waitForExistence(timeout: 5))
-        app.buttons["reader.annotation.add"].tap()
-        app.buttons["Signature"].tap()
-        app.buttons["Create signature"].tap()
+        app.buttons["reader.sign"].tap()
         XCTAssertTrue(app.navigationBars["Signature"].waitForExistence(timeout: 3))
         app.buttons["Type"].tap()
         let typedText = app.textFields["signature.typedText"]
@@ -1090,6 +1092,163 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Approved"].exists)
     }
 
+    func testReaderPolishSupportsLargeTextAndRotation() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--open-first-document", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL", "-AppleInterfaceStyle", "Dark"]
+        app.launch()
+        defer { XCUIDevice.shared.orientation = .portrait }
+        XCTAssertTrue(app.buttons["reader.export"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["reader.panel.forms"].isHittable)
+        capture("polish-reader-large-text-portrait", in: app)
+        XCUIDevice.shared.orientation = .landscapeLeft
+        XCTAssertTrue(app.buttons["reader.export"].isHittable)
+        XCTAssertTrue(app.buttons["reader.panel.pages"].isHittable)
+        capture("polish-reader-large-text-landscape", in: app)
+        XCUIDevice.shared.orientation = .portrait
+        app.buttons["reader.export"].tap()
+        XCTAssertTrue(app.navigationBars["Share PDF"].waitForExistence(timeout: 3))
+        let share = app.buttons["Share PDF"]
+        if !share.isHittable { app.swipeUp() }
+        XCTAssertTrue(share.isHittable)
+        capture("polish-share-large-text", in: app)
+    }
+
+    func testFormsCanCreateAndReuseSignature() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--open-first-document", "--open-forms-panel", "--clear-saved-signatures"]
+        app.launch()
+        XCTAssertTrue(app.buttons["reader.sign"].waitForExistence(timeout: 5))
+        app.buttons["reader.sign"].tap()
+        XCTAssertTrue(app.buttons["Type"].waitForExistence(timeout: 3))
+        app.buttons["Type"].tap()
+        let field = app.textFields["signature.typedText"]
+        XCTAssertTrue(field.waitForExistence(timeout: 3))
+        field.tap()
+        field.typeText("Pat Example")
+        app.buttons["signature.save"].tap()
+        let place = app.buttons["reader.annotation.placeCenter"]
+        XCTAssertTrue(place.waitForExistence(timeout: 4))
+        place.tap()
+        app.buttons["reader.panel.forms"].tap()
+        XCTAssertTrue(app.buttons["reader.sign"].waitForExistence(timeout: 3))
+        app.buttons["reader.sign"].tap()
+        XCTAssertTrue(place.waitForExistence(timeout: 3))
+        XCTAssertFalse(app.textFields["signature.typedText"].exists)
+        place.tap()
+        capture("polish-saved-signatures", in: app)
+    }
+
+    func testContentsIsReachableInsidePages() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--open-first-document"]
+        app.launch()
+        XCTAssertTrue(app.buttons["reader.panel.pages"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["reader.panel.outline"].exists)
+        app.buttons["reader.panel.pages"].tap()
+        let picker = app.segmentedControls["reader.pages.contents"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 3))
+        picker.buttons["Contents"].tap()
+        picker.buttons["Pages"].tap()
+        XCTAssertTrue(app.buttons["reader.pages.page.0"].waitForExistence(timeout: 3))
+    }
+
+    func testFormsOffersDirectSignatureCapture() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--open-first-document", "--open-forms-panel", "--clear-saved-signatures"]
+        app.launch()
+        XCTAssertTrue(app.buttons["reader.sign"].waitForExistence(timeout: 5))
+        app.buttons["reader.sign"].tap()
+        XCTAssertTrue(app.navigationBars["Signature"].waitForExistence(timeout: 3))
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.navigationBars["Forms"].waitForExistence(timeout: 3))
+    }
+
+    func testReaderKeyboardFindAndShareShortcuts() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--open-first-document"]
+        app.launch()
+        XCTAssertTrue(app.buttons["reader.export"].waitForExistence(timeout: 5))
+        app.typeKey("f", modifierFlags: .command)
+        XCTAssertTrue(app.navigationBars["Find"].waitForExistence(timeout: 3))
+        app.buttons["Done"].tap()
+        app.typeKey("e", modifierFlags: [.command, .shift])
+        XCTAssertTrue(app.navigationBars["Share PDF"].waitForExistence(timeout: 3))
+    }
+
+    func testProcessingCancellationKeepsSourceAndAllowsRetry() {
+        let data = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 300, height: 400)).pdfData { context in
+            context.beginPage()
+            ("Cancel then retry" as NSString).draw(at: CGPoint(x: 20, y: 40), withAttributes: [.font: UIFont.systemFont(ofSize: 18)])
+        }
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-pdf-source", data.base64EncodedString(), "--ui-test-processing-delay"]
+        app.launch()
+        app.buttons["library.addDocument"].tap()
+        let compress = app.buttons["Compress PDF"]
+        for _ in 0..<3 where !compress.exists || !compress.isHittable { app.swipeUp() }
+        compress.tap()
+        XCTAssertTrue(app.navigationBars["Compress PDF"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["pdfTool.preview"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["pdfTool.preview"].isEnabled)
+        app.buttons["pdfTool.preview"].tap()
+        capture("processing-visible-controls", in: app)
+        XCTAssertTrue(app.buttons["processing.cancel"].waitForExistence(timeout: 3))
+        app.buttons["processing.cancel"].tap()
+        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: app.buttons["pdfTool.preview"])
+        waitForExpectations(timeout: 5)
+        XCTAssertFalse(app.navigationBars["Compressed Copy"].exists)
+        app.buttons["pdfTool.preview"].tap()
+        XCTAssertTrue(app.navigationBars["Compressed Copy"].waitForExistence(timeout: 10))
+    }
+
+    func testSaveFailureRetainsReaderAndBackRetriesSuccessfully() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--open-first-document", "--place-test-signature", "--ui-test-save-failure"]
+        app.launch()
+        XCTAssertTrue(app.alerts["Document problem"].waitForExistence(timeout: 8))
+        app.alerts.buttons["OK"].tap()
+        capture("recovery-after-alert", in: app)
+        XCTAssertEqual(app.buttons["reader.saveStatus"].label, "Not saved · Tap to retry")
+        XCTAssertTrue(app.buttons["reader.saveAndBack"].exists)
+        capture("recovery-save-failed", in: app)
+        app.buttons["reader.saveAndBack"].tap()
+        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
+        app.buttons["library.document.Folik UI Test.pdf"].tap()
+        app.buttons["reader.panel.annotations"].tap()
+        XCTAssertTrue(app.staticTexts["Signature"].waitForExistence(timeout: 3))
+    }
+
+    func testFirstUseAndShareAccessibilitySemantics() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-empty-library"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Open, sign, and share your PDFs."].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Choose PDFs from Files"].isHittable)
+        try app.performAccessibilityAudit(for: [.sufficientElementDescription, .trait])
+        capture("first-use-guidance", in: app)
+        app.terminate()
+        app.launchArguments = ["--ui-test-fixture", "--open-first-document"]
+        app.launch()
+        XCTAssertTrue(app.buttons["reader.export"].waitForExistence(timeout: 5))
+        app.buttons["reader.export"].tap()
+        XCTAssertTrue(app.buttons["Share PDF"].waitForExistence(timeout: 3))
+        try app.performAccessibilityAudit(for: [.sufficientElementDescription, .trait])
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.buttons["reader.export"].isHittable)
+    }
+
+    func testSharePDFReachesSystemShareSheet() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--open-first-document", "--place-test-signature"]
+        app.launch()
+        XCTAssertTrue(app.buttons["reader.export"].waitForExistence(timeout: 5))
+        app.buttons["reader.export"].tap()
+        XCTAssertTrue(app.navigationBars["Share PDF"].waitForExistence(timeout: 3))
+        app.buttons["Share PDF"].tap()
+        XCTAssertTrue(app.otherElements["ActivityListView"].waitForExistence(timeout: 10))
+        capture("polish-system-share", in: app)
+    }
+
     func testExportMenuExplainsEditableAndFlattenedCopies() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-fixture", "--open-first-document"]
@@ -1100,9 +1259,13 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(export.waitForExistence(timeout: 3))
         XCTAssertEqual(export.label, "Export and share")
         export.tap()
-        XCTAssertTrue(app.buttons["Share Original"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["Editable Copy"].exists)
-        XCTAssertTrue(app.buttons["Flattened Copy"].exists)
+        XCTAssertTrue(app.navigationBars["Share PDF"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Share PDF"].exists)
+        XCTAssertTrue(app.buttons["Share flattened copy"].exists)
+        XCTAssertTrue(app.staticTexts["Folik UI Test.pdf"].exists)
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     func testPageOrganizerRotatesDuplicatesDeletesAndUndoesDraftChanges() {
@@ -1216,7 +1379,7 @@ final class FolikUITests: XCTestCase {
         app.launch(); app.buttons["library.addDocument"].tap(); app.buttons["Make PDF Searchable"].tap()
         XCTAssertTrue(app.buttons["pdfTool.preview"].waitForExistence(timeout: 8))
         app.buttons["pdfTool.preview"].tap()
-        XCTAssertTrue(app.navigationBars["Conversion Preview"].waitForExistence(timeout: 30))
+        XCTAssertTrue(app.navigationBars["Searchable Copy"].waitForExistence(timeout: 30))
         XCTAssertTrue(app.staticTexts["Searchable copy. Your source PDF is unchanged."].exists)
         capture("08-ocr", in: app)
         app.buttons["office.save"].tap()
@@ -1261,7 +1424,7 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(area.waitForExistence(timeout: 10))
         if !area.isHittable { redaction.swipeUp() }; area.tap()
         redaction.buttons["redaction.preview"].tap()
-        XCTAssertTrue(redaction.navigationBars["Conversion Preview"].waitForExistence(timeout: 30))
+        XCTAssertTrue(redaction.navigationBars["Redacted Copy"].waitForExistence(timeout: 30))
         capture("07-redaction", in: redaction)
     }
 

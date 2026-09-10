@@ -100,7 +100,7 @@ struct FillablePDFView: View {
                 }
             }
             .sheet(item: $preview) {
-                OfficePreviewView(preview: $0, filename: filename, complete: complete)
+                OfficePreviewView(preview: $0.presentedAs("Fillable Copy", notes: "Form details"), filename: filename, complete: complete)
             }
             .onDisappear { worker?.cancel() }
             .onAppear {

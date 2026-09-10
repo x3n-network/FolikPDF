@@ -168,7 +168,7 @@ struct RecentlyDeletedView: View {
 
     private func restore(_ items: [DeletedDocument]) {
         do {
-            for item in items { try library.restoreDeleted(item) }
+            try library.performBatch { for item in items { try library.restoreDeleted(item) } }
             selection.subtract(items.map(\.id))
             if selection.isEmpty { isSelecting = false }
         } catch {
@@ -178,7 +178,7 @@ struct RecentlyDeletedView: View {
 
     private func permanentlyDelete(_ items: [DeletedDocument]) {
         do {
-            for item in items { try library.permanentlyDelete(item) }
+            try library.performBatch { for item in items { try library.permanentlyDelete(item) } }
             selection.subtract(items.map(\.id))
             if selection.isEmpty { isSelecting = false }
         } catch {

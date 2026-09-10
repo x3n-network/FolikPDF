@@ -40,13 +40,13 @@ struct LibraryToolsView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Capture and import") {
+                Section("Add a document") {
                     tool(.scan, title: "Scan Document", subtitle: "Capture paper with automatic edge detection", icon: "doc.viewfinder")
                         .disabled(!canScan)
                     tool(.importPDF, title: "Choose PDFs", subtitle: "Add one or more PDFs from Files", icon: "folder")
-                }
-                Section("Convert to PDF") {
                     tool(.images, title: "Images to PDF", subtitle: "Create an ordered, searchable PDF", icon: "photo.on.rectangle")
+                }
+                Section("More ways to convert") {
                     tool(.documents, title: "Documents to PDF", subtitle: "Convert DOCX, ODT, DOC, or Pages previews", icon: "doc.richtext")
                     tool(.text, title: "Text/RTF to PDF", subtitle: "Turn plain or rich text into a paginated PDF", icon: "doc.text")
                     tool(.batch, title: "Batch to PDF", subtitle: "Prepare separate PDFs or combine several files", icon: "square.stack.3d.up")

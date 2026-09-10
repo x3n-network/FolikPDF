@@ -16,6 +16,8 @@ Folik is a native, local-first PDF reader and workspace for iPhone and iPad. It 
 
 The updated library in **Folik 1.0.2**. Browse in a list or grid, resume reading, merge selected PDFs, and recover removed documents from Recently Deleted.
 
+Current development version: **1.0.4**. See the [1.0.4 release notes](docs/RELEASE_NOTES_1.0.4.md) for the combined usability and performance polish, and [performance measurements](docs/PERFORMANCE_1.0.4.md) for the latest optimization results.
+
 ## Current capabilities
 
 - Import one or more PDFs from Files
@@ -41,7 +43,7 @@ The updated library in **Folik 1.0.2**. Browse in a list or grid, resume reading
 - Search filenames, folders, tags, and selectable PDF text across the library with a private disposable index, matching-page counts, and highlighted excerpts
 - Read PDFs with native PDFKit rendering
 - Resume each PDF at its last-viewed page and restore its continuous, single-page, or two-page layout, with a dismissible Continue Reading card
-- Browse page thumbnails and document outlines
+- Browse page thumbnails and switch to Contents within the Pages panel
 - Bookmark important pages locally and filter the Pages panel to return to them quickly
 - Organize pages in a safe new copy: reorder, rotate, duplicate, delete, extract, insert blanks, or add pages from another PDF—with multi-step undo
 - Find text incrementally with result context, progress, and previous/next navigation
@@ -56,8 +58,8 @@ The updated library in **Folik 1.0.2**. Browse in a list or grid, resume reading
 - Add standard Approved, Draft, Confidential, and Final stamps that remain editable in other PDF apps
 - Select annotations on the page, drag to move them, resize supported types, or use precise Move and Size controls
 - Change annotation colors and adjust drawing or shape line widths with undo and redo
-- Create a handwritten or typed signature/initials, keep it locally on-device, and reuse it across PDFs
-- Share the original, create an editable copy, or export a flattened copy that makes forms, signatures, and annotations part of the page
+- Create a handwritten or typed signature/initials, keep it locally on-device, and reuse it across PDFs; use Sign directly from Annotations or Forms
+- Share a PDF copy with editable annotations and forms, or a flattened copy that makes forms, signatures, and annotations part of the page; sharing waits for your latest changes to save successfully
 - Adapt navigation for compact iPhone and regular iPad layouts
 - Open different PDFs in dedicated iPad windows for Split View and Stage Manager workflows
 - Support Dynamic Type, VoiceOver labels, light mode, and dark mode
@@ -69,7 +71,7 @@ Folik is at the beginning of its development. Keep an original copy of important
 
 Choose **Add (+) → Make Fillable Copy**, or begin from a document's **… → Tools** menu, to preserve the source and open a separate authoring copy. In the reader's **Forms** panel, use **Suggest fields** to scan locally for likely labels, blank boxes, and checkboxes, review every proposed field, and add only the selected results. You can also add text, multiline, checkbox, date, or signature fields manually, then tap the page to place them. Added fields have a visible trash button in the Forms list, with confirmation and undo support. Suggestions are a starting point and may miss fields or infer the wrong type; nothing is uploaded. **Edit layout** supports direct dragging plus visible Move, Size, and Delete controls for accessibility, and its selection outline stays attached while the PDF is panned or zoomed. Field labels are limited to 80 characters, repeated labels receive independent internal field names, and required fields participate in completion tracking.
 
-Folik supports the standard AcroForm widgets that PDFKit can edit on iOS. Checkbox and radio state is saved and restored independently from a field's display string, and radio options with the same field name are counted as one logical field. Required fields are identified from standard field flags and prioritized by the next-field navigator. For documents that expose internal field IDs instead of readable labels, Folik derives a concise label from nearby page text. A date field is a labeled standard text widget rather than a PDF JavaScript calendar, keeping the result broadly compatible and free of embedded scripts. A created signature field is intended for compatible signing apps; Folik can place its own visual handwritten or typed signature from **Annotations → Add → Signature**, but it does not apply certificate-backed cryptographic signatures. Inspect & Sanitize distinguishes unsigned signature fields from fields containing a PDF signature structure, but Folik does not cryptographically verify signer identity, certificate trust, or document integrity. XFA-only forms cannot be filled by iOS; Folik detects them and explains the limitation instead of showing an empty or misleading editor. JavaScript calculations and other vendor-specific form behavior may vary, so keep an original copy of important forms.
+Folik supports the standard AcroForm widgets that PDFKit can edit on iOS. Checkbox and radio state is saved and restored independently from a field's display string, and radio options with the same field name are counted as one logical field. Required fields are identified from standard field flags and prioritized by the next-field navigator. For documents that expose internal field IDs instead of readable labels, Folik derives a concise label from nearby page text. A date field is a labeled standard text widget rather than a PDF JavaScript calendar, keeping the result broadly compatible and free of embedded scripts. A created signature field is intended for compatible signing apps; Folik can place its own visual handwritten or typed signature from **Annotations → Sign** or **Forms → Sign**, but it does not apply certificate-backed cryptographic signatures. Inspect & Sanitize distinguishes unsigned signature fields from fields containing a PDF signature structure, but Folik does not cryptographically verify signer identity, certificate trust, or document integrity. XFA-only forms cannot be filled by iOS; Folik detects them and explains the limitation instead of showing an empty or misleading editor. JavaScript calculations and other vendor-specific form behavior may vary, so keep an original copy of important forms.
 
 ### PDF redaction
 
@@ -127,7 +129,7 @@ Choose **Add (+) → Make PDF Searchable**. Folik adds an invisible text layer t
 
 ### Office document conversion
 
-Choose **Add (+) → Documents to PDF** for DOCX, ODT, legacy DOC, and Pages files up to 25 MB. The engine supports styled paragraphs, headings, decimal/alphabetic/Roman lists, embedded raster images (including images in table cells), source margins and table column proportions, horizontal table-cell spans, and searchable text. External web/email links remain clickable. Text boxes enter the reading flow, and footnotes/endnotes are collected at the end. Long paragraphs and table cells continue across PDF pages. Conversion happens entirely on-device, and nothing enters the library until you review the PDF and tap **Save to Library**.
+Choose **Add (+) → Documents to PDF** for DOCX, ODT, legacy DOC, and Pages files up to 25 MB. The engine supports styled paragraphs, headings, decimal/alphabetic/Roman lists, embedded raster images (including images in table cells), source margins and table column proportions, horizontal table-cell spans, and searchable text. External web/email links remain clickable. Text boxes enter the reading flow, and footnotes/endnotes are collected at the end. Long paragraphs and table cells continue across PDF pages. Conversion happens entirely on-device, and nothing enters the library until you review the PDF and tap **Save Copy**.
 
 This is a limited document renderer, not a full Word/LibreOffice layout implementation. Fonts may be substituted; image placement, complex table sizing, and pagination may change. Nested tables flow in reading order inside their parent cell. Headers, footers, comments, linked images, charts, and some other objects are unsupported; conversion notes identify detected limitations. Review important documents against their originals. Space-aligned text can have a different extraction/selection order in PDF viewers.
 

@@ -5,6 +5,18 @@ struct FolikApp: App {
     @StateObject private var library = DocumentLibrary()
     @StateObject private var appLock = AppLockManager()
 
+    init() {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--profile-memory") {
+            Task {
+                try? await Task.sleep(for: .seconds(5))
+                do { _ = try await PerformanceProbe.run() } catch { print("FOLIK_PROFILE_ERROR \(error)") }
+            }
+        }
+        #endif
+        Task.detached(priority: .utility) { DocumentExporter.cleanupExpired() }
+    }
+
     var body: some Scene {
         WindowGroup {
             FolikSceneRoot(appLock: appLock, becameActive: importSharedPDFsIfAppropriate) {
@@ -15,7 +27,7 @@ struct FolikApp: App {
 
         WindowGroup("PDF", id: "pdf", for: String.self) { $documentReference in
             FolikSceneRoot(appLock: appLock, becameActive: {
-                library.refresh()
+                await library.refreshInBackground()
                 await importSharedPDFsIfAppropriate()
             }) {
                 DocumentWindowView(reference: documentReference)
@@ -59,6 +71,9 @@ private struct FolikSceneRoot<Content: View>: View {
             }
         }
         .environmentObject(appLock)
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
+            Task { await PDFThumbnailCache.shared.removeAll() }
+        }
         .task {
             appLock.sceneChanged(to: scenePhase, sceneID: sceneID)
             if scenePhase == .active { await becameActive() }

@@ -10,6 +10,13 @@ import PDFKit
 final class DocumentLibrary: ObservableObject {
     @Published private(set) var documents: [LibraryDocument] = []
     @Published private(set) var isImporting = false
+    @Published private(set) var isRefreshing = false
+    private var inventoryCache: [LibraryDocument] = []
+    private var inventoryRevision = 0
+    private var pendingRefresh: Task<Void, Never>?
+    private var bulkMutationDepth = 0
+    private(set) var inventoryRefreshCount = 0
+    private(set) var lastParsedPDFCount = 0
     @Published private(set) var importStatus: String?
     @Published private(set) var organization: [String: LibraryMetadata] = [:]
     @Published private(set) var readingResume: LibraryResume?
@@ -32,7 +39,8 @@ final class DocumentLibrary: ObservableObject {
         self.bookmarkStore = bookmarkStore ?? BookmarkStore()
         self.readerStateStore = readerStateStore ?? ReaderStateStore()
         documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        refresh()
+        isRefreshing = true
+        Task { await refreshInBackground() }
     }
 
     init(
@@ -71,7 +79,7 @@ final class DocumentLibrary: ObservableObject {
             let importedURLs = try await Task.detached(priority: .userInitiated) {
                 try Self.copyPDFs(sourceURLs, to: destinationDirectory)
             }.value
-            refresh()
+            await refreshInBackground()
             let importedPaths = Set(importedURLs.map(\.standardizedFileURL))
             return documents.filter { importedPaths.contains($0.url.standardizedFileURL) }
         } catch {
@@ -99,7 +107,7 @@ final class DocumentLibrary: ObservableObject {
             let result = try await Task.detached(priority: .userInitiated) {
                 try SharedPDFInbox.consume(from: inboxDirectory, into: destinationDirectory)
             }.value
-            refresh()
+            await refreshInBackground()
             if !result.failedFilenames.isEmpty {
                 let count = result.failedFilenames.count
                 errorMessage = "Folik couldn’t add \(count) shared PDF\(count == 1 ? "" : "s"). The original shared file\(count == 1 ? " is" : "s are") still available to retry."
@@ -146,7 +154,7 @@ final class DocumentLibrary: ObservableObject {
                 try fileManager.moveItem(at: temporaryURL, to: finalURL)
                 return finalURL
             }.value
-            refresh()
+            await refreshInBackground()
             return documents.first { $0.url.standardizedFileURL == destination.standardizedFileURL }
         } catch {
             errorMessage = "Folik couldn’t create that scan. \(error.localizedDescription)"
@@ -164,7 +172,7 @@ final class DocumentLibrary: ObservableObject {
             importStatus = nil
         }
         let directory = documentsDirectory
-        let destination = try await Task.detached(priority: .userInitiated) {
+        let worker = Task.detached(priority: .userInitiated) {
             let manager = FileManager.default
             try manager.createDirectory(at: directory, withIntermediateDirectories: true)
             let destination = Self.uniqueDestination(named: fileName, in: directory, fileManager: manager)
@@ -175,10 +183,17 @@ final class DocumentLibrary: ObservableObject {
                   let pdf = CGPDFDocument(provider), pdf.numberOfPages > 0 else {
                 throw CocoaError(.fileWriteUnknown)
             }
+            try Task.checkCancellation()
             try manager.moveItem(at: temporary, to: destination)
             return destination
-        }.value
-        refresh()
+        }
+        let destination = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+        await refreshInBackground()
+        if Task.isCancelled {
+            try fileManager.removeItem(at: destination)
+            await refreshInBackground()
+            throw CancellationError()
+        }
         guard let document = documents.first(where: { $0.url.standardizedFileURL == destination.standardizedFileURL }) else {
             throw CocoaError(.fileReadUnknown)
         }
@@ -190,7 +205,7 @@ final class DocumentLibrary: ObservableObject {
         guard !outputs.isEmpty, outputs.count <= 20,
               outputs.reduce(0, { $0 + $1.preview.data.count }) <= PDFProcessing.maximumBytes else { throw PDFProcessingError.tooLarge }
         isImporting = true; importStatus = "Saving PDFs…"
-        defer { isImporting = false; importStatus = nil; refresh() }
+        defer { isImporting = false; importStatus = nil }
         let directory = documentsDirectory
         let worker = Task.detached {
             let manager = FileManager.default
@@ -222,7 +237,7 @@ final class DocumentLibrary: ObservableObject {
             }
         }
         let urls = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
-        refresh()
+        await refreshInBackground()
         return urls.compactMap { url in documents.first { $0.url == url } }
     }
 
@@ -381,7 +396,7 @@ final class DocumentLibrary: ObservableObject {
     }
 
     func delete(_ documents: [LibraryDocument]) {
-        for document in documents { delete(document) }
+        performBatch { for document in documents { delete(document) } }
     }
 
     func dismissReadingResume() {
@@ -389,72 +404,109 @@ final class DocumentLibrary: ObservableObject {
         readingResume = nil
     }
 
+    /// Batches synchronous metadata mutations without repeatedly scanning the library.
+    func performBatch(_ operation: () throws -> Void) rethrows {
+        bulkMutationDepth += 1
+        defer {
+            bulkMutationDepth -= 1
+            if bulkMutationDepth == 0 { refresh() }
+        }
+        try operation()
+    }
+
+    func refreshInBackground() async {
+        inventoryRevision += 1
+        if let pendingRefresh { await pendingRefresh.value; return }
+        isRefreshing = true
+        let task = Task { @MainActor in
+            defer {
+                self.pendingRefresh = nil
+                self.isRefreshing = false
+            }
+            while true {
+                let revision = self.inventoryRevision
+                let directory = self.documentsDirectory
+                let previous = self.inventoryCache
+                do {
+                    let snapshot = try await Task.detached(priority: .userInitiated) {
+                        try LibraryInventory.read(directory: directory, previous: previous)
+                    }.value
+                    // A mutation during enumeration invalidates the snapshot, not the user's change.
+                    guard revision == self.inventoryRevision else { continue }
+                    try self.applyInventory(snapshot)
+                } catch {
+                    guard revision == self.inventoryRevision else { continue }
+                    self.errorMessage = "Folik couldn’t load your library. \(error.localizedDescription)"
+                }
+                return
+            }
+        }
+        pendingRefresh = task
+        await task.value
+    }
+
+    /// Used by synchronous metadata operations and deterministic fixture setup.
+    /// Unchanged PDFs reuse their metadata instead of being reopened.
     func refresh() {
+        guard bulkMutationDepth == 0 else { return }
+        inventoryRevision += 1
         do {
-            try fileManager.createDirectory(at: documentsDirectory, withIntermediateDirectories: true)
-            let keys: Set<URLResourceKey> = [.contentModificationDateKey, .fileSizeKey, .isRegularFileKey]
-            let previousIDs = Dictionary(uniqueKeysWithValues: documents.map { ($0.url.standardizedFileURL, $0.id) })
-            let discovered: [LibraryDocument] = try fileManager.contentsOfDirectory(
-                at: documentsDirectory,
-                includingPropertiesForKeys: Array(keys),
-                options: [.skipsHiddenFiles]
-            )
-            .filter { $0.pathExtension.localizedCaseInsensitiveCompare("pdf") == .orderedSame }
-            .compactMap { url -> LibraryDocument? in
-                let values = try? url.resourceValues(forKeys: keys)
-                guard values?.isRegularFile != false,
-                      let provider = CGDataProvider(url: url as CFURL),
-                      let pdf = CGPDFDocument(provider) else { return nil }
-                return LibraryDocument(
-                    id: previousIDs[url.standardizedFileURL] ?? UUID(),
-                    url: url,
-                    pageCount: pdf.numberOfPages,
-                    fileSize: Int64(values?.fileSize ?? 0),
-                    modifiedAt: values?.contentModificationDate ?? .distantPast
-                )
-            }
-            .sorted { $0.modifiedAt > $1.modifiedAt }
-            documents = discovered
-            let inventory = try trash.inventory()
-            recentlyDeleted = inventory.documents
-            unreadableDeletedCount = inventory.unreadable
-            var records = try LibraryOrganization.load(from: organizationURL)
-            let previous = records
-            for archived in recentlyDeleted {
-                let source = documentsDirectory.appendingPathComponent(archived.originalFilename)
-                if !fileManager.fileExists(atPath: source.path) {
-                    records.removeValue(forKey: archived.originalFilename)
-                    bookmarkStore.removeBookmarks(for: source)
-                    readerStateStore.removeState(for: source)
-                }
-            }
-            var usedIDs: Set<UUID> = []
-            documents = discovered.map { document in
-                let filename = document.url.lastPathComponent
-                var metadata = records[filename] ?? LibraryMetadata()
-                let identifier: UUID
-                if let existing = metadata.documentID, usedIDs.insert(existing).inserted {
-                    identifier = existing
-                } else {
-                    identifier = UUID()
-                    metadata.documentID = identifier
-                    usedIDs.insert(identifier)
-                }
-                records[filename] = metadata
-                return LibraryDocument(
-                    id: identifier,
-                    url: document.url,
-                    pageCount: document.pageCount,
-                    fileSize: document.fileSize,
-                    modifiedAt: document.modifiedAt
-                )
-            }
-            if records != previous { try LibraryOrganization.save(records, to: organizationURL) }
-            organization = records
-            readingResume = readerStateStore.mostRecent(in: documents)
+            try applyInventory(LibraryInventory.read(directory: documentsDirectory, previous: inventoryCache))
         } catch {
             errorMessage = "Folik couldn’t load your library. \(error.localizedDescription)"
         }
+    }
+
+    private func applyInventory(_ snapshot: LibraryInventorySnapshot) throws {
+        inventoryRefreshCount += 1
+        lastParsedPDFCount = snapshot.parsedPDFCount
+        inventoryCache = snapshot.documents
+        let discovered = snapshot.documents
+        var resolvedSuccessfully = false
+        defer {
+            // A damaged organization file must not hide otherwise readable PDFs.
+            if !resolvedSuccessfully, documents != discovered { documents = discovered }
+        }
+        let inventory = try trash.inventory()
+        recentlyDeleted = inventory.documents
+        unreadableDeletedCount = inventory.unreadable
+        var records = try LibraryOrganization.load(from: organizationURL)
+        let previous = records
+        for archived in recentlyDeleted {
+            let source = documentsDirectory.appendingPathComponent(archived.originalFilename)
+            if !fileManager.fileExists(atPath: source.path) {
+                records.removeValue(forKey: archived.originalFilename)
+                bookmarkStore.removeBookmarks(for: source)
+                readerStateStore.removeState(for: source)
+            }
+        }
+        var usedIDs: Set<UUID> = []
+        let resolved = discovered.map { document in
+            let filename = document.url.lastPathComponent
+            var metadata = records[filename] ?? LibraryMetadata()
+            let identifier: UUID
+            if let existing = metadata.documentID, usedIDs.insert(existing).inserted {
+                identifier = existing
+            } else {
+                identifier = UUID()
+                metadata.documentID = identifier
+                usedIDs.insert(identifier)
+            }
+            records[filename] = metadata
+            return LibraryDocument(
+                id: identifier,
+                url: document.url,
+                pageCount: document.pageCount,
+                fileSize: document.fileSize,
+                modifiedAt: document.modifiedAt
+            )
+        }
+        resolvedSuccessfully = true
+        inventoryCache = resolved
+        if documents != resolved { documents = resolved }
+        if records != previous { try LibraryOrganization.save(records, to: organizationURL) }
+        organization = records
+        readingResume = readerStateStore.mostRecent(in: documents)
     }
 
     #if DEBUG

@@ -27,14 +27,8 @@ struct PrivacyReportView: View {
                     findings(report)
                     sanitizeSection(report)
                 }
-                if busy {
-                    Section {
-                        ProgressView(status)
-                        Button("Cancel Processing") { task?.cancel() }
-                    }
-                }
                 if let error {
-                    Section { Text(error).foregroundStyle(.red) }
+                    Section { ProcessingErrorView(message: error) }
                 }
             }
             .navigationTitle("Inspect & Sanitize")
@@ -45,13 +39,18 @@ struct PrivacyReportView: View {
                 }
             }
             .safeAreaInset(edge: .bottom) {
-                Button("Preview Sanitized Copy", action: sanitize)
-                    .buttonStyle(.borderedProminent)
-                    .frame(minHeight: 48)
-                    .padding()
-                    .background(.regularMaterial)
-                    .disabled(busy || report == nil || (try? PDFConverter.fileName(filename)) == nil)
-                    .accessibilityIdentifier("privacy.preview")
+                VStack(spacing: 8) {
+                    if busy { ProcessingStatusView(status: status) { task?.cancel() } }
+                    Button("Preview Sanitized Copy", action: sanitize)
+                        .buttonStyle(.borderedProminent)
+                        .frame(minHeight: 48)
+
+                        .disabled(busy || report == nil || (try? PDFConverter.fileName(filename)) == nil)
+                        .accessibilityIdentifier("privacy.preview")
+                }
+                .padding()
+                .frame(maxWidth: .infinity)
+                .background(.regularMaterial)
             }
             .fileImporter(isPresented: $showFiles, allowedContentTypes: [.pdf]) { result in
                 switch result {
@@ -60,7 +59,7 @@ struct PrivacyReportView: View {
                 }
             }
             .sheet(item: $preview) {
-                OfficePreviewView(preview: $0, filename: filename, complete: complete)
+                OfficePreviewView(preview: $0.presentedAs("Sanitized Copy", notes: "Privacy details"), filename: filename, complete: complete)
             }
             .interactiveDismissDisabled(busy)
             .onDisappear { task?.cancel() }
@@ -197,9 +196,10 @@ struct PrivacyReportView: View {
             do {
                 let data = try await Task.detached {
                     try PDFConverter.readFile(url, maximumBytes: PDFProcessing.maximumBytes)
-                }.value
+                }.cancellableValue
                 try Task.checkCancellation()
-                let result = try await Task.detached { try PDFPrivacy.inspect(data) }.value
+                let worker = Task.detached { try PDFPrivacy.inspect(data) }
+                let result = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
                 try Task.checkCancellation()
                 source = data
                 sourceName = url.lastPathComponent
@@ -221,7 +221,8 @@ struct PrivacyReportView: View {
         task = Task {
             defer { busy = false }
             do {
-                let result = try await Task.detached { try PDFPrivacy.inspect(data) }.value
+                let worker = Task.detached { try PDFPrivacy.inspect(data) }
+                let result = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
                 try Task.checkCancellation()
                 report = result
             } catch is CancellationError { }

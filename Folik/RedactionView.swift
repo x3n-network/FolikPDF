@@ -85,21 +85,26 @@ struct RedactionView: View {
                         }
                         TextField("New copy filename", text: $filename).textFieldStyle(.roundedBorder).disabled(busy)
                     }
-                    if busy { ProgressView(status); Button("Cancel Processing") { task?.cancel() } }
-                    if let error { Text(error).foregroundStyle(.red) }
+                    if let error { ProcessingErrorView(message: error) }
                 }.padding()
             }
             .navigationTitle("Redact PDF").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { task?.cancel(); dismiss() } } }
             .safeAreaInset(edge: .bottom) {
-                Button("Create Redacted Preview", action: prepare).buttonStyle(.borderedProminent)
-                    .frame(minHeight: 48).padding().disabled(busy || areas.isEmpty || (try? PDFConverter.fileName(filename)) == nil)
-                    .accessibilityIdentifier("redaction.preview")
+                VStack(spacing: 8) {
+                    if busy { ProcessingStatusView(status: status) { task?.cancel() } }
+                    Button("Create Redacted Preview", action: prepare).buttonStyle(.borderedProminent)
+                        .frame(minHeight: 48).disabled(busy || areas.isEmpty || (try? PDFConverter.fileName(filename)) == nil)
+                        .accessibilityIdentifier("redaction.preview")
+                }
+                .padding()
+                .frame(maxWidth: .infinity)
+                .background(.regularMaterial)
             }
             .fileImporter(isPresented: $showFiles, allowedContentTypes: [.pdf]) { result in
                 switch result { case .success(let url): load(url); case .failure(let failure): error = failure.localizedDescription }
             }
-            .sheet(item: $preview) { OfficePreviewView(preview: $0, filename: filename, complete: complete) }
+            .sheet(item: $preview) { OfficePreviewView(preview: $0.presentedAs("Redacted Copy", notes: "Redaction details"), filename: filename, complete: complete) }
             .sheet(isPresented: $showSuggestions) {
                 SmartRedactionReviewView(suggestions: suggestions) { selected in
                     addSuggestions(selected)
@@ -166,7 +171,7 @@ struct RedactionView: View {
         suggestions = []; page = 0; pageCount = 0
         task = Task {
             do {
-                let data = try await Task.detached { try PDFConverter.readFile(url, maximumBytes: PDFProcessing.maximumBytes) }.value
+                let data = try await Task.detached { try PDFConverter.readFile(url, maximumBytes: PDFProcessing.maximumBytes) }.cancellableValue
                 try Task.checkCancellation(); source = data; sourceName = url.lastPathComponent; areas = []; page = 0; filename = url.deletingPathExtension().lastPathComponent + " Redacted"
                 busy = false; renderPage()
             } catch { busy = false; if !(error is CancellationError) { self.error = error.localizedDescription } }
@@ -183,7 +188,7 @@ struct RedactionView: View {
                     let pdf = try PDFProcessing.document(source)
                     guard let page = pdf.page(at: index) else { throw PDFProcessingError.invalid }
                     return (try PDFRedaction.bitmap(page), pdf.pageCount)
-                }.value
+                }.cancellableValue
                 try Task.checkCancellation(); image = result.0; pageCount = result.1
             } catch is CancellationError { } catch { self.error = error.localizedDescription }
         }

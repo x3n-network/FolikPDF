@@ -30,7 +30,7 @@ final class PDFCompressionTests: XCTestCase {
         let reopened = try XCTUnwrap(PDFDocument(data: output.data))
         XCTAssertTrue(reopened.string?.contains("PRESERVE SELECTABLE TEXT") == true)
         XCTAssertEqual(reopened.page(at: 0)?.annotations.first?.widgetStringValue, "Keep value")
-        XCTAssertTrue(output.recoveryNotice?.contains("smaller") == true)
+        XCTAssertTrue(output.resultSummary?.contains("smaller") == true)
     }
     func testEveryPresetReturnsNoLargerPDFAndRejectsInvalidData() throws {
         let input = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 612, height: 792)).pdfData { $0.beginPage() }

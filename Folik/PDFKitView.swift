@@ -134,6 +134,7 @@ struct PDFKitView: UIViewRepresentable {
         func startObserving() {
             guard !isObserving else { return }
             isObserving = true
+            session.commitPendingEdits = { [weak self] in self?.pdfView.endEditing(true) }
             let center = NotificationCenter.default
             center.addObserver(self, selector: #selector(pageChanged), name: .PDFViewPageChanged, object: pdfView)
             center.addObserver(self, selector: #selector(viewportChanged), name: .PDFViewScaleChanged, object: pdfView)
@@ -148,6 +149,8 @@ struct PDFKitView: UIViewRepresentable {
         }
 
         func stopObserving() {
+            pdfView.endEditing(true)
+            session.commitPendingEdits = nil
             pendingRestore = nil
             if let scrollView = findScrollView(in: pdfView) {
                 scrollView.panGestureRecognizer.removeTarget(self, action: #selector(viewportGestureChanged(_:)))

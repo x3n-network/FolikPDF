@@ -10,6 +10,7 @@ private struct LibraryPDFToolRequest: Identifiable {
 }
 
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showingDeleted = false
     @EnvironmentObject private var library: DocumentLibrary
     @State private var path: [LibraryDocument] = []
@@ -63,6 +64,12 @@ struct ContentView: View {
                 let result = try await searchIndex.search(query, documents: documents)
                 try Task.checkCancellation(); searchResult = result; searchingText = false
             } catch { if !Task.isCancelled { searchingText = false } }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
+            Task { await searchIndex.releaseMemory() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { Task { await searchIndex.releaseMemory() } }
         }
         .tint(FolikTheme.cobalt)
         .fileImporter(
@@ -168,7 +175,7 @@ struct ContentView: View {
             }
         }
         .onChange(of: path.count) { _, count in
-            if count == 0 { library.refresh() }
+            if count == 0 { Task { await library.refreshInBackground() } }
         }
         .onAppear {
             #if DEBUG
@@ -177,6 +184,7 @@ struct ContentView: View {
             let arguments = ProcessInfo.processInfo.arguments
             if arguments.contains("--ui-test-fixture") {
                 library.prepareUITestFixture()
+                if arguments.contains("--ui-test-empty-library") { library.delete(library.documents) }
                 if arguments.contains("--ui-test-shared-inbox") {
                     Task { await library.importSharedInbox() }
                 }

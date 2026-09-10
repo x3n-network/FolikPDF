@@ -379,6 +379,29 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
     @Published private(set) var hasTextSelection = false
     @Published private(set) var isSearching = false
     @Published private(set) var isModified = false
+    @Published private(set) var isSaving = false
+    @Published private(set) var hasSavedChanges = false
+    @Published private(set) var documentRevision = 0
+    @Published private(set) var saveFailed = false
+    var commitPendingEdits: (() -> Void)?
+    private var pendingSave: Task<Bool, Never>?
+    private var scheduledAnnotationSave: Task<Void, Never>?
+    private let annotationSaveDelay: Duration
+    private(set) var successfulSaveCount = 0
+    private let saveDocument: @MainActor (PDFDocument, URL) throws -> Void
+
+    var saveStatus: String {
+        if isSaving { return "Saving…" }
+        if saveFailed { return "Not saved · Tap to retry" }
+        if isModified { return "Unsaved changes · Tap to save" }
+        return hasSavedChanges ? "Saved on this device" : "On this device"
+    }
+    @Published private(set) var isPreparingDocument = false
+    private let deferredPreparation: Bool
+    private var preparationComplete = false
+    private var preparationTask: Task<Void, Never>?
+    private(set) var preparationBatchCount = 0
+    private(set) var longestPreparationBatchMilliseconds = 0.0
     @Published private(set) var isLocked = false
     @Published private(set) var canFillForms = false
     @Published private(set) var formCompatibilityNotice: String?
@@ -411,8 +434,14 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         item: LibraryDocument,
         signatureStore: SignatureStore? = nil,
         bookmarkStore: BookmarkStore? = nil,
-        readerStateStore: ReaderStateStore? = nil
+        readerStateStore: ReaderStateStore? = nil,
+        annotationSaveDelay: Duration = .zero,
+        deferredPreparation: Bool = false,
+        saveDocument: @escaping @MainActor (PDFDocument, URL) throws -> Void = PDFDocumentPersistence.save
     ) {
+        self.deferredPreparation = deferredPreparation
+        self.saveDocument = saveDocument
+        self.annotationSaveDelay = annotationSaveDelay
         self.item = item
         self.signatureStore = signatureStore ?? SignatureStore()
         self.bookmarkStore = bookmarkStore ?? BookmarkStore()
@@ -471,9 +500,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         guard let document, document.unlock(withPassword: password) else { return false }
         isLocked = false
         readerStateStore.markOpened(item.url)
-        outlineEntries = Self.flattenOutline(document.outlineRoot)
-        configureForms(in: document)
-        refreshAnnotations()
+        prepareSynchronously(document)
         command = PDFReaderCommand(action: .restore(pageIndex: pageIndex, layout: layout))
         return true
     }
@@ -645,7 +672,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         formFieldPlacement = nil
         isModified = true
         refreshFormState(markModified: false)
-        persistChanges()
+        scheduleAnnotationSave()
         beginFormLayoutEditing()
     }
 
@@ -973,24 +1000,86 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
 
     func noteFormEditing() {
         guard !formFields.isEmpty else { return }
-        isModified = true
-        refreshFormState(markModified: true)
+        refreshFormValues()
+        if currentFormValues() != savedFormValues { isModified = true }
     }
 
     func requestSave() {
-        command = PDFReaderCommand(action: .save)
+        Task { await saveForSharing() }
     }
 
-    func persistChanges() {
-        guard let document, isModified else { return }
-        refreshFormState(markModified: true)
-        if document.write(to: item.url) {
+    /// Ends native field editing and confirms persistence before a caller reads the file.
+    func saveForSharing() async -> Bool {
+        if let pendingSave { return await pendingSave.value }
+        isSaving = true
+        let backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Save PDF")
+        let task = Task { @MainActor in
+            defer {
+                self.pendingSave = nil
+                self.isSaving = false
+                if backgroundTask != .invalid { UIApplication.shared.endBackgroundTask(backgroundTask) }
+            }
+            self.commitPendingEdits?()
+            // Allow PDFKit's end-editing notifications to commit the active field.
+            await Task.yield()
+            self.noteFormEditing()
+            return self.persistChanges()
+        }
+        pendingSave = task
+        return await task.value
+    }
+
+    func prepareShare(mode: DocumentExportMode) async throws -> URL {
+        guard await saveForSharing() else { throw CocoaError(.fileWriteUnknown) }
+        let sourceURL = item.url
+        let worker = Task.detached(priority: .userInitiated) {
+            try DocumentExporter.export(sourceURL: sourceURL, mode: mode)
+        }
+        let result = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+        if Task.isCancelled { DocumentExporter.removeExport(at: result); throw CancellationError() }
+        return result
+    }
+
+    private func scheduleAnnotationSave() {
+        guard annotationSaveDelay > .zero else { persistChanges(); return }
+        scheduledAnnotationSave?.cancel()
+        let delay = annotationSaveDelay
+        scheduledAnnotationSave = Task { [weak self] in
+            do {
+                try await Task.sleep(for: delay)
+                guard let self else { return }
+                self.scheduledAnnotationSave = nil
+                _ = await self.saveForSharing()
+            } catch { }
+        }
+    }
+
+    @discardableResult
+    func persistChanges() -> Bool {
+        scheduledAnnotationSave?.cancel()
+        scheduledAnnotationSave = nil
+        guard let document, !isLocked else {
+            saveFailed = true
+            errorMessage = "Open and unlock this PDF before saving or sharing."
+            return false
+        }
+        guard isModified else { return !saveFailed }
+        refreshFormValues()
+        do {
+            try saveDocument(document, item.url)
             savedFormValues = currentFormValues()
-            refreshFormState(markModified: false)
-            refreshAnnotations()
+            refreshFormValues()
             isModified = false
-        } else {
-            errorMessage = "Your changes are visible, but Folik couldn’t save them to this PDF."
+            if saveFailed { errorMessage = nil }
+            saveFailed = false
+            hasSavedChanges = true
+            documentRevision += 1
+            successfulSaveCount += 1
+            return true
+        } catch {
+            saveFailed = true
+            errorMessage = "Your changes are still visible, but could not be saved. Free up device storage if needed, then tap the save status to retry."
+            return false
         }
     }
 
@@ -1007,6 +1096,15 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         }
         isModified = false
         refreshFormState(markModified: false)
+    }
+
+    private func refreshFormValues() {
+        formFields = formFields.map { field in
+            FormField(id: field.id, annotation: field.annotation, pageIndex: field.pageIndex,
+                      title: field.title, logicalID: field.logicalID, kind: field.kind,
+                      value: field.annotation.widgetStringValue ?? "", isReadOnly: field.annotation.isReadOnly,
+                      isSelected: field.annotation.buttonWidgetState == .onState, isRequired: field.isRequired)
+        }
     }
 
     func refreshFormState(markModified: Bool) {
@@ -1036,7 +1134,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         guard addedAnnotation else { return }
         isModified = true
         refreshAnnotations()
-        persistChanges()
+        scheduleAnnotationSave()
     }
 
     func addInkAnnotation(pageIndex: Int, points: [CGPoint]) {
@@ -1074,16 +1172,17 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         recordAnnotationAction(.added(annotation, pageIndex: pageIndex))
         isModified = true
         refreshAnnotations()
-        persistChanges()
+        scheduleAnnotationSave()
     }
 
     func deleteAnnotation(_ item: DocumentAnnotation) {
         guard let page = document?.page(at: item.pageIndex) else { return }
         page.removeAnnotation(item.annotation)
+        if item.annotation.type == "Widget" { refreshFormState(markModified: false) }
         recordAnnotationAction(.removed(item.annotation, pageIndex: item.pageIndex))
         isModified = true
         refreshAnnotations()
-        persistChanges()
+        scheduleAnnotationSave()
     }
 
     func undoAnnotationAction() {
@@ -1093,7 +1192,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         updateAnnotationHistoryState()
         isModified = true
         refreshAnnotations()
-        persistChanges()
+        scheduleAnnotationSave()
     }
 
     func redoAnnotationAction() {
@@ -1103,7 +1202,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         updateAnnotationHistoryState()
         isModified = true
         refreshAnnotations()
-        persistChanges()
+        scheduleAnnotationSave()
     }
 
     func placeAnnotation(pageIndex: Int, point: CGPoint) {
@@ -1204,7 +1303,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         recordAnnotationAction(.added(annotation, pageIndex: pageIndex))
         isModified = true
         refreshAnnotations()
-        persistChanges()
+        scheduleAnnotationSave()
     }
 
     private func placeFormField(_ placement: FormFieldPlacement, pageIndex: Int, point: CGPoint) {
@@ -1221,7 +1320,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         recordAnnotationAction(.added(annotation, pageIndex: pageIndex))
         isModified = true
         refreshFormState(markModified: false)
-        persistChanges()
+        scheduleAnnotationSave()
     }
 
     private func formFieldAnnotation(
@@ -1310,8 +1409,10 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         switch action {
         case .added(let annotation, let pageIndex):
             document?.page(at: pageIndex)?.addAnnotation(annotation)
+            if annotation.type == "Widget" { refreshFormState(markModified: false) }
         case .removed(let annotation, let pageIndex):
             document?.page(at: pageIndex)?.removeAnnotation(annotation)
+            if annotation.type == "Widget" { refreshFormState(markModified: false) }
         case .transformed(let annotation, _, _, let toGeometry):
             applyGeometry(toGeometry, to: annotation)
         case .styled(let annotation, _, _, let toStyle):
@@ -1323,8 +1424,10 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         switch action {
         case .added(let annotation, let pageIndex):
             document?.page(at: pageIndex)?.removeAnnotation(annotation)
+            if annotation.type == "Widget" { refreshFormState(markModified: false) }
         case .removed(let annotation, let pageIndex):
             document?.page(at: pageIndex)?.addAnnotation(annotation)
+            if annotation.type == "Widget" { refreshFormState(markModified: false) }
         case .transformed(let annotation, _, let fromGeometry, _):
             applyGeometry(fromGeometry, to: annotation)
         case .styled(let annotation, _, let fromStyle, _):
@@ -1391,13 +1494,13 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
     private func finishAnnotationGeometryChange() {
         isModified = true
         refreshAnnotations()
-        persistChanges()
+        scheduleAnnotationSave()
     }
 
     private func finishAnnotationStyleChange() {
         isModified = true
         refreshAnnotations()
-        persistChanges()
+        scheduleAnnotationSave()
     }
 
     private static func colorsMatch(_ first: UIColor, _ second: UIColor) -> Bool {
@@ -1484,10 +1587,50 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         document.delegate = self
         isLocked = document.isLocked
         if !document.isLocked {
-            outlineEntries = Self.flattenOutline(document.outlineRoot)
-            configureForms(in: document)
-            refreshAnnotations()
+            if deferredPreparation { isPreparingDocument = true }
+            else { prepareSynchronously(document) }
         }
+    }
+
+    private func prepareSynchronously(_ document: PDFDocument) {
+        outlineEntries = Self.flattenOutline(document.outlineRoot)
+        configureForms(in: document)
+        refreshAnnotations()
+        preparationComplete = true
+    }
+
+    /// Keeps live PDFKit objects on the main actor, yielding between small metadata batches.
+    func prepareForReading() async {
+        guard !preparationComplete, let document, !document.isLocked else { return }
+        if let preparationTask { await preparationTask.value; return }
+        isPreparingDocument = true
+        let task = Task { @MainActor in
+            defer { self.isPreparingDocument = false }
+            var fields: [FormField] = []
+            var annotations: [DocumentAnnotation] = []
+            self.preparationBatchCount = 0
+            self.longestPreparationBatchMilliseconds = 0
+            for start in stride(from: 0, to: document.pageCount, by: 8) {
+                await Task.yield()
+                guard !Task.isCancelled else { return }
+                let batchStart = CFAbsoluteTimeGetCurrent()
+                let range = start..<min(start + 8, document.pageCount)
+                autoreleasepool {
+                    fields.append(contentsOf: Self.formFields(in: document, pages: range))
+                    annotations.append(contentsOf: Self.annotations(in: document, pages: range))
+                }
+                self.longestPreparationBatchMilliseconds = max(self.longestPreparationBatchMilliseconds, (CFAbsoluteTimeGetCurrent() - batchStart) * 1000)
+                self.preparationBatchCount += 1
+            }
+            guard !Task.isCancelled else { return }
+            self.outlineEntries = Self.flattenOutline(document.outlineRoot)
+            self.configureForms(in: document, preparedFields: fields)
+            self.annotations = annotations
+            self.preparationComplete = true
+        }
+        preparationTask = task
+        await withTaskCancellationHandler(operation: { await task.value }, onCancel: { task.cancel() })
+        preparationTask = nil
     }
 
     private func loadSavedSignatures() {
@@ -1518,9 +1661,9 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         }
     }
 
-    private func configureForms(in document: PDFDocument) {
+    private func configureForms(in document: PDFDocument, preparedFields: [FormField]? = nil) {
         canFillForms = document.allowsFormFieldEntry
-        formFields = Self.formFields(in: document)
+        formFields = preparedFields ?? Self.formFields(in: document)
         if Self.containsXFA(in: document) {
             formCompatibilityNotice = formFields.isEmpty
                 ? "This PDF uses an XFA form, which iOS cannot fill."
@@ -1540,9 +1683,9 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         })
     }
 
-    private static func formFields(in document: PDFDocument) -> [FormField] {
+    private static func formFields(in document: PDFDocument, pages: Range<Int>? = nil) -> [FormField] {
         var fields: [FormField] = []
-        for pageIndex in 0..<document.pageCount {
+        for pageIndex in pages ?? 0..<document.pageCount {
             guard let page = document.page(at: pageIndex) else { continue }
             for (annotationIndex, annotation) in page.annotations.enumerated() where annotation.type == "Widget" {
                 let rawKind = annotation.widgetFieldType.rawValue
@@ -1658,9 +1801,9 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         return CGPDFDictionaryGetObject(acroForm, "XFA", &xfa)
     }
 
-    private static func annotations(in document: PDFDocument) -> [DocumentAnnotation] {
+    private static func annotations(in document: PDFDocument, pages: Range<Int>? = nil) -> [DocumentAnnotation] {
         var items: [DocumentAnnotation] = []
-        for pageIndex in 0..<document.pageCount {
+        for pageIndex in pages ?? 0..<document.pageCount {
             guard let page = document.page(at: pageIndex) else { continue }
             for (annotationIndex, annotation) in page.annotations.enumerated() {
                 guard let metadata = annotationMetadata(for: annotation, on: page) else { continue }

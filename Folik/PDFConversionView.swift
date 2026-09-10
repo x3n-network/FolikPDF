@@ -29,6 +29,7 @@ struct PDFConversionView: View {
     @State private var loading = false
     @State private var converting = false
     @State private var errorMessage: String?
+    @State private var conversionTask: Task<Void, Never>?
     @State private var loadTask: Task<Void, Never>?
 
     private var busy: Bool { loading || converting }
@@ -99,7 +100,7 @@ struct PDFConversionView: View {
                 }
                 if let errorMessage {
                     Section {
-                        Text(errorMessage).foregroundStyle(.red)
+                        ProcessingErrorView(message: errorMessage)
                             .accessibilityIdentifier("converter.error")
                     }
                 }
@@ -115,11 +116,10 @@ struct PDFConversionView: View {
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 10) {
                     if busy {
-                        HStack {
-                            ProgressView()
-                            Text(loading ? "Loading selection…" : "Creating PDF…")
+                        ProcessingStatusView(status: loading ? "Loading selection…" : "Creating PDF…") {
+                            loadTask?.cancel()
+                            conversionTask?.cancel()
                         }
-                        .font(.subheadline)
                     }
                     Button(action: createPDF) {
                         Text("Create PDF").font(.headline)
@@ -168,7 +168,7 @@ struct PDFConversionView: View {
                 prepareTestSelection()
                 #endif
             }
-            .onDisappear { loadTask?.cancel() }
+            .onDisappear { loadTask?.cancel(); conversionTask?.cancel() }
             .interactiveDismissDisabled(busy)
         }
         .tint(FolikTheme.cobalt)
@@ -177,7 +177,7 @@ struct PDFConversionView: View {
     private func makePage(_ data: Data) async throws -> Page {
         let thumbnail = try await Task.detached(priority: .userInitiated) {
             try PDFConverter.image(data, maximumPixelSize: 160)
-        }.value
+        }.cancellableValue
         return Page(data: data, thumbnail: UIImage(cgImage: thumbnail))
     }
 
@@ -196,7 +196,7 @@ struct PDFConversionView: View {
                         try Task.checkCancellation()
                         let data = try await Task.detached(priority: .userInitiated) {
                             try PDFConverter.readFile(url, maximumBytes: PDFConverter.maximumImageBytes)
-                        }.value
+                        }.cancellableValue
                         bytes += data.count
                         guard bytes <= PDFConverter.maximumTotalImageBytes else { throw PDFConversionError.tooLarge }
                         additions.append(try await makePage(data))
@@ -207,7 +207,7 @@ struct PDFConversionView: View {
                     guard ["txt", "rtf"].contains(url.pathExtension.lowercased()) else { throw PDFConversionError.unsupportedDocument }
                     let data = try await Task.detached(priority: .userInitiated) {
                         try PDFConverter.readFile(url, maximumBytes: PDFConverter.maximumTextBytes)
-                    }.value
+                    }.cancellableValue
                     try Task.checkCancellation()
                     documentData = data
                     documentExtension = url.pathExtension
@@ -253,12 +253,12 @@ struct PDFConversionView: View {
         else { return }
         converting = true
         errorMessage = nil
-        Task {
+        conversionTask = Task {
             defer { converting = false }
             do {
                 let document = try await library.importConvertedPDF(input, named: name)
                 complete(document)
-            } catch { errorMessage = error.localizedDescription }
+            } catch is CancellationError { } catch { errorMessage = error.localizedDescription }
         }
     }
 }

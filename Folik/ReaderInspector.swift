@@ -6,12 +6,26 @@ struct ReaderInspector: View {
     @ObservedObject var session: DocumentSession
     let close: () -> Void
     let organizePages: () -> Void
+    @State private var showingContents = false
 
     var body: some View {
         Group {
             switch panel {
             case .pages:
-                PageNavigator(session: session, close: close, organizePages: organizePages)
+                VStack(spacing: 0) {
+                    Picker("Browse document", selection: $showingContents) {
+                        Text("Pages").tag(false)
+                        Text("Contents").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .padding()
+                    .accessibilityIdentifier("reader.pages.contents")
+                    if showingContents {
+                        OutlineNavigator(session: session, close: close)
+                    } else {
+                        PageNavigator(session: session, close: close, organizePages: organizePages)
+                    }
+                }
             case .outline:
                 OutlineNavigator(session: session, close: close)
             case .search:
@@ -33,11 +47,35 @@ struct ReaderInspector: View {
     }
 }
 
+private struct SignDocumentButton: View {
+    @ObservedObject var session: DocumentSession
+    let close: () -> Void
+    let capture: () -> Void
+
+    var body: some View {
+        Button {
+            if let asset = session.savedSignatureAsset(for: .signature) {
+                session.beginSignaturePlacement(asset)
+                close()
+            } else {
+                capture()
+            }
+        } label: {
+            Label("Sign", systemImage: "signature")
+                .frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(.bordered)
+        .accessibilityIdentifier("reader.sign")
+        .accessibilityHint("Place your saved signature or create one on this device")
+    }
+}
+
 private struct AnnotationNavigator: View {
     @ObservedObject var session: DocumentSession
     let close: () -> Void
     @State private var textPlacementKind: AnnotationPlacementKind?
     @State private var signatureCaptureKind: SignatureKind?
+    @State private var signaturePlaced = false
     @State private var draftText = ""
 
     var body: some View {
@@ -67,6 +105,8 @@ private struct AnnotationNavigator: View {
                         .accessibilityLabel("Redo annotation change")
                     }
                 }
+
+                SignDocumentButton(session: session, close: close, capture: { signatureCaptureKind = .signature })
 
                 LazyVGrid(
                     columns: [GridItem(.flexible()), GridItem(.flexible())],
@@ -250,14 +290,16 @@ private struct AnnotationNavigator: View {
         } message: {
             Text("Enter the text, then tap the page where it should appear.")
         }
-        .sheet(item: $signatureCaptureKind) { kind in
+        .sheet(item: $signatureCaptureKind, onDismiss: {
+            if signaturePlaced { signaturePlaced = false; close() }
+        }) { kind in
             SignatureCaptureView(
                 kind: kind,
                 existingAsset: session.savedSignatureAsset(for: kind)
             ) { asset in
                 session.saveSignatureAsset(asset)
                 session.beginSignaturePlacement(asset)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { close() }
+                signaturePlaced = true
             }
         }
         .onAppear {
@@ -351,7 +393,13 @@ private struct PageNavigator: View {
                                         close()
                                     } label: {
                                         VStack(spacing: 7) {
-                                            PDFPageThumbnail(page: page)
+                                            Group {
+                                                if document.isEncrypted {
+                                                    PDFPageThumbnail(page: page)
+                                                } else {
+                                                    FilePDFThumbnail(url: session.item.url, page: index, size: CGSize(width: 132, height: 180), revision: "\(session.documentRevision)")
+                                                }
+                                            }
                                                 .aspectRatio(page.bounds(for: .cropBox).size, contentMode: .fit)
                                                 .overlay(alignment: .topTrailing) {
                                                     if session.bookmarkedPageIndices.contains(index) {
@@ -613,6 +661,8 @@ private struct FormNavigator: View {
     let close: () -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var fieldSetupKind: FormFieldPlacementKind?
+    @State private var signatureCaptureKind: SignatureKind?
+    @State private var signaturePlaced = false
     @State private var suggestions: [FormFieldSuggestion] = []
     @State private var selectedSuggestionIDs: Set<UUID> = []
     @State private var isSuggestingFields = false
@@ -638,6 +688,8 @@ private struct FormNavigator: View {
                         }
                     }
                 }
+
+                SignDocumentButton(session: session, close: close, capture: { signatureCaptureKind = .signature })
 
                 if session.fillableFormFieldCount > 0 {
                     ProgressView(value: Double(session.completedFormFieldCount), total: Double(session.fillableFormFieldCount))
@@ -771,6 +823,15 @@ private struct FormNavigator: View {
                 }
             }
             .listStyle(.plain)
+        }
+        .sheet(item: $signatureCaptureKind, onDismiss: {
+            if signaturePlaced { signaturePlaced = false; close() }
+        }) { kind in
+            SignatureCaptureView(kind: kind, existingAsset: session.savedSignatureAsset(for: kind)) { asset in
+                session.saveSignatureAsset(asset)
+                session.beginSignaturePlacement(asset)
+                signaturePlaced = true
+            }
         }
         .sheet(item: $fieldSetupKind) { kind in
             FormFieldSetupView(kind: kind) { label, isRequired in

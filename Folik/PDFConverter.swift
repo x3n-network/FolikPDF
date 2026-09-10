@@ -45,15 +45,18 @@ nonisolated enum PDFConverter {
     }
 
     static func readFile(_ url: URL, maximumBytes: Int) throws -> Data {
+        try Task.checkCancellation()
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
         var coordinationError: NSError?
         var result: Result<Data, Error>?
         NSFileCoordinator().coordinate(readingItemAt: url, options: .withoutChanges, error: &coordinationError) { readableURL in
             result = Result {
+                try Task.checkCancellation()
                 let handle = try FileHandle(forReadingFrom: readableURL)
                 defer { try? handle.close() }
                 let data = try handle.read(upToCount: maximumBytes + 1) ?? Data()
+                try Task.checkCancellation()
                 guard data.count <= maximumBytes else { throw PDFConversionError.tooLarge }
                 return data
             }

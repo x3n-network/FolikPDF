@@ -66,6 +66,16 @@ nonisolated struct OfficePreview: Identifiable, Sendable {
     let warnings: [String]
     let pageCount: Int
     var recoveryNotice: String? = nil
+    var previewTitle: String = "Conversion Preview"
+    var notesTitle: String = "Conversion notes"
+    var resultSummary: String? = nil
+
+    func presentedAs(_ title: String, notes: String) -> OfficePreview {
+        var result = self
+        result.previewTitle = title
+        result.notesTitle = notes
+        return result
+    }
 }
 
 nonisolated enum OfficeDocumentEngine {

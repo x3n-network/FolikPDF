@@ -24,12 +24,16 @@ nonisolated enum LibrarySearch {
             try Task.checkCancellation()
             guard item.fileSize <= PDFProcessing.maximumBytes,
                   let pdf = PDFDocument(url: item.url), !pdf.isLocked, pdf.pageCount <= 500 else { result.skipped += 1; continue }
-            var pages: [String] = []
+            var matches = DocumentMatches(query: query)
             for index in 0..<pdf.pageCount {
                 try Task.checkCancellation()
-                pages.append(pdf.page(at: index)?.string ?? "")
+                try autoreleasepool {
+                    let text = pdf.page(at: index)?.string ?? ""
+                    try Task.checkCancellation()
+                    matches.consume(text, page: index + 1)
+                }
             }
-            addMatches(query, pages: pages, document: item, to: &result)
+            matches.append(document: item, to: &result)
         }
         return result
     }
@@ -49,32 +53,35 @@ nonisolated enum LibrarySearch {
         return result
     }
 
-    private static func addMatches(
-        _ query: String,
-        pages: [String],
-        document: LibraryDocument,
-        to result: inout LibrarySearchResult
-    ) {
-        let hasSelectableText = pages.contains { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        guard hasSelectableText else {
-            result.noSearchableText.insert(document.url)
-            return
-        }
+    struct DocumentMatches {
+        let query: String
+        private(set) var hasText = false
+        private(set) var matchingPages = 0
+        private(set) var hits: [LibrarySearchHit] = []
 
-        var hits: [LibrarySearchHit] = []
-        var matchingPages = 0
-        for (index, text) in pages.enumerated() {
-            guard let range = text.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) else { continue }
+        mutating func consume(_ text: String, page: Int) {
+            if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { hasText = true }
+            guard !query.isEmpty, let range = text.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) else { return }
             matchingPages += 1
-            guard hits.count < 3 else { continue }
+            guard hits.count < 3 else { return }
             let start = text.index(range.lowerBound, offsetBy: -35, limitedBy: text.startIndex) ?? text.startIndex
             let end = text.index(range.upperBound, offsetBy: 80, limitedBy: text.endIndex) ?? text.endIndex
             let excerpt = text[start..<end].split(whereSeparator: \.isWhitespace).joined(separator: " ")
-            hits.append(LibrarySearchHit(page: index + 1, excerpt: excerpt))
+            hits.append(LibrarySearchHit(page: page, excerpt: excerpt))
         }
-        if !hits.isEmpty {
-            result.hits[document.url] = hits
-            result.matchingPageCounts[document.url] = matchingPages
+
+        func append(document: LibraryDocument, to result: inout LibrarySearchResult) {
+            if !hasText { result.noSearchableText.insert(document.url) }
+            if !hits.isEmpty {
+                result.hits[document.url] = hits
+                result.matchingPageCounts[document.url] = matchingPages
+            }
         }
+    }
+
+    private static func addMatches(_ query: String, pages: [String], document: LibraryDocument, to result: inout LibrarySearchResult) {
+        var matches = DocumentMatches(query: query)
+        for (index, text) in pages.enumerated() { matches.consume(text, page: index + 1) }
+        matches.append(document: document, to: &result)
     }
 }

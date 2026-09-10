@@ -957,6 +957,87 @@ final class DocumentSessionTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: store.fileURL(for: .signature).path))
     }
 
+    func testUnchangedFieldNotificationsDoNotShowUnsavedChanges() throws {
+        let source = workspace.appendingPathComponent("Saved Form.pdf")
+        try PDFTestFixture.writeCompatibilityForm(to: source)
+        let session = DocumentSession(item: PDFTestFixture.item(for: source))
+        session.noteFormEditing()
+        XCTAssertFalse(session.isModified)
+        let field = try XCTUnwrap(session.formFields.first(where: { $0.title == "Full name" }))
+        field.annotation.widgetStringValue = "Saved value"
+        session.noteFormEditing()
+        XCTAssertTrue(session.isModified)
+        XCTAssertTrue(session.persistChanges())
+        session.noteFormEditing()
+        XCTAssertFalse(session.isModified)
+        XCTAssertEqual(session.saveStatus, "Saved on this device")
+    }
+
+    func testLargeDocumentAnnotationBurstBenchmark() throws {
+        let source = workspace.appendingPathComponent("Annotation Benchmark.pdf")
+        try PDFTestFixture.write(to: source, pages: (1...150).map { "Page \($0) " + String(repeating: "Representative document text. ", count: 30) })
+        let session = DocumentSession(item: PDFTestFixture.item(for: source), annotationSaveDelay: .milliseconds(250))
+        let start = CFAbsoluteTimeGetCurrent()
+        for index in 0..<30 {
+            session.addInkAnnotation(pageIndex: index % 3, points: [CGPoint(x: 20, y: 30 + index), CGPoint(x: 100, y: 50 + index)])
+        }
+        XCTAssertEqual(session.successfulSaveCount, 0)
+        XCTAssertTrue(session.persistChanges())
+        XCTAssertEqual(session.successfulSaveCount, 1)
+        let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1000
+        print("FOLIK_BENCHMARK annotation_burst_ms=\(elapsed)")
+        let reopened = try XCTUnwrap(PDFDocument(url: source))
+        XCTAssertEqual((0..<3).reduce(0) { $0 + (reopened.page(at: $1)?.annotations.count ?? 0) }, 30)
+    }
+
+    func testSharingCommitsActiveFieldBeforeCreatingCopy() async throws {
+        let source = workspace.appendingPathComponent("Active Field.pdf")
+        try PDFTestFixture.writeCompatibilityForm(to: source)
+        let session = DocumentSession(item: PDFTestFixture.item(for: source))
+        let field = try XCTUnwrap(session.formFields.first(where: { $0.title == "Full name" }))
+        var committed = false
+        session.commitPendingEdits = {
+            field.annotation.widgetStringValue = "Latest unsaved value"
+            committed = true
+        }
+        let exported = try await session.prepareShare(mode: .editable)
+        defer { try? FileManager.default.removeItem(at: exported) }
+        XCTAssertTrue(committed)
+        XCTAssertNotEqual(exported, source)
+        let reopened = try XCTUnwrap(PDFDocument(url: exported))
+        XCTAssertEqual(reopened.page(at: 0)?.annotations.first(where: { $0.fieldName == "Full name" })?.widgetStringValue, "Latest unsaved value")
+        XCTAssertFalse(session.isModified)
+        XCTAssertFalse(session.isSaving)
+        XCTAssertEqual(session.saveStatus, "Saved on this device")
+    }
+
+    func testFailedSaveStopsSharingAndCanBeRetried() async throws {
+        let folder = workspace.appendingPathComponent("Recoverable", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let source = folder.appendingPathComponent("Form.pdf")
+        try PDFTestFixture.writeCompatibilityForm(to: source)
+        let session = DocumentSession(item: PDFTestFixture.item(for: source))
+        let field = try XCTUnwrap(session.formFields.first(where: { $0.title == "Full name" }))
+        field.annotation.widgetStringValue = "Keep this change"
+        session.noteFormEditing()
+        try FileManager.default.removeItem(at: folder)
+        do {
+            _ = try await session.prepareShare(mode: .editable)
+            XCTFail("Sharing must stop when the document cannot be saved")
+        } catch { }
+        XCTAssertTrue(session.saveFailed)
+        XCTAssertTrue(session.isModified)
+        XCTAssertFalse(session.isSaving)
+        XCTAssertEqual(field.annotation.widgetStringValue, "Keep this change")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let exported = try await session.prepareShare(mode: .editable)
+        defer { try? FileManager.default.removeItem(at: exported) }
+        XCTAssertFalse(session.saveFailed)
+        XCTAssertFalse(session.isModified)
+        let reopened = try XCTUnwrap(PDFDocument(url: exported))
+        XCTAssertEqual(reopened.page(at: 0)?.annotations.first(where: { $0.fieldName == "Full name" })?.widgetStringValue, "Keep this change")
+    }
+
     func testEditableAndFlattenedExportsPreserveOriginal() throws {
         let source = workspace.appendingPathComponent("Completed Application.pdf")
         try PDFTestFixture.writeCompatibilityForm(to: source)

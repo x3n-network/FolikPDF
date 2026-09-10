@@ -1,4 +1,3 @@
-import QuickLookThumbnailing
 import SwiftUI
 
 nonisolated enum LibrarySortOrder: String, CaseIterable, Identifiable {
@@ -90,6 +89,14 @@ struct LibraryView: View {
         .onChange(of: favoritesOnly) { _, _ in selection.removeAll() }
         .onChange(of: visibleDocuments.map(\.id)) { _, ids in
             selection.formIntersection(ids)
+        }
+        .overlay {
+            if library.isRefreshing && documents.isEmpty {
+                ProgressView("Loading your library…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(FolikTheme.surface)
+                    .accessibilityIdentifier("library.loading")
+            }
         }
         .sheet(isPresented: $choosingOCRSource, onDismiss: {
             if let document = pendingOCRSource {
@@ -520,12 +527,12 @@ struct LibraryView: View {
                 .frame(width: 132, height: 132)
                 .padding(.bottom, 28)
 
-                Text("Your documents, without the tollbooth.")
+                Text("Open, sign, and share your PDFs.")
                     .font(.title2.weight(.bold))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 28)
 
-                Text("Scan paper, open a PDF, or use the Add menu to convert images and text. Read, search, organize, and mark up your documents on this device.")
+                Text("Choose a PDF or scan a document to get started. Use Sign in Forms or Annotations, then Share when you’re ready. Everything stays on your device.")
                     .font(.body)
                     .foregroundStyle(FolikTheme.mutedInk)
                     .multilineTextAlignment(.center)
@@ -792,7 +799,7 @@ private struct DocumentRow: View {
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
             : AnyLayout(HStackLayout(alignment: .center, spacing: 14))
         return layout {
-            PDFCoverThumbnail(url: document.url, thumbnailSize: isGrid ? CGSize(width: 200, height: 260) : CGSize(width: 104, height: 136))
+            FilePDFThumbnail(url: document.url, size: isGrid ? CGSize(width: 200, height: 260) : CGSize(width: 104, height: 136), revision: "\(document.modifiedAt.timeIntervalSinceReferenceDate)-\(document.fileSize)")
                 .frame(width: isGrid ? nil : 60, height: isGrid ? 170 : 80)
                 .frame(maxWidth: isGrid ? .infinity : nil)
 
@@ -852,62 +859,5 @@ private struct DocumentRow: View {
             + Text(String(hit.excerpt[..<range.lowerBound])).foregroundColor(.secondary)
             + Text(String(hit.excerpt[range])).bold().foregroundColor(FolikTheme.cobalt)
             + Text(String(hit.excerpt[range.upperBound...])).foregroundColor(.secondary)
-    }
-}
-
-private struct PDFCoverThumbnail: View {
-    let url: URL
-    var thumbnailSize = CGSize(width: 104, height: 136)
-    @Environment(\.displayScale) private var displayScale
-    @State private var image: UIImage?
-    @State private var request: QLThumbnailGenerator.Request?
-
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(FolikTheme.recessedSurface)
-            if let image {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-            } else {
-                Image(systemName: "doc.fill")
-                    .font(.title2)
-                    .foregroundStyle(FolikTheme.cobalt)
-                    .accessibilityHidden(true)
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(FolikTheme.separator, lineWidth: 0.5)
-        }
-        .onAppear(perform: loadThumbnail)
-        .onChange(of: displayScale) { _, _ in
-            if let request { QLThumbnailGenerator.shared.cancel(request) }
-            request = nil
-            image = nil
-            loadThumbnail()
-        }
-        .onDisappear {
-            if let request { QLThumbnailGenerator.shared.cancel(request) }
-            request = nil
-        }
-        .accessibilityHidden(true)
-    }
-
-    private func loadThumbnail() {
-        guard image == nil, request == nil else { return }
-        let request = QLThumbnailGenerator.Request(
-            fileAt: url,
-            size: thumbnailSize,
-            scale: displayScale,
-            representationTypes: .thumbnail
-        )
-        self.request = request
-        QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { thumbnail, _ in
-            guard let thumbnail else { return }
-            Task { @MainActor in image = thumbnail.uiImage }
-        }
     }
 }

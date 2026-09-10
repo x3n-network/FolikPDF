@@ -40,7 +40,7 @@ struct OfficeConversionView: View {
                         .foregroundStyle(.secondary)
                 }
                 if let errorMessage {
-                    Section { Text(errorMessage).foregroundStyle(.red).accessibilityIdentifier("office.error") }
+                    Section { ProcessingErrorView(message: errorMessage).accessibilityIdentifier("office.error") }
                 }
             }
             .navigationTitle("Documents to PDF")
@@ -52,7 +52,7 @@ struct OfficeConversionView: View {
             }
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 10) {
-                    if busy { ProgressView("Preparing document…") }
+                    if busy { ProcessingStatusView(status: "Preparing document…") { worker?.cancel() } }
                     Button("Preview PDF", action: preparePreview)
                         .font(.headline)
                         .frame(maxWidth: .infinity, minHeight: 48)
@@ -100,7 +100,7 @@ struct OfficeConversionView: View {
                 let data = try await Task.detached(priority: .userInitiated) {
                     if ext == "pages" { return try PagesPDFReader.readFile(url) }
                     return try PDFConverter.readFile(url, maximumBytes: OfficePackage.maximumFileBytes)
-                }.value
+                }.cancellableValue
                 try Task.checkCancellation()
                 sourceData = data; extensionName = ext
                 sourceName = url.lastPathComponent
@@ -140,19 +140,22 @@ struct OfficePreviewView: View {
             VStack(spacing: 0) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("\(preview.pageCount) \(preview.pageCount == 1 ? "page" : "pages") · Review before saving")
+                        Text(filename)
+                            .font(.headline)
+                            .accessibilityIdentifier("preview.filename")
+                        Text(preview.resultSummary ?? "\(preview.pageCount) \(preview.pageCount == 1 ? "page" : "pages") · Review before saving")
                             .font(.subheadline.weight(.semibold))
                         Text(preview.recoveryNotice ?? "Image placement and complex layouts may differ. Compare important documents with the original.")
                             .font(.footnote).foregroundStyle(.secondary)
                         if !preview.warnings.isEmpty {
-                            DisclosureGroup("Conversion notes (\(preview.warnings.count))") {
+                            DisclosureGroup("\(preview.notesTitle) (\(preview.warnings.count))") {
                                 ForEach(preview.warnings, id: \.self) { warning in
                                     Text(warning).font(.footnote).frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 3)
                                 }
                             }
                             .accessibilityIdentifier("office.notes")
                         }
-                        if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
+                        if let errorMessage { ProcessingErrorView(message: errorMessage) }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading).padding()
                 }
@@ -160,7 +163,7 @@ struct OfficePreviewView: View {
                 OfficePDFPreview(data: preview.data)
                     .accessibilityIdentifier("office.pdfPreview")
             }
-            .navigationTitle("Conversion Preview")
+            .navigationTitle(preview.previewTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Back") { dismiss() }.disabled(saving) }
@@ -169,7 +172,7 @@ struct OfficePreviewView: View {
                 Button(action: save) {
                     HStack {
                         if saving { ProgressView() }
-                        Text(saving ? "Saving…" : "Save to Library").font(.headline)
+                        Text(saving ? "Saving…" : "Save Copy").font(.headline)
                     }
                     .frame(maxWidth: .infinity, minHeight: 48)
                 }
