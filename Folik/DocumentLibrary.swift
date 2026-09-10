@@ -256,6 +256,34 @@ final class DocumentLibrary: ObservableObject {
         return renamed
     }
 
+    @discardableResult
+    func duplicate(_ document: LibraryDocument) throws -> LibraryDocument {
+        guard documents.contains(where: { $0.url == document.url }) else { throw CocoaError(.fileNoSuchFile) }
+        let destination = Self.uniqueDestination(
+            named: document.displayName + " Copy.pdf",
+            in: documentsDirectory,
+            fileManager: fileManager
+        )
+        var records = try LibraryOrganization.load(from: organizationURL)
+        let metadata = records[document.url.lastPathComponent]
+        try fileManager.copyItem(at: document.url, to: destination)
+        do {
+            if let metadata {
+                records[destination.lastPathComponent] = metadata
+                try LibraryOrganization.save(records, to: organizationURL)
+            }
+        } catch {
+            try? fileManager.removeItem(at: destination)
+            throw error
+        }
+        refresh()
+        guard let copy = documents.first(where: { $0.url.standardizedFileURL == destination.standardizedFileURL }) else {
+            try? fileManager.removeItem(at: destination)
+            throw CocoaError(.fileReadUnknown)
+        }
+        return copy
+    }
+
     func delete(_ document: LibraryDocument) {
         defer { refresh() }
         do {

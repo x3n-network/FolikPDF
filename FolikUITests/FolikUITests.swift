@@ -157,7 +157,7 @@ final class FolikUITests: XCTestCase {
         app.buttons["library.document.Folik UI Test.pdf"].tap()
         app.buttons["More"].tap()
         XCTAssertFalse(app.buttons["Merge PDFs"].isEnabled)
-        app.navigationBars["Library"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        app.navigationBars["1 Selected"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         app.buttons["library.document.Second.pdf"].tap()
         app.buttons["More"].tap()
         app.buttons["Merge PDFs"].tap()
@@ -202,6 +202,57 @@ final class FolikUITests: XCTestCase {
         clear.tap()
         XCTAssertTrue(app.buttons["library.document.Scan.pdf"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["library.searchOCR"].exists)
+    }
+
+    func testLibrarySearchShowsSeveralMatchingPages() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture"]
+        app.launch()
+
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.tap()
+        search.typeText("Folik searchable")
+
+        XCTAssertTrue(app.staticTexts["2 matching pages"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Page 1:'")).firstMatch.exists)
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Page 2:'")).firstMatch.exists)
+    }
+
+    func testLibraryDocumentCanBeDuplicated() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture"]
+        app.launch()
+
+        XCTAssertTrue(app.buttons["Document actions"].waitForExistence(timeout: 5))
+        app.buttons["Document actions"].tap()
+        app.buttons["Duplicate"].tap()
+
+        XCTAssertTrue(app.buttons["library.document.Folik UI Test Copy.pdf"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["library.document.Folik UI Test.pdf"].exists)
+    }
+
+    func testRecentlyDeletedCanRestoreSeveralSelectedDocuments() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-library-pair"]
+        app.launch()
+
+        app.buttons["library.select"].tap()
+        app.buttons["library.document.Folik UI Test.pdf"].tap()
+        app.buttons["library.document.Second.pdf"].tap()
+        XCTAssertTrue(app.navigationBars["2 Selected"].exists)
+        app.buttons["Remove selected documents"].tap()
+        app.buttons["Move to Recently Deleted"].tap()
+
+        XCTAssertTrue(app.buttons["library.recentlyDeleted"].waitForExistence(timeout: 5))
+        app.buttons["library.recentlyDeleted"].tap()
+        app.buttons["trash.select"].tap()
+        app.buttons["Folik UI Test"].tap()
+        app.buttons["Second"].tap()
+        XCTAssertEqual(app.staticTexts["trash.selectionCount"].label, "2 selected")
+        app.buttons["Restore"].tap()
+
+        XCTAssertTrue(app.staticTexts["No Deleted Documents"].waitForExistence(timeout: 5))
     }
 
     func testGridLayoutPersistsAndSupportsSelectionAndDocumentTools() {
@@ -568,7 +619,11 @@ final class FolikUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-fixture", "--ui-test-pdf-source", data.base64EncodedString()]
         app.launch()
-        app.buttons["library.addDocument"].tap(); app.buttons["Compress PDF"].tap()
+        app.buttons["library.addDocument"].tap()
+        let compress = app.buttons["Compress PDF"]
+        for _ in 0..<3 where !compress.exists || !compress.isHittable { app.swipeUp() }
+        XCTAssertTrue(compress.waitForExistence(timeout: 5))
+        compress.tap()
         XCTAssertTrue(app.navigationBars["Compress PDF"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["pdfTool.preview"].waitForExistence(timeout: 5))
         app.buttons["pdfTool.preview"].tap()
@@ -660,12 +715,23 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(settingsElements["settings.website"].exists)
         XCTAssertTrue(settingsElements["settings.openSource"].exists)
         XCTAssertTrue(settingsElements["settings.feedback"].exists)
-        XCTAssertTrue(app.staticTexts["Version 1.0.2 (1)"].exists)
+        XCTAssertTrue(app.staticTexts["Version 1.0.3 (1)"].exists)
         app.swipeUp()
         XCTAssertTrue(app.staticTexts["Documents stay on this device"].exists)
         XCTAssertTrue(app.staticTexts["Scans and text recognition run locally"].exists)
         app.swipeUp()
         XCTAssertTrue(settingsElements["settings.eula"].waitForExistence(timeout: 3))
+    }
+
+    func testAppLockCoversTheLibraryUntilAuthentication() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-app-lock"]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Folik is locked"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["appLock.unlock"].exists)
+        XCTAssertFalse(app.buttons["library.settings"].isHittable)
+        XCTAssertFalse(app.buttons["library.document.Folik UI Test.pdf"].isHittable)
     }
 
     func testAnnotationEditingOffersAccessibleMovementControls() {

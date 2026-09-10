@@ -27,6 +27,7 @@ struct ContentView: View {
     @State private var searchText = ""
     @State private var searchResult = LibrarySearchResult()
     @State private var searchingText = false
+    @State private var searchIndex = LibrarySearchIndex()
     @State private var handledDebugLaunch = false
 
     var body: some View {
@@ -44,8 +45,7 @@ struct ContentView: View {
             searchingText = true
             do {
                 try await Task.sleep(for: .milliseconds(300))
-                let worker = Task.detached { try LibrarySearch.search(query, documents: documents) }
-                let result = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                let result = try await searchIndex.search(query, documents: documents)
                 try Task.checkCancellation(); searchResult = result; searchingText = false
             } catch { if !Task.isCancelled { searchingText = false } }
         }
@@ -195,6 +195,8 @@ struct ContentView: View {
         let libraryView = LibraryView(
             searchStatus: searchResult.skipped > 0 ? "Skipped \(searchResult.skipped) protected, unreadable, or oversized documents." : nil,
             searchHits: searchResult.hits,
+            searchMatchCounts: searchResult.matchingPageCounts,
+            searchQuery: searchText,
             isSearching: searchingText,
             hasSearchQuery: !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             noTextDocuments: library.documents.filter { searchResult.noSearchableText.contains($0.url) },
@@ -225,7 +227,7 @@ struct ContentView: View {
     private var filteredDocuments: [LibraryDocument] {
         guard !searchText.isEmpty else { return library.documents }
         return library.documents.filter {
-            $0.displayName.localizedCaseInsensitiveContains(searchText.trimmingCharacters(in: .whitespacesAndNewlines)) || library.metadata(for: $0).matches(searchText.trimmingCharacters(in: .whitespacesAndNewlines)) || searchResult.hits[$0.url] != nil
+            $0.displayName.localizedCaseInsensitiveContains(searchText.trimmingCharacters(in: .whitespacesAndNewlines)) || library.metadata(for: $0).matches(searchText.trimmingCharacters(in: .whitespacesAndNewlines)) || !(searchResult.hits[$0.url]?.isEmpty ?? true)
         }
     }
 

@@ -73,10 +73,29 @@ final class LibraryOrganizationTests: XCTestCase {
         try write("Café invoice 4827", to: url)
         let library = DocumentLibrary(documentsDirectory: root)
         let result = try LibrarySearch.search("cafe", documents: library.documents)
-        XCTAssertEqual(result.hits[url]?.page, 2)
-        XCTAssertTrue(result.hits[url]?.excerpt.contains("4827") == true)
+        XCTAssertEqual(result.hits[url]?.first?.page, 2)
+        XCTAssertTrue(result.hits[url]?.first?.excerpt.contains("4827") == true)
+        XCTAssertEqual(result.matchingPageCounts[url], 1)
         try write("Replacement text", to: url)
         XCTAssertTrue(try LibrarySearch.search("4827", documents: library.documents).hits.isEmpty)
+    }
+
+    func testPersistentSearchIndexInvalidatesChangedFiles() async throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("Project.pdf")
+        try write("needle first", to: url)
+        let library = DocumentLibrary(documentsDirectory: root)
+        let cache = root.appendingPathComponent("search-index.json")
+        let index = LibrarySearchIndex(cacheURL: cache)
+
+        let first = try await index.search("needle", documents: library.documents)
+        XCTAssertEqual(first.hits[url]?.first?.page, 2)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: cache.path))
+
+        try write("replacement", to: url)
+        let refreshed = DocumentLibrary(documentsDirectory: root)
+        let second = try await index.search("needle", documents: refreshed.documents)
+        XCTAssertTrue(second.hits.isEmpty)
     }
     func testSearchIdentifiesPDFsWithoutTextSeparatelyFromNoMatches() throws {
         let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }

@@ -51,6 +51,25 @@ final class DocumentLibraryTests: XCTestCase {
         XCTAssertEqual(Set(library.documents.map(\.url.lastPathComponent)), ["Report.pdf", "Report 2.pdf"])
     }
 
+    func testDuplicatePreservesPDFAndOrganizationWithoutCopyingReadingProgress() throws {
+        let source = libraryDirectory.appendingPathComponent("Report.pdf")
+        try FileManager.default.createDirectory(at: libraryDirectory, withIntermediateDirectories: true)
+        try PDFTestFixture.write(to: source, pages: ["Report"])
+        let sourceBytes = try Data(contentsOf: source)
+        let library = DocumentLibrary(documentsDirectory: libraryDirectory)
+        let original = try XCTUnwrap(library.documents.first)
+        try library.organize(original, folder: "Work", tags: ["review"])
+        try library.setFavorite(true, for: [original])
+
+        let copy = try library.duplicate(original)
+
+        XCTAssertEqual(copy.url.lastPathComponent, "Report Copy.pdf")
+        XCTAssertEqual(try Data(contentsOf: copy.url), sourceBytes)
+        XCTAssertEqual(library.metadata(for: copy).folder, "Work")
+        XCTAssertEqual(library.metadata(for: copy).tags, ["review"])
+        XCTAssertTrue(library.metadata(for: copy).isFavorite)
+    }
+
     func testNonPDFInputIsIgnored() async throws {
         let source = workspace.appendingPathComponent("notes.txt")
         try Data("Not a PDF".utf8).write(to: source)

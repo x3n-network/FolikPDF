@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appLock: AppLockManager
 
     private let companyWebsite = URL(string: "https://x3n.network")!
     private let openSourceWebsite = URL(string: "https://www.x3n.network/opensource/folik/")!
@@ -79,6 +80,33 @@ struct SettingsView: View {
                 }
 
                 Section("Privacy") {
+                    Toggle("App Lock", isOn: Binding(
+                        get: { appLock.isEnabled },
+                        set: appLock.setEnabled
+                    ))
+                    .disabled(appLock.isAuthenticating)
+                    .accessibilityIdentifier("settings.appLock")
+                    if appLock.isAuthenticating && !appLock.isEnabled {
+                        ProgressView("Confirming App Lock…")
+                    }
+                    if let error = appLock.errorMessage, !appLock.isEnabled {
+                        Text(error)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                    if appLock.isEnabled {
+                        Picker("Require Authentication", selection: Binding(
+                            get: { appLock.delay },
+                            set: appLock.setDelay
+                        )) {
+                            ForEach(AppLockDelay.allCases) { delay in
+                                Text(delay.title).tag(delay)
+                            }
+                        }
+                        Text("App Lock uses Face ID, Touch ID, or your device passcode and hides document previews in the app switcher. It does not add encryption to individual PDFs.")
+                            .font(.footnote)
+                            .foregroundStyle(FolikTheme.mutedInk)
+                    }
                     Label("Documents stay on this device", systemImage: "iphone.and.arrow.forward")
                     Label("Scans and text recognition run locally", systemImage: "text.viewfinder")
                     Label("Folik includes no analytics or advertising SDKs", systemImage: "hand.raised")
@@ -151,4 +179,5 @@ private struct ExternalLinkRow: View {
 
 #Preview {
     SettingsView()
+        .environmentObject(AppLockManager())
 }

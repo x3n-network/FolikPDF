@@ -27,10 +27,11 @@ The updated library in **Folik 1.0.2**. Browse in a list or grid, resume reading
 - Open PDFs in Folik from Files, Mail, Safari, and other apps using the system share sheet or Open In menu
 - Scan multi-page paper documents with automatic edge detection and perspective correction, then add an on-device searchable text layer and save them as local PDFs
 - Keep a private on-device document library with virtual folders and tags, plus a remembered list or adaptive grid layout
+- Optionally lock the app with Face ID, Touch ID, or the device passcode and hide document previews in the app switcher
 - Combine 2–20 selected library PDFs, review the merged result, and save a new copy
-- Restore PDFs from Recently Deleted with their folders, tags, favorites, bookmarks, and reading position; permanent deletion requires confirmation
-- Rename, favorite, and sort documents, or select several to organize, share, favorite, or remove together
-- Search filenames, folders, tags, and selectable PDF text across the library, with matching page excerpts
+- Restore one or several PDFs from Recently Deleted with their folders, tags, favorites, bookmarks, and reading position; bulk permanent deletion requires confirmation
+- Rename, duplicate, favorite, and sort documents, or select several to organize, share, favorite, or remove together
+- Search filenames, folders, tags, and selectable PDF text across the library with a private disposable index, matching-page counts, and highlighted excerpts
 - Read PDFs with native PDFKit rendering
 - Resume each PDF at its last-viewed page and restore its continuous, single-page, or two-page layout, with a dismissible Continue Reading card
 - Browse page thumbnails and document outlines
@@ -74,7 +75,7 @@ Choose **Add (+) → Batch to PDF** for up to 20 files and 100 MB total. Add PDF
 
 Use a document’s **… → Organize** menu to assign a virtual folder and comma-separated tags. Folder and tag filters narrow the library without moving or renaming files. Organization is stored atomically in an app-local sidecar; unreadable metadata is not silently overwritten. Folder names are limited to 80 characters, with up to 20 tags of 40 characters each.
 
-Library search matches filenames, folder/tag labels, and selectable PDF text, with the first matching page and an excerpt. Search runs off the main thread, debounces typing, and cancels superseded requests. Text is read fresh for each search and is not stored in a persistent index. Locked, unreadable, or oversized documents are skipped with a count. Scanned documents need OCR first.
+Library search matches filenames, folder/tag labels, and selectable PDF text, with matching-page counts and up to three highlighted excerpts. Search runs off the main thread, debounces typing, and cancels superseded requests. To make repeat searches fast, extracted text is kept in a bounded, disposable cache protected by iOS file protection; entries are invalidated when a source PDF changes and stale entries are removed. Nothing is uploaded, and the cache is never required to open a document. Locked, unreadable, or oversized documents are skipped with a count. Scanned documents need OCR first.
 
 ### PDF compression
 
@@ -139,6 +140,7 @@ The app icon uses Folik's folded-page **F** in standard, dark, and tinted appear
 
 ```text
 DocumentLibrary    Imports and owns local PDF copies
+LibrarySearchIndex Bounded, disposable on-device cache for cross-library text search
 DocumentScanner    Native camera capture and scanned-image PDF generation
 PDFConverter       Local image and paginated TXT/RTF conversion
 PDFConversionView  Image/text selection, image ordering, and conversion review

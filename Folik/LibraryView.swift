@@ -38,7 +38,9 @@ struct LibraryView: View {
     @State private var choosingOCRSource = false
     @State private var pendingOCRSource: LibraryDocument?
     var searchStatus: String? = nil
-    var searchHits: [URL: LibrarySearchHit] = [:]
+    var searchHits: [URL: [LibrarySearchHit]] = [:]
+    var searchMatchCounts: [URL: Int] = [:]
+    var searchQuery = ""
     var isSearching = false
     var hasSearchQuery = false
     var noTextDocuments: [LibraryDocument] = []
@@ -133,7 +135,7 @@ struct LibraryView: View {
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { availableWidth = $0 }
         .background(FolikTheme.surface)
-        .navigationTitle("Library")
+        .navigationTitle(isSelecting ? "\(selection.count) Selected" : "Library")
         .navigationBarTitleDisplayMode(.large)
         .safeAreaInset(edge: .bottom) {
             if isImporting, let importStatus {
@@ -466,7 +468,9 @@ struct LibraryView: View {
                 isGrid: isGrid,
                 document: document,
                 metadata: library.metadata(for: document),
-                hit: searchHits[document.url],
+                hits: searchHits[document.url] ?? [],
+                matchingPageCount: searchMatchCounts[document.url] ?? 0,
+                searchQuery: searchQuery,
                 isSelecting: isSelecting,
                 isSelected: selection.contains(document.id),
                 toolsDisabled: isImporting,
@@ -476,6 +480,10 @@ struct LibraryView: View {
                 },
                 organize: { organizing = LibraryDocumentSelection(documents: [document]) },
                 rename: { renaming = document },
+                duplicate: {
+                    do { try library.duplicate(document) }
+                    catch { library.errorMessage = "Folik couldn’t duplicate \(document.displayName). \(error.localizedDescription)" }
+                },
                 toggleFavorite: { updateFavorites(!library.metadata(for: document).isFavorite, for: [document]) },
                 open: { openDocument(document) },
                 delete: { deleteDocument(document) },
@@ -650,13 +658,16 @@ private struct DocumentRow: View {
     var isGrid = false
     let document: LibraryDocument
     let metadata: LibraryMetadata
-    let hit: LibrarySearchHit?
+    let hits: [LibrarySearchHit]
+    let matchingPageCount: Int
+    let searchQuery: String
     let isSelecting: Bool
     let isSelected: Bool
     let toolsDisabled: Bool
     let toggleSelection: () -> Void
     let organize: () -> Void
     let rename: () -> Void
+    let duplicate: () -> Void
     let toggleFavorite: () -> Void
     let open: () -> Void
     let delete: () -> Void
@@ -667,7 +678,10 @@ private struct DocumentRow: View {
         if metadata.isFavorite { details.append("Favorite") }
         if !metadata.folder.isEmpty { details.append("Folder: " + metadata.folder) }
         if !metadata.tags.isEmpty { details.append("Tags: " + metadata.tags.joined(separator: ", ")) }
-        if let hit { details.append("Page \(hit.page): \(hit.excerpt)") }
+        if matchingPageCount > 0 {
+            details.append("\(matchingPageCount) matching page\(matchingPageCount == 1 ? "" : "s")")
+        }
+        if let hit = hits.first { details.append("Page \(hit.page): \(hit.excerpt)") }
         return details.joined(separator: ", ")
     }
 
@@ -733,6 +747,9 @@ private struct DocumentRow: View {
                         Label(metadata.isFavorite ? "Remove Favorite" : "Favorite", systemImage: metadata.isFavorite ? "star.slash" : "star")
                     }
                     Button("Rename", action: rename)
+                    Button(action: duplicate) {
+                        Label("Duplicate", systemImage: "plus.square.on.square")
+                    }
                     Button("Organize", action: organize)
                     Menu {
                         ForEach(LibraryPDFTool.allCases) { tool in
@@ -798,15 +815,33 @@ private struct DocumentRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 }
-                if let hit {
-                    Text("Page \(hit.page): \(hit.excerpt)")
-                        .font(.caption)
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
-                        .foregroundStyle(.secondary)
+                if !hits.isEmpty {
+                    Text("\(matchingPageCount) matching page\(matchingPageCount == 1 ? "" : "s")")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(FolikTheme.cobalt)
+                    ForEach(Array(hits.prefix(dynamicTypeSize.isAccessibilitySize ? 3 : 2).enumerated()), id: \.offset) { _, hit in
+                        highlightedExcerpt(hit)
+                            .font(.caption)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private func highlightedExcerpt(_ hit: LibrarySearchHit) -> Text {
+        let prefix = Text("Page \(hit.page): ").foregroundColor(.secondary)
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty,
+              let range = hit.excerpt.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) else {
+            return prefix + Text(hit.excerpt).foregroundColor(.secondary)
+        }
+        return prefix
+            + Text(String(hit.excerpt[..<range.lowerBound])).foregroundColor(.secondary)
+            + Text(String(hit.excerpt[range])).bold().foregroundColor(FolikTheme.cobalt)
+            + Text(String(hit.excerpt[range.upperBound...])).foregroundColor(.secondary)
     }
 }
 
