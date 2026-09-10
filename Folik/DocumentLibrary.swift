@@ -23,6 +23,31 @@ final class DocumentLibrary: ObservableObject {
     @Published private(set) var recentlyDeleted: [DeletedDocument] = []
     @Published private(set) var unreadableDeletedCount = 0
     private var trash: RecentlyDeletedStore { RecentlyDeletedStore(root: documentsDirectory.appendingPathComponent(".folik-trash", isDirectory: true)) }
+    @Published private(set) var personalTemplates: [PersonalFormTemplate] = []
+    private var templatesDirectory: URL { documentsDirectory.appendingPathComponent(".folik-templates", isDirectory: true) }
+
+    func refreshTemplates() async throws {
+        let root = templatesDirectory
+        personalTemplates = try await Task.detached { try PersonalTemplateStore.list(in: root) }.value
+    }
+
+    func saveTemplate(_ data: Data, named name: String, clearAnswers: Bool) async throws {
+        guard !isImporting else { throw CocoaError(.fileWriteUnknown) }
+        isImporting = true
+        defer { isImporting = false }
+        let root = templatesDirectory
+        _ = try await Task.detached(priority: .userInitiated) {
+            try PersonalTemplateStore.save(data, named: name, clearAnswers: clearAnswers, in: root)
+        }.value
+        try await refreshTemplates()
+    }
+
+    func deleteTemplate(_ template: PersonalFormTemplate) throws {
+        guard personalTemplates.contains(template), template.url.deletingLastPathComponent().standardizedFileURL == templatesDirectory.standardizedFileURL else { return }
+        try fileManager.removeItem(at: template.url)
+        personalTemplates.removeAll { $0.id == template.id }
+    }
+
     @Published var errorMessage: String?
 
     private let fileManager: FileManager

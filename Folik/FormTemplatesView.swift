@@ -4,14 +4,35 @@ import SwiftUI
 struct FormTemplatesView: View {
     let complete: (LibraryDocument) -> Void
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var library: DocumentLibrary
+    @State private var loadError: String?
+    @State private var deleting: PersonalFormTemplate?
 
     var body: some View {
         NavigationStack {
             List {
+                Section("My Templates") {
+                    if library.personalTemplates.isEmpty {
+                        Text("Open a document’s Forms panel and choose Save as My Template to keep a reusable master.")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    ForEach(library.personalTemplates) { template in
+                        NavigationLink {
+                            FormTemplatePreview(title: template.title, subtitle: "A new copy keeps the defaults saved in this template.", readData: { try Data(contentsOf: template.url) }, complete: complete)
+                        } label: {
+                            Label(template.title, systemImage: "doc.text")
+                                .padding(.vertical, 8)
+                        }
+                        .accessibilityIdentifier("template.personal." + template.title)
+                        .swipeActions { Button("Delete", role: .destructive) { deleting = template } }
+                        .contextMenu { Button("Delete Template", role: .destructive) { deleting = template } }
+                    }
+                    if let loadError { Text(loadError).foregroundStyle(.red) }
+                }
                 Section {
                     ForEach(FormTemplate.allCases) { template in
                         NavigationLink {
-                            FormTemplatePreview(template: template, complete: complete)
+                            FormTemplatePreview(title: template.title, subtitle: template.subtitle, readData: template.data, complete: complete)
                         } label: {
                             Label {
                                 VStack(alignment: .leading, spacing: 5) {
@@ -25,10 +46,21 @@ struct FormTemplatesView: View {
                         }
                         .accessibilityIdentifier("template.\(template.id)")
                     }
-                } footer: {
+                } header: { Text("Included Templates") } footer: {
                     Text("Included on your device. Every form starts as a fresh copy, ready to fill and share. No downloads needed.")
                 }
             }
+            .task {
+                do { try await library.refreshTemplates() } catch { loadError = error.localizedDescription }
+            }
+            .confirmationDialog("Delete template?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
+                Button("Delete Template", role: .destructive) {
+                    if let deleting {
+                        do { try library.deleteTemplate(deleting) } catch { loadError = error.localizedDescription }
+                    }
+                    deleting = nil
+                }
+            } message: { Text("Copies already in your library will remain.") }
             .navigationTitle("Form Templates")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
@@ -37,25 +69,38 @@ struct FormTemplatesView: View {
 }
 
 private struct FormTemplatePreview: View {
-    let template: FormTemplate
+    let title: String
+    let subtitle: String
+    let readData: () throws -> Data
     let complete: (LibraryDocument) -> Void
     @EnvironmentObject private var library: DocumentLibrary
     @State private var preview: UIImage?
+    @State private var pageIndex = 0
+    @State private var pageCount = 1
     @State private var errorMessage: String?
     @State private var creating = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text(template.subtitle).foregroundStyle(.secondary)
+                Text(subtitle).foregroundStyle(.secondary)
                 if let preview {
                     Image(uiImage: preview)
                         .resizable().scaledToFit()
-                        .accessibilityLabel("Blank \(template.title) preview, one page")
+                        .accessibilityLabel("\(title) preview, page \(pageIndex + 1) of \(pageCount)")
                 } else if let errorMessage {
                     ContentUnavailableView("Preview Unavailable", systemImage: "doc", description: Text(errorMessage))
                 } else {
                     ProgressView("Loading preview").frame(maxWidth: .infinity)
+                }
+                if pageCount > 1 {
+                    HStack {
+                        Button("Previous") { pageIndex -= 1 }.disabled(pageIndex == 0)
+                        Spacer()
+                        Text("Page \(pageIndex + 1) of \(pageCount)")
+                        Spacer()
+                        Button("Next") { pageIndex += 1 }.disabled(pageIndex + 1 == pageCount)
+                    }.frame(minHeight: 44)
                 }
                 Text("Fill the fields in Folik, or use Build to customize your copy.")
                     .font(.footnote).foregroundStyle(.secondary)
@@ -65,7 +110,7 @@ private struct FormTemplatePreview: View {
             .frame(maxWidth: .infinity)
         }
         .background(Color(uiColor: .systemGroupedBackground))
-        .navigationTitle(template.title)
+        .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
             Button(action: startForm) {
@@ -82,9 +127,11 @@ private struct FormTemplatePreview: View {
         }
         .interactiveDismissDisabled(creating)
         .navigationBarBackButtonHidden(creating)
-        .task {
+        .task(id: pageIndex) {
             do {
-                guard let page = PDFDocument(data: try template.data())?.page(at: 0) else {
+                let document = PDFDocument(data: try readData())
+                pageCount = document?.pageCount ?? 1
+                guard let page = document?.page(at: pageIndex) else {
                     throw CocoaError(.fileReadCorruptFile)
                 }
                 preview = page.thumbnail(of: CGSize(width: 1224, height: 1584), for: .mediaBox)
@@ -103,7 +150,7 @@ private struct FormTemplatePreview: View {
         creating = true
         Task {
             do {
-                let document = try await library.importConvertedPDF(.preparedPDF(template.data()), named: template.title)
+                let document = try await library.importConvertedPDF(.preparedPDF(readData()), named: title)
                 complete(document)
             } catch {
                 creating = false

@@ -1623,6 +1623,24 @@ final class FolikUITests: XCTestCase {
         capture("template-fill-ready", in: app)
     }
 
+    func testSavePersonalTemplate() {
+        let app = launchApp(additionalArguments: ["--ui-test-fixture", "--ui-test-empty-library"])
+        let browse = app.buttons["library.templates"]
+        XCTAssertTrue(browse.waitForExistence(timeout: 8))
+        if !browse.isHittable { app.swipeUp() }
+        browse.tap()
+        app.buttons["template.workOrder"].tap()
+        app.buttons["template.start"].tap()
+        let saveTemplate = app.buttons["reader.form.saveTemplate"]
+        XCTAssertTrue(saveTemplate.waitForExistence(timeout: 10))
+        if !saveTemplate.isHittable { app.swipeUp() }
+        saveTemplate.tap()
+        XCTAssertTrue(app.textFields["template.name"].waitForExistence(timeout: 5))
+        capture("personal-template-save-options", in: app)
+        app.buttons["template.save"].tap()
+        XCTAssertTrue(saveTemplate.waitForExistence(timeout: 8))
+    }
+
     private func launchApp(
         opening filename: String? = nil,
         additionalArguments: [String] = []

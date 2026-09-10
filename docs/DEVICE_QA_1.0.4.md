@@ -33,3 +33,7 @@ The direct builder, Build/Fill modes, repeated placement, properties, duplicatio
 - Fill single-line and multiline text, check a box, close and reopen, and export. Confirm values remain editable in the exported PDF.
 - Start the same template again; confirm it is blank and the previously filled copy is unchanged.
 - With VoiceOver and larger text, confirm template descriptions, Back, and Start Form remain accessible. Check iPad split view and landscape.
+
+### Personal templates
+
+Save a multipage form both with cleared answers and retained defaults. Restart the app, preview every page, start two copies, and confirm their values are independent. Check saved choices/radio groups in another PDF viewer, template deletion, long names, and VoiceOver access to save options. Page artwork and drawn signatures are retained by design; inspect the save explanation.

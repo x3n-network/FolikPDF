@@ -669,6 +669,7 @@ private struct FormNavigator: View {
     @State private var suggestionMessage: String?
     @State private var suggestionTask: Task<Void, Never>?
     @State private var fieldPendingDeletion: FormField?
+    @State private var savingTemplate = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -763,6 +764,11 @@ private struct FormNavigator: View {
                     }
                 }
 
+                Button("Save as My Template") { savingTemplate = true }
+                    .frame(minHeight: 44)
+                    .disabled(session.isLocked || !session.canFillForms)
+                    .accessibilityIdentifier("reader.form.saveTemplate")
+
                 if session.isModified {
                     Button("Revert unsaved form changes", role: .destructive, action: session.revertFormChanges)
                         .font(.subheadline.weight(.semibold))
@@ -850,6 +856,7 @@ private struct FormNavigator: View {
                 signaturePlaced = true
             }
         }
+        .sheet(isPresented: $savingTemplate) { SavePersonalTemplateView(session: session) }
         .sheet(item: $fieldSetupKind) { kind in
             FormFieldSetupView(kind: kind) { label, isRequired in
                 session.beginFormFieldPlacement(kind, label: label, isRequired: isRequired)

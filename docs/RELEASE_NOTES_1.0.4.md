@@ -115,3 +115,9 @@ Results: `/tmp/folik-forms-regression.xcresult` (the sample structure failure be
 - Validation: iPhone preview/start UI and initial template persistence passed in `/tmp/folik-templates-tests.xcresult`. iPad preview/start passed in `/tmp/folik-templates-ipad.xcresult`; corrected a test selector that tapped a background control, then gallery navigation and expanded single-line, multiline, and checkbox persistence passed in `/tmp/folik-templates-ipad-final.xcresult`. Tests verify canonical AcroForm values after saving, fresh blank copies, unique destinations, and unchanged masters. Inspected blank and filled page renders for all three templates.
 - Release simulator build passed (`/tmp/folik-templates-release.log`), and all three bundled assets match the source PDFs. Physical-device airplane-mode and VoiceOver checks remain in the device QA checklist.
 - Final iPhone regression checks passed for the populated-library template gallery and the existing sample signing/sharing flow (`/tmp/folik-templates-regression.xcresult`).
+
+## My Templates
+
+Forms now offers Save as My Template with cleared answers or retained defaults. Personal masters live separately from working documents, support multipage previews, and can be deleted without removing library copies. Source page content and drawn annotations remain; digitally signed inputs require an unsigned original. Template names use collision-safe suffixes.
+
+Validation: save UI and bundled-template regression passed in `/tmp/folik-personal-tests2.xcresult`; after correcting widget subtype matching, canonical blank/default text and checkbox values, restart discovery, source preservation, and independent copies passed in `/tmp/folik-personal-final.xcresult`.

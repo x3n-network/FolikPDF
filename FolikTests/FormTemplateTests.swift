@@ -52,6 +52,48 @@ final class FormTemplateTests: XCTestCase {
         }
     }
 
+    func testPersonalTemplatesClearOrKeepValuesAndPersistIndependently() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pdf = try XCTUnwrap(PDFDocument(data: FormTemplate.workOrder.data()))
+        let widgets = try XCTUnwrap(pdf.page(at: 0)).annotations
+        let text = try XCTUnwrap(widgets.first { $0.fieldName == "Customer or team" })
+        text.widgetStringValue = "My Company"
+        text.widgetDefaultStringValue = "Old Default"
+        let check = try XCTUnwrap(widgets.first { $0.widgetFieldType == .button })
+        check.buttonWidgetState = .onState
+        let source = try XCTUnwrap(pdf.dataRepresentation())
+        let library = DocumentLibrary(documentsDirectory: root)
+        try await library.saveTemplate(source, named: "Weekly Work", clearAnswers: true)
+        try await library.saveTemplate(source, named: "Weekly Work", clearAnswers: false)
+        XCTAssertEqual(library.personalTemplates.count, 2)
+        XCTAssertNotEqual(library.personalTemplates[0].url, library.personalTemplates[1].url)
+        XCTAssertTrue(library.documents.isEmpty)
+        let blank = try XCTUnwrap(PDFDocument(url: library.personalTemplates[0].url))
+        let kept = try XCTUnwrap(PDFDocument(url: library.personalTemplates[1].url))
+        for template in library.personalTemplates {
+            let attachment = XCTAttachment(data: try Data(contentsOf: template.url), uniformTypeIdentifier: "com.adobe.pdf")
+            attachment.name = template.title; attachment.lifetime = .keepAlways; add(attachment)
+        }
+        XCTAssertEqual(try canonicalValues(blank)["Customer or team"], "")
+        XCTAssertEqual(try canonicalValues(blank)["Work completed"], "Off")
+        XCTAssertEqual(try canonicalValues(kept)["Customer or team"], "My Company")
+        XCTAssertEqual(try canonicalValues(kept)["Work completed"], "Yes")
+        XCTAssertEqual(try canonicalValues(blank).count, 10)
+        XCTAssertEqual(blank.page(at: 0)?.annotations.first { $0.fieldName == "Customer or team" }?.widgetDefaultStringValue, "")
+        let restored = DocumentLibrary(documentsDirectory: root)
+        try await restored.refreshTemplates()
+        XCTAssertEqual(restored.personalTemplates, library.personalTemplates)
+        let master = library.personalTemplates[0]
+        let data = try Data(contentsOf: master.url)
+        let copy = try await library.importConvertedPDF(.preparedPDF(data), named: master.title)
+        try library.deleteTemplate(master)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: copy.url.path))
+        XCTAssertEqual(try Data(contentsOf: copy.url), data)
+        XCTAssertEqual(text.widgetStringValue, "My Company")
+    }
+
     private func canonicalValues(_ document: PDFDocument) throws -> [String: String] {
         let catalog = try XCTUnwrap(document.documentRef?.catalog)
         var acroForm: CGPDFDictionaryRef?
