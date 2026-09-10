@@ -13,12 +13,12 @@ struct FolikApp: App {
                 .environmentObject(library)
         }
 
-        WindowGroup("PDF", id: "pdf", for: String.self) { $filename in
+        WindowGroup("PDF", id: "pdf", for: String.self) { $documentReference in
             FolikSceneRoot(appLock: appLock, becameActive: {
                 library.refresh()
                 await importSharedPDFsIfAppropriate()
             }) {
-                DocumentWindowView(filename: filename)
+                DocumentWindowView(reference: documentReference)
             }
                 .environmentObject(library)
         }
@@ -74,27 +74,42 @@ private struct FolikSceneRoot<Content: View>: View {
 }
 
 private struct DocumentWindowView: View {
-    let filename: String?
+    let reference: String?
     @EnvironmentObject private var library: DocumentLibrary
+    @State private var handledDebugRename = false
 
     private var document: LibraryDocument? {
-        guard let filename else { return nil }
-        return library.documents.first { $0.url.lastPathComponent == filename }
+        guard let reference else { return nil }
+        if let identifier = UUID(uuidString: reference) {
+            return library.document(id: identifier)
+        }
+        // Supports filename-valued scenes created by early 1.0.3 development builds.
+        return library.documents.first { $0.url.lastPathComponent == reference }
     }
 
     var body: some View {
         NavigationStack {
             if let document {
                 ReaderView(item: document)
+                    .id(document.url)
             } else {
                 ContentUnavailableView(
                     "PDF Unavailable",
                     systemImage: "doc.badge.ellipsis",
-                    description: Text("This PDF may have been renamed or removed from Folik.")
+                    description: Text("This PDF may have been removed from Folik.")
                 )
                 .navigationTitle("Folik")
             }
         }
         .tint(FolikTheme.cobalt)
+        #if DEBUG
+        .task {
+            guard !handledDebugRename,
+                  ProcessInfo.processInfo.arguments.contains("--ui-test-rename-window-document"),
+                  let document else { return }
+            handledDebugRename = true
+            _ = try? library.rename(document, to: "Renamed Window Test")
+        }
+        #endif
     }
 }

@@ -77,7 +77,7 @@ Your documents and search index remain on your device. No accounts, ads, analyti
 ## iPad windows and drag and drop
 
 - Adds **Open in New Window** to document actions when iPadOS supports multiple scenes.
-- Keys dedicated windows by document filename, bringing an existing window forward when the same PDF is requested again.
+- Gives each library PDF a private stable identifier so dedicated windows survive document renames and requesting the same PDF brings its existing window forward.
 - Keeps navigation and reader panels independent in each window while coordinating App Lock across every active scene.
 - Starts the App Lock relock timer only after the last Folik scene enters the background, preventing one window from locking another active window.
 - Accepts file-backed PDF drops across the full library with visible, Dynamic Type-friendly feedback and the existing Files picker as an accessible alternative.
@@ -88,15 +88,15 @@ Your documents and search index remain on your device. No accounts, ads, analyti
 - Documents, extracted search text, authentication state, and processing remain on-device.
 - PDFs awaiting import from the share extension remain in the private Folik App Group container.
 - The search index is stored in the disposable Caches directory with iOS file protection and is never required to open a document.
-- Existing PDFs and library metadata remain compatible; no document rewrite or migration is performed.
+- Existing PDFs and library metadata remain compatible; Folik adds missing identifiers to its private library metadata without rewriting documents.
 
 ## Validation
 
 - Debug and Release generic iOS Simulator builds succeed, and Xcode static analysis passes.
-- The complete simulator unit suite passed 119 tests; one optional private-document fixture test was skipped.
+- The complete simulator unit suite passed 121 tests; one optional private-document fixture test was skipped.
 - The complete iPhone 17 UI suite passed 45 tests; the optional App Store screenshot fixture and iPad-only multi-window test were skipped.
 - Focused iPad mini UI checks passed for multi-page search results, document duplication, bulk recovery, and the lock-screen cover.
 - Focused iPhone and iPad mini UI checks passed for inspecting, previewing, saving, and preserving the original during sanitizing.
-- New unit coverage exercises search-index persistence and invalidation, document duplication, App Lock enrollment, startup state, single- and multi-scene relock delays, privacy reporting, catalog-level active/embedded content detection, sanitized-output structure, share-inbox validation and transfer, and file-backed drop staging and cleanup.
+- New unit coverage exercises search-index persistence and invalidation, stable document-identity migration and repair, document duplication, App Lock enrollment, startup state, single- and multi-scene relock delays, privacy reporting, catalog-level active/embedded content detection, sanitized-output structure, share-inbox validation and transfer, and file-backed drop staging and cleanup.
 - App Lock authentication passed deterministic automated coverage and a physical-iPhone Face ID smoke test. Touch ID remains a manual release check.
 - A signed generic-device build verifies matching App Group entitlements and provisioning for Folik and its embedded share extension.

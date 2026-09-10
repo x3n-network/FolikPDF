@@ -230,6 +230,7 @@ final class DocumentLibrary: ObservableObject {
     var folders: [String] { Array(Set(documents.map { metadata(for: $0).folder }.filter { !$0.isEmpty })).sorted() }
     var tags: [String] { Array(Set(documents.flatMap { metadata(for: $0).tags })).sorted() }
     func metadata(for document: LibraryDocument) -> LibraryMetadata { organization[document.url.lastPathComponent] ?? LibraryMetadata() }
+    func document(id: UUID) -> LibraryDocument? { documents.first { $0.id == id } }
     func organize(_ document: LibraryDocument, folder: String, tags: [String]) throws {
         try organize([document], folder: folder, tags: tags)
     }
@@ -242,7 +243,9 @@ final class DocumentLibrary: ObservableObject {
         var records = try LibraryOrganization.load(from: organizationURL)
         for document in documents {
             var updated = validated
-            updated.isFavorite = records[document.url.lastPathComponent]?.isFavorite ?? false
+            let existing = records[document.url.lastPathComponent]
+            updated.isFavorite = existing?.isFavorite ?? false
+            updated.documentID = existing?.documentID ?? document.id
             records[document.url.lastPathComponent] = updated
         }
         try LibraryOrganization.save(records, to: organizationURL)
@@ -256,6 +259,7 @@ final class DocumentLibrary: ObservableObject {
             guard self.documents.contains(where: { $0.url == document.url }) else { throw CocoaError(.fileNoSuchFile) }
             var metadata = records[document.url.lastPathComponent] ?? LibraryMetadata()
             metadata.isFavorite = isFavorite
+            metadata.documentID = metadata.documentID ?? document.id
             records[document.url.lastPathComponent] = metadata
         }
         try LibraryOrganization.save(records, to: organizationURL)
@@ -271,12 +275,13 @@ final class DocumentLibrary: ObservableObject {
         guard !fileManager.fileExists(atPath: destination.path) else { throw LibraryOrganizationError.nameAlreadyExists }
 
         var records = try LibraryOrganization.load(from: organizationURL)
-        let metadata = records.removeValue(forKey: document.url.lastPathComponent)
-        if let metadata { records[fileName] = metadata }
+        var metadata = records.removeValue(forKey: document.url.lastPathComponent) ?? LibraryMetadata()
+        metadata.documentID = metadata.documentID ?? document.id
+        records[fileName] = metadata
 
         try fileManager.moveItem(at: document.url, to: destination)
         do {
-            if metadata != nil { try LibraryOrganization.save(records, to: organizationURL) }
+            try LibraryOrganization.save(records, to: organizationURL)
         } catch {
             try? fileManager.moveItem(at: destination, to: document.url)
             throw error
@@ -299,13 +304,12 @@ final class DocumentLibrary: ObservableObject {
             fileManager: fileManager
         )
         var records = try LibraryOrganization.load(from: organizationURL)
-        let metadata = records[document.url.lastPathComponent]
+        var metadata = records[document.url.lastPathComponent] ?? LibraryMetadata()
+        metadata.documentID = UUID()
         try fileManager.copyItem(at: document.url, to: destination)
         do {
-            if let metadata {
-                records[destination.lastPathComponent] = metadata
-                try LibraryOrganization.save(records, to: organizationURL)
-            }
+            records[destination.lastPathComponent] = metadata
+            try LibraryOrganization.save(records, to: organizationURL)
         } catch {
             try? fileManager.removeItem(at: destination)
             throw error
@@ -322,8 +326,10 @@ final class DocumentLibrary: ObservableObject {
         defer { refresh() }
         do {
             let previous = try LibraryOrganization.load(from: organizationURL)
+            var metadata = previous[document.url.lastPathComponent] ?? LibraryMetadata()
+            metadata.documentID = metadata.documentID ?? document.id
             let record = DeletedDocument(id: UUID(), originalFilename: document.url.lastPathComponent,
-                deletedAt: Date(), metadata: previous[document.url.lastPathComponent] ?? LibraryMetadata(),
+                deletedAt: Date(), metadata: metadata,
                 bookmarks: Array(bookmarkStore.bookmarks(for: document.url, pageCount: document.pageCount)),
                 readerState: readerStateStore.snapshot(for: document.url))
             try trash.archive(record, from: document.url)
@@ -349,7 +355,9 @@ final class DocumentLibrary: ObservableObject {
         let destination = Self.uniqueDestination(named: record.originalFilename, in: documentsDirectory, fileManager: fileManager)
         let previous = try LibraryOrganization.load(from: organizationURL)
         var records = previous
-        records[destination.lastPathComponent] = record.metadata
+        var metadata = record.metadata
+        metadata.documentID = metadata.documentID ?? UUID()
+        records[destination.lastPathComponent] = metadata
         // Save metadata first: an interruption after moving the PDF cannot lose its organization.
         try LibraryOrganization.save(records, to: organizationURL)
         let oldState = readerStateStore.snapshot(for: destination)
@@ -385,18 +393,20 @@ final class DocumentLibrary: ObservableObject {
         do {
             try fileManager.createDirectory(at: documentsDirectory, withIntermediateDirectories: true)
             let keys: Set<URLResourceKey> = [.contentModificationDateKey, .fileSizeKey, .isRegularFileKey]
-            documents = try fileManager.contentsOfDirectory(
+            let previousIDs = Dictionary(uniqueKeysWithValues: documents.map { ($0.url.standardizedFileURL, $0.id) })
+            let discovered: [LibraryDocument] = try fileManager.contentsOfDirectory(
                 at: documentsDirectory,
                 includingPropertiesForKeys: Array(keys),
                 options: [.skipsHiddenFiles]
             )
             .filter { $0.pathExtension.localizedCaseInsensitiveCompare("pdf") == .orderedSame }
-            .compactMap { url in
+            .compactMap { url -> LibraryDocument? in
                 let values = try? url.resourceValues(forKeys: keys)
                 guard values?.isRegularFile != false,
                       let provider = CGDataProvider(url: url as CFURL),
                       let pdf = CGPDFDocument(provider) else { return nil }
                 return LibraryDocument(
+                    id: previousIDs[url.standardizedFileURL] ?? UUID(),
                     url: url,
                     pageCount: pdf.numberOfPages,
                     fileSize: Int64(values?.fileSize ?? 0),
@@ -404,6 +414,7 @@ final class DocumentLibrary: ObservableObject {
                 )
             }
             .sorted { $0.modifiedAt > $1.modifiedAt }
+            documents = discovered
             let inventory = try trash.inventory()
             recentlyDeleted = inventory.documents
             unreadableDeletedCount = inventory.unreadable
@@ -416,6 +427,27 @@ final class DocumentLibrary: ObservableObject {
                     bookmarkStore.removeBookmarks(for: source)
                     readerStateStore.removeState(for: source)
                 }
+            }
+            var usedIDs: Set<UUID> = []
+            documents = discovered.map { document in
+                let filename = document.url.lastPathComponent
+                var metadata = records[filename] ?? LibraryMetadata()
+                let identifier: UUID
+                if let existing = metadata.documentID, usedIDs.insert(existing).inserted {
+                    identifier = existing
+                } else {
+                    identifier = UUID()
+                    metadata.documentID = identifier
+                    usedIDs.insert(identifier)
+                }
+                records[filename] = metadata
+                return LibraryDocument(
+                    id: identifier,
+                    url: document.url,
+                    pageCount: document.pageCount,
+                    fileSize: document.fileSize,
+                    modifiedAt: document.modifiedAt
+                )
             }
             if records != previous { try LibraryOrganization.save(records, to: organizationURL) }
             organization = records

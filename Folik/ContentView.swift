@@ -250,7 +250,7 @@ struct ContentView: View {
             openRecentlyDeleted: { showingDeleted = true },
             openDocument: { path.append($0) },
             openDocumentWindow: supportsMultipleWindows ? { document in
-                openWindow(id: "pdf", value: document.url.lastPathComponent)
+                openWindow(id: "pdf", value: document.id.uuidString)
             } : nil,
             deleteDocument: library.delete,
             openDocumentTool: { tool, document in

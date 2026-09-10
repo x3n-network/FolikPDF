@@ -100,7 +100,7 @@ Queued PDFs move into the local Folik library the next time the app is active. D
 
 ### iPad windows and drag and drop
 
-On iPad, choose **Open in New Window** from a document's actions to place that PDF in a dedicated window. Open different documents side by side with Split View or arrange them with Stage Manager. Requesting the same PDF again brings its existing dedicated window forward instead of creating duplicates. Each window keeps its own reader navigation and panels.
+On iPad, choose **Open in New Window** from a document's actions to place that PDF in a dedicated window. Open different documents side by side with Split View or arrange them with Stage Manager. Requesting the same PDF again brings its existing dedicated window forward instead of creating duplicates. Each window keeps its own reader navigation and panels, and remains connected to its PDF if the document is renamed.
 
 Drop one or more PDFs from Files or another app anywhere over the Folik library to import them. Folik shows a full-library drop target, validates up to 20 readable PDFs and 100 MB total, copies them off the main thread, and removes temporary transfer files afterward. A single imported PDF opens immediately, matching the Files picker. The visible **Choose PDFs from Files** action remains available without dragging, and source files stay unchanged.
 

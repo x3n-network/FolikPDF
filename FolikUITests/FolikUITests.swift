@@ -35,7 +35,7 @@ final class FolikUITests: XCTestCase {
 
     func testOpenDocumentInNewWindowOnIPad() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["--ui-test-fixture"]
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-rename-window-document"]
         app.launch()
 
         XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
@@ -46,7 +46,7 @@ final class FolikUITests: XCTestCase {
         }
         openInNewWindow.tap()
 
-        XCTAssertTrue(app.navigationBars["Folik UI Test"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.navigationBars["Renamed Window Test"].waitForExistence(timeout: 8))
         XCTAssertGreaterThanOrEqual(app.windows.count, 2)
     }
 

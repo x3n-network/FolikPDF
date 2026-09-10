@@ -53,6 +53,44 @@ final class LibraryOrganizationTests: XCTestCase {
         XCTAssertEqual(metadata.folder, "Work")
         XCTAssertEqual(metadata.tags, ["2026"])
         XCTAssertFalse(metadata.isFavorite)
+        XCTAssertEqual(metadata.documentID, library.documents.first?.id)
+        XCTAssertEqual(try LibraryOrganization.load(from: store)["Example.pdf"]?.documentID, metadata.documentID)
+    }
+
+    func testDuplicateStoredDocumentIdentifiersAreRepairedWithoutChangingPDFs() throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let first = root.appendingPathComponent("First.pdf")
+        let second = root.appendingPathComponent("Second.pdf")
+        try write("First", to: first)
+        try write("Second", to: second)
+        let firstBytes = try Data(contentsOf: first)
+        let secondBytes = try Data(contentsOf: second)
+        let duplicatedID = UUID()
+        let store = root.appendingPathComponent(".folik-library.json")
+        try LibraryOrganization.save([
+            "First.pdf": LibraryMetadata(documentID: duplicatedID),
+            "Second.pdf": LibraryMetadata(documentID: duplicatedID)
+        ], to: store)
+
+        let library = DocumentLibrary(documentsDirectory: root)
+
+        XCTAssertEqual(Set(library.documents.map(\.id)).count, 2)
+        XCTAssertEqual(Set(try LibraryOrganization.load(from: store).values.compactMap(\.documentID)).count, 2)
+        XCTAssertEqual(try Data(contentsOf: first), firstBytes)
+        XCTAssertEqual(try Data(contentsOf: second), secondBytes)
+    }
+
+    func testIdentityMigrationDoesNotDiscardMetadataForAnUnreadablePDF() throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        try Data("temporarily unreadable".utf8).write(to: root.appendingPathComponent("Archive.pdf"))
+        let store = root.appendingPathComponent(".folik-library.json")
+        let record = LibraryMetadata(folder: "Records", tags: ["archive"], documentID: UUID())
+        try LibraryOrganization.save(["Archive.pdf": record], to: store)
+
+        let library = DocumentLibrary(documentsDirectory: root)
+
+        XCTAssertTrue(library.documents.isEmpty)
+        XCTAssertEqual(try LibraryOrganization.load(from: store)["Archive.pdf"], record)
     }
 
     func testBulkOrganizationPreservesFavorite() throws {

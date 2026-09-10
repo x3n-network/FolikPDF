@@ -68,6 +68,10 @@ final class DocumentLibraryTests: XCTestCase {
         XCTAssertEqual(library.metadata(for: copy).folder, "Work")
         XCTAssertEqual(library.metadata(for: copy).tags, ["review"])
         XCTAssertTrue(library.metadata(for: copy).isFavorite)
+        XCTAssertNotEqual(copy.id, original.id)
+        let reopened = DocumentLibrary(documentsDirectory: libraryDirectory)
+        XCTAssertEqual(reopened.documents.first { $0.url.lastPathComponent == "Report.pdf" }?.id, original.id)
+        XCTAssertEqual(reopened.documents.first { $0.url.lastPathComponent == "Report Copy.pdf" }?.id, copy.id)
     }
 
     func testNonPDFInputIsIgnored() async throws {
@@ -187,9 +191,11 @@ final class DocumentLibraryTests: XCTestCase {
         try library.setFavorite(true, for: [original])
         bookmarkStore.save([1], for: original.url)
         readerStateStore.save(ReaderState(pageIndex: 1, layout: .twoUp), for: original.url)
+        let documentID = original.id
 
         let renamed = try library.rename(original, to: "Final Report")
 
+        XCTAssertEqual(renamed.id, documentID)
         XCTAssertEqual(renamed.url.lastPathComponent, "Final Report.pdf")
         XCTAssertFalse(FileManager.default.fileExists(atPath: original.url.path))
         XCTAssertEqual(library.metadata(for: renamed).folder, "Work")
@@ -197,6 +203,12 @@ final class DocumentLibraryTests: XCTestCase {
         XCTAssertTrue(library.metadata(for: renamed).isFavorite)
         XCTAssertEqual(bookmarkStore.bookmarks(for: renamed.url, pageCount: 2), [1])
         XCTAssertEqual(readerStateStore.state(for: renamed.url, pageCount: 2), ReaderState(pageIndex: 1, layout: .twoUp))
+        let reopened = DocumentLibrary(
+            documentsDirectory: libraryDirectory,
+            bookmarkStore: bookmarkStore,
+            readerStateStore: readerStateStore
+        )
+        XCTAssertEqual(reopened.document(id: documentID)?.url.lastPathComponent, "Final Report.pdf")
     }
 
     func testRenameRejectsAnExistingNameWithoutChangingFiles() async throws {

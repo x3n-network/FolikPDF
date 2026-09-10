@@ -4,15 +4,17 @@ nonisolated struct LibraryMetadata: Codable, Equatable, Sendable {
     var folder = ""
     var tags: [String] = []
     var isFavorite = false
+    var documentID: UUID?
 
     private enum CodingKeys: String, CodingKey {
-        case folder, tags, isFavorite
+        case folder, tags, isFavorite, documentID
     }
 
-    init(folder: String = "", tags: [String] = [], isFavorite: Bool = false) {
+    init(folder: String = "", tags: [String] = [], isFavorite: Bool = false, documentID: UUID? = nil) {
         self.folder = folder
         self.tags = tags
         self.isFavorite = isFavorite
+        self.documentID = documentID
     }
 
     init(from decoder: Decoder) throws {
@@ -20,6 +22,7 @@ nonisolated struct LibraryMetadata: Codable, Equatable, Sendable {
         folder = try container.decodeIfPresent(String.self, forKey: .folder) ?? ""
         tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
         isFavorite = try container.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
+        documentID = try container.decodeIfPresent(UUID.self, forKey: .documentID)
     }
     static func validated(folder: String, tags: [String]) throws -> Self {
         let folder = folder.trimmingCharacters(in: .whitespacesAndNewlines)
