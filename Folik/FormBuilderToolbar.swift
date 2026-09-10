@@ -7,6 +7,7 @@ struct FormBuilderToolbar: View {
     let fill: () -> Void
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var editingProperties = false
+    @State private var layoutTools = false
     @State private var label = ""
     @State private var required = false
 
@@ -16,6 +17,7 @@ struct FormBuilderToolbar: View {
                 ScrollView(.horizontal) {
                     HStack(spacing: 12) {
                         Button("Fields", action: showFields).accessibilityIdentifier("reader.panel.forms")
+                        layoutButton
                         Button("Fill", action: fill).accessibilityIdentifier("builder.fill")
                         Menu("Add field") {
                             ForEach(FormFieldPlacementKind.allCases) { kind in
@@ -45,6 +47,7 @@ struct FormBuilderToolbar: View {
                     HStack(spacing: 8) {
                         Button("Fields", action: showFields)
                             .accessibilityIdentifier("reader.panel.forms")
+                        layoutButton
                         Spacer(minLength: 0)
                         Button(action: session.undoAnnotationAction) { Image(systemName: "arrow.uturn.backward").frame(width: 44, height: 44) }
                             .disabled(!session.canUndoAnnotation).accessibilityLabel("Undo form change")
@@ -106,6 +109,7 @@ struct FormBuilderToolbar: View {
         }
         .font(.subheadline)
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+        .sheet(isPresented: $layoutTools) { FormLayoutToolsView(session: session) }
         .sheet(isPresented: $editingProperties) {
             NavigationStack {
                 Form {
@@ -129,6 +133,12 @@ struct FormBuilderToolbar: View {
                 }
             }
         }
+    }
+
+    private var layoutButton: some View {
+        Button("Layout tools") { layoutTools = true }
+            .disabled(session.formFields.isEmpty)
+            .accessibilityIdentifier("builder.layoutTools")
     }
 
     @ViewBuilder private var placementActions: some View {

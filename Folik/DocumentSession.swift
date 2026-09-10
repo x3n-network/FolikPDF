@@ -242,7 +242,9 @@ private struct FormFieldProperties {
     let flags: Int
 }
 
-private enum AnnotationHistoryAction {
+private indirect enum AnnotationHistoryAction {
+    case batch([AnnotationHistoryAction])
+    case fieldOrder(from: [(PDFAnnotation, Int?)], to: [(PDFAnnotation, Int?)])
     case formProperties(PDFAnnotation, from: FormFieldProperties, to: FormFieldProperties)
     case added(PDFAnnotation, pageIndex: Int)
     case removed(PDFAnnotation, pageIndex: Int)
@@ -736,6 +738,61 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         annotation.setValue(properties.label, forAnnotationKey: .widgetTextLabelUI)
         annotation.setValue(NSNumber(value: properties.flags), forAnnotationKey: .widgetFieldFlags)
         refreshFormState(markModified: false)
+    }
+
+    @discardableResult
+    func arrangeFormFields(ids: Set<String>, action: FormLayoutAction) -> Bool {
+        guard formMode == .build, !isLocked, canFillForms else { return false }
+        let fields = formFields.filter { ids.contains($0.id) && !$0.isReadOnly }
+        guard fields.count == ids.count, let first = fields.first,
+              fields.allSatisfy({ $0.pageIndex == first.pageIndex }),
+              let page = document?.page(at: first.pageIndex),
+              let bounds = action.arrange(fields.map { $0.annotation.bounds }),
+              bounds.allSatisfy({ page.bounds(for: .cropBox).contains($0) }) else { return false }
+        var actions: [AnnotationHistoryAction] = []
+        for (field, bounds) in zip(fields, bounds) where field.annotation.bounds != bounds {
+            let before = AnnotationGeometry(bounds: field.annotation.bounds, paths: [])
+            let after = AnnotationGeometry(bounds: bounds, paths: [])
+            field.annotation.bounds = bounds
+            actions.append(.transformed(field.annotation, pageIndex: field.pageIndex, from: before, to: after))
+        }
+        guard !actions.isEmpty else { return true }
+        recordAnnotationAction(.batch(actions))
+        finishAnnotationGeometryChange()
+        return true
+    }
+
+    func setFormFillOrder(_ ids: [String]) {
+        guard formMode == .build, !isLocked, canFillForms,
+              ids.count == formFields.count, Set(ids).count == ids.count,
+              Set(ids) == Set(formFields.map(\.id)), ids != formFields.map(\.id) else { return }
+        let key = PDFAnnotationKey(rawValue: "/FolikFillOrder")
+        let old = formFields.map { ($0.annotation, ($0.annotation.value(forAnnotationKey: key) as? NSNumber)?.intValue) }
+        let byID = Dictionary(uniqueKeysWithValues: formFields.map { ($0.id, $0.annotation) })
+        let new: [(PDFAnnotation, Int?)] = ids.enumerated().compactMap { index, id in
+            byID[id].map { ($0, Optional(index)) }
+        }
+        applyFieldOrder(new)
+        recordAnnotationAction(.fieldOrder(from: old, to: new))
+        finishAnnotationGeometryChange()
+    }
+
+    private func applyFieldOrder(_ values: [(PDFAnnotation, Int?)]) {
+        let key = PDFAnnotationKey(rawValue: "/FolikFillOrder")
+        for (annotation, order) in values {
+            if let order { annotation.setValue(NSNumber(value: order), forAnnotationKey: key) }
+            else { annotation.removeValue(forAnnotationKey: key) }
+        }
+        refreshFormState(markModified: false)
+    }
+
+    private static func orderedFormFields(_ fields: [FormField]) -> [FormField] {
+        let key = PDFAnnotationKey(rawValue: "/FolikFillOrder")
+        return fields.enumerated().sorted { lhs, rhs in
+            let left = (lhs.element.annotation.value(forAnnotationKey: key) as? NSNumber)?.intValue ?? Int.max
+            let right = (rhs.element.annotation.value(forAnnotationKey: key) as? NSNumber)?.intValue ?? Int.max
+            return left == right ? lhs.offset < rhs.offset : left < right
+        }.map(\.element)
     }
 
     /// Snap matching edges within six PDF points. Used only for form dragging.
@@ -1532,6 +1589,8 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
 
     private func apply(_ action: AnnotationHistoryAction) {
         switch action {
+        case .batch(let actions): actions.forEach { apply($0) }
+        case .fieldOrder(_, let to): applyFieldOrder(to)
         case .formProperties(let annotation, _, let to):
             applyFormProperties(to, to: annotation)
         case .added(let annotation, let pageIndex):
@@ -1549,6 +1608,8 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
 
     private func applyInverse(of action: AnnotationHistoryAction) {
         switch action {
+        case .batch(let actions): actions.reversed().forEach { applyInverse(of: $0) }
+        case .fieldOrder(let from, _): applyFieldOrder(from)
         case .formProperties(let annotation, let from, _):
             applyFormProperties(from, to: annotation)
         case .added(let annotation, let pageIndex):
@@ -1792,7 +1853,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
 
     private func configureForms(in document: PDFDocument, preparedFields: [FormField]? = nil) {
         canFillForms = document.allowsFormFieldEntry
-        formFields = preparedFields ?? Self.formFields(in: document)
+        formFields = Self.orderedFormFields(preparedFields ?? Self.formFields(in: document))
         if Self.containsXFA(in: document) {
             formCompatibilityNotice = formFields.isEmpty
                 ? "This PDF uses an XFA form, which iOS cannot fill."
@@ -1859,7 +1920,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
                 ))
             }
         }
-        return fields
+        return orderedFormFields(fields)
     }
 
     private static func nearbyFormLabel(

@@ -34,6 +34,47 @@ final class Release104Tests: XCTestCase {
                                fileSize: Int64(values.fileSize ?? 0), modifiedAt: values.contentModificationDate ?? .distantPast)
     }
 
+    func testBulkFormLayoutUndoAndSavedFillOrder() async throws {
+        let url = try pdf("Layout", pages: ["Arrange fields"])
+        let seed = DocumentSession(item: try item(url))
+        for title in ["A", "B", "C"] {
+            seed.beginFormFieldPlacement(.text, label: title, isRequired: false)
+            seed.placeAnnotationAtCurrentPageCenter()
+        }
+        let original = [CGRect(x: 20, y: 250, width: 30, height: 24), CGRect(x: 80, y: 170, width: 40, height: 30), CGRect(x: 180, y: 80, width: 50, height: 36)]
+        for (field, bounds) in zip(seed.formFields, original) { field.annotation.bounds = bounds }
+        seed.formFields[0].annotation.widgetStringValue = "Value A"
+        XCTAssertTrue(try XCTUnwrap(seed.document).write(to: url))
+        let session = DocumentSession(item: try item(url))
+        session.setFormMode(.build)
+        let ids = Set(session.formFields.map(\.id))
+        XCTAssertTrue(session.arrangeFormFields(ids: ids, action: .left))
+        XCTAssertEqual(session.formFields.map { $0.annotation.bounds.minX }, [20, 20, 20])
+        session.undoAnnotationAction()
+        XCTAssertEqual(session.formFields.map { $0.annotation.bounds }, original)
+        session.redoAnnotationAction()
+        XCTAssertEqual(session.formFields.map { $0.annotation.bounds.minX }, [20, 20, 20])
+        session.undoAnnotationAction()
+        XCTAssertTrue(session.arrangeFormFields(ids: ids, action: .horizontalSpacing))
+        XCTAssertEqual(session.formFields.map { $0.annotation.bounds.minX }, [20, 95, 180])
+        session.undoAnnotationAction()
+        XCTAssertTrue(session.arrangeFormFields(ids: ids, action: .size))
+        XCTAssertTrue(session.formFields.allSatisfy { $0.annotation.bounds.size == original[0].size })
+        session.undoAnnotationAction()
+        let reversed = Array(session.formFields.map(\.id).reversed())
+        session.setFormFillOrder(reversed)
+        XCTAssertEqual(session.formFields.map(\.title), ["C", "B", "A"])
+        session.undoAnnotationAction()
+        XCTAssertEqual(session.formFields.map(\.title), ["A", "B", "C"])
+        session.redoAnnotationAction()
+        let saved = await session.saveForSharing()
+        XCTAssertTrue(saved)
+        let reopened = DocumentSession(item: try item(url))
+        XCTAssertEqual(reopened.formFields.map(\.title), ["C", "B", "A"])
+        XCTAssertEqual(reopened.formFields.last?.annotation.widgetStringValue, "Value A")
+        XCTAssertNil(FormLayoutAction.horizontalSpacing.arrange([CGRect(x: 0, y: 0, width: 50, height: 10), CGRect(x: 5, y: 0, width: 50, height: 10), CGRect(x: 10, y: 0, width: 50, height: 10)]))
+    }
+
     func testFormWorkingCopyCanBeRenamedAfterEditingWithoutChangingSource() async throws {
         let source = try pdf("Source", pages: ["Original form"])
         let data = try Data(contentsOf: source)

@@ -1654,6 +1654,35 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(saveTemplate.waitForExistence(timeout: 8))
     }
 
+    func testFormLayoutToolsAndFillOrder() {
+        let app = launchApp(additionalArguments: ["--ui-test-fixture", "--ui-test-empty-library"])
+        let browse = app.buttons["library.templates"]
+        XCTAssertTrue(browse.waitForExistence(timeout: 8))
+        if !browse.isHittable { app.swipeUp() }
+        browse.tap()
+        let work = app.buttons["template.workOrder"]
+        if !work.isHittable { app.swipeUp() }
+        work.tap()
+        app.buttons["template.start"].tap()
+        XCTAssertTrue(app.segmentedControls["reader.form.mode"].waitForExistence(timeout: 10))
+        app.segmentedControls["reader.form.mode"].buttons["Build"].tap()
+        app.buttons["reader.form.editLayout"].tap()
+        XCTAssertTrue(app.buttons["builder.layoutTools"].waitForExistence(timeout: 5))
+        app.buttons["builder.layoutTools"].tap()
+        XCTAssertTrue(app.navigationBars["Form Layout Tools"].waitForExistence(timeout: 5))
+        app.switches["layout.field.Work order number"].tap()
+        app.switches["layout.field.Date"].tap()
+        for _ in 0..<4 where !app.buttons["layout.width"].isHittable { app.swipeUp() }
+        app.buttons["layout.width"].tap()
+        app.navigationBars["Form Layout Tools"].buttons["Undo"].tap()
+        app.swipeDown()
+        app.swipeDown()
+        app.segmentedControls.buttons["Fill order"].tap()
+        app.buttons["Move Work order number later"].tap()
+        capture("form-fill-order", in: app)
+        app.navigationBars["Form Layout Tools"].buttons["Done"].tap()
+    }
+
     private func launchApp(
         opening filename: String? = nil,
         additionalArguments: [String] = []

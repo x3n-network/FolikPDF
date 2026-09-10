@@ -127,3 +127,9 @@ Validation: save UI and bundled-template regression passed in `/tmp/folik-person
 Review proposed fields on a zoomable, disposable PDF copy, toggle inclusion by tapping a box or its list control, and edit labels/types before applying. Page navigation covers multipage suggestions. Preview annotations never enter the working document.
 
 Validation: the scan → suggest → preview/zoom → edit → add UI flow passed on iPhone and iPad (`/tmp/folik-suggestions-tests.xcresult`, `/tmp/folik-suggestions-final.xcresult`). Field inference and standard-widget/source-preservation unit tests passed in the latter. Inspected iPhone preview rendering and moved selection controls out of the crowded navigation bar.
+
+## Bulk form layout and filling order
+
+Build → Layout tools now aligns selected fields, matches width/height/size, and distributes spacing within one page. Changes stay within page bounds and are grouped into one undo action. Filling order has accessible earlier/later controls and persists as Folik-specific PDF annotation metadata; required unfinished fields retain priority and external readers may use their own order.
+
+Validation: bulk geometry, batch undo/redo, spacing, matching size, preserved values, saved/reopened filling order, and the layout/order UI flow passed in `/tmp/folik-layout-final.xcresult` on iPhone.

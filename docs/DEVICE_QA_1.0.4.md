@@ -41,3 +41,7 @@ Save a multipage form both with cleared answers and retained defaults. Restart t
 ### On-page suggestion review
 
 On a rotated, cropped, multipage scan, pinch and pan the preview and toggle boxes by touch. Confirm list selection matches each box, edit a label/type, cancel without changes, then repeat and add only selected fields. Verify VoiceOver can perform the same review through the list controls.
+
+### Bulk form layout and filling order
+
+Select mixed-size fields, align and distribute them, undo/redo, then reopen to check geometry and answers. Try page edges and rotated pages. Change fill order across multiple pages with both touch and VoiceOver controls; verify required-field priority and preservation after saving. Other readers may ignore Folik’s filling-order metadata.
