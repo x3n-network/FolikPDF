@@ -363,9 +363,16 @@ struct PDFReaderCommand {
     }
 }
 
+enum FormWorkspaceMode: String, CaseIterable, Identifiable {
+    case build, fill
+    var id: Self { self }
+    var title: String { self == .build ? "Build" : "Fill" }
+}
+
 @MainActor
 final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
     let item: LibraryDocument
+    @Published private(set) var formMode: FormWorkspaceMode = .fill
     @Published private(set) var document: PDFDocument?
     @Published private(set) var pageIndex = 0
     @Published private(set) var bookmarkedPageIndices: Set<Int> = []
@@ -618,6 +625,14 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
     func cancelAnnotationPlacement() {
         annotationPlacement = nil
         formFieldPlacement = nil
+    }
+
+    func setFormMode(_ mode: FormWorkspaceMode) {
+        commitPendingEdits?()
+        cancelAnnotationPlacement()
+        setDrawingEnabled(false)
+        finishAnnotationEditing()
+        formMode = mode
     }
 
     func beginFormFieldPlacement(_ kind: FormFieldPlacementKind, label: String, isRequired: Bool) {

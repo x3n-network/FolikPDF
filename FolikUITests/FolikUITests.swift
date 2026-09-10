@@ -186,6 +186,27 @@ final class FolikUITests: XCTestCase {
         capture("direct-form-builder-finished", in: app)
     }
 
+    func testBuildAndFillSeparateToolsAndPreserveFormNavigation() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--open-first-document", "--open-forms-panel"]
+        app.launch()
+        let modes = app.segmentedControls["reader.form.mode"]
+        XCTAssertTrue(modes.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["reader.sign"].exists)
+        XCTAssertFalse(app.buttons["reader.form.add"].exists)
+        modes.buttons["Build"].tap()
+        XCTAssertTrue(app.buttons["reader.form.add"].exists)
+        XCTAssertFalse(app.buttons["reader.sign"].exists)
+        XCTAssertFalse(app.buttons["reader.form.nextIncomplete"].exists)
+        capture("form-build-mode", in: app)
+        modes.buttons["Fill"].tap()
+        XCTAssertTrue(app.buttons["reader.sign"].exists)
+        XCTAssertTrue(app.buttons["reader.form.nextIncomplete"].exists)
+        capture("form-fill-mode", in: app)
+        app.buttons["reader.form.nextIncomplete"].tap()
+        XCTAssertTrue(app.buttons["reader.panel.forms"].waitForExistence(timeout: 3))
+    }
+
     func testScannedPDFCanAuthorFillableFields() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -200,6 +221,7 @@ final class FolikUITests: XCTestCase {
         app.buttons["reader.panel.forms"].tap()
         XCTAssertTrue(app.navigationBars["Forms"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["Add fields to turn this PDF into a fillable form."].exists)
+        app.segmentedControls["reader.form.mode"].buttons["Build"].tap()
 
         app.buttons["reader.form.add"].tap()
         app.buttons["Text field"].tap()
@@ -217,7 +239,7 @@ final class FolikUITests: XCTestCase {
 
         app.buttons["reader.panel.forms"].tap()
         XCTAssertTrue(app.staticTexts["Customer name"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["0 of 1 filled"].exists)
+        XCTAssertTrue(app.staticTexts["1 field to arrange"].exists)
         XCTAssertTrue(app.buttons["reader.form.editLayout"].isEnabled)
         app.buttons["reader.form.editLayout"].tap()
         XCTAssertTrue(app.staticTexts["Edit form layout"].waitForExistence(timeout: 3))
@@ -249,6 +271,7 @@ final class FolikUITests: XCTestCase {
 
         XCTAssertTrue(app.navigationBars["Scan"].waitForExistence(timeout: 5))
         app.buttons["reader.panel.forms"].tap()
+        app.segmentedControls["reader.form.mode"].buttons["Build"].tap()
         XCTAssertTrue(app.buttons["reader.form.suggest"].waitForExistence(timeout: 3))
         app.buttons["reader.form.suggest"].tap()
 

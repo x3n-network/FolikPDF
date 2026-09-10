@@ -53,6 +53,26 @@ final class Release104Tests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: copy.url.path))
     }
 
+    func testFormModeSwitchEndsPlacementAndLayoutWithoutLosingValues() throws {
+        let session = DocumentSession(item: try item(pdf("Modes", pages: ["Form"])))
+        session.setFormMode(.build)
+        session.beginFormFieldPlacement(.text, label: "Name", isRequired: true)
+        session.placeAnnotationAtCurrentPageCenter()
+        let field = try XCTUnwrap(session.formFields.first)
+        field.annotation.widgetStringValue = "Ada"
+        session.noteFormEditing()
+        session.beginFormLayoutEditing()
+        session.selectAnnotation(field.annotation, pageIndex: 0)
+        session.setFormMode(.fill)
+        XCTAssertFalse(session.isAnnotationEditingEnabled)
+        XCTAssertNil(session.selectedAnnotation)
+        XCTAssertEqual(field.annotation.widgetStringValue, "Ada")
+        session.beginFormFieldPlacement(.checkbox, label: "Confirm", isRequired: false)
+        session.setFormMode(.build)
+        XCTAssertFalse(session.isPlacementActive)
+        XCTAssertEqual(session.formFields.count, 1)
+    }
+
     func testFailedReplacementPreservesOriginalAndRetrySavesLatestEdits() async throws {
         let url = try pdf("Recovery", pages: ["Original"])
         let original = try Data(contentsOf: url)

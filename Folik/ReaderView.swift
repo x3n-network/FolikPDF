@@ -198,7 +198,7 @@ struct ReaderView: View {
             await session.prepareForReading()
             guard !Task.isCancelled else { return }
             passwordPromptPresented = session.isLocked
-            if startInFormBuilder { presentedPanel = .forms }
+            if startInFormBuilder { session.setFormMode(.build); presentedPanel = .forms }
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--clear-saved-signatures") {
                 session.deleteSavedSignature(for: .signature)

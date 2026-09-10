@@ -673,6 +673,11 @@ private struct FormNavigator: View {
     var body: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
+                Picker("Form mode", selection: Binding(get: { session.formMode }, set: session.setFormMode)) {
+                    ForEach(FormWorkspaceMode.allCases) { mode in Text(mode.title).tag(mode) }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("reader.form.mode")
                 if dynamicTypeSize.isAccessibilitySize {
                     formSummary
                     if !session.formFields.isEmpty {
@@ -689,9 +694,16 @@ private struct FormNavigator: View {
                     }
                 }
 
-                SignDocumentButton(session: session, close: close, capture: { signatureCaptureKind = .signature })
+                if session.formMode == .fill {
+                    SignDocumentButton(session: session, close: close, capture: { signatureCaptureKind = .signature })
+                    if session.formFields.isEmpty {
+                        Button("Build a fillable form") { session.setFormMode(.build) }
+                            .frame(minHeight: 44)
+                            .accessibilityIdentifier("reader.form.startBuilding")
+                    }
+                }
 
-                if session.fillableFormFieldCount > 0 {
+                if session.formMode == .fill && session.fillableFormFieldCount > 0 {
                     ProgressView(value: Double(session.completedFormFieldCount), total: Double(session.fillableFormFieldCount))
                         .tint(FolikTheme.cobalt)
                         .accessibilityLabel("Form completion")
@@ -725,28 +737,30 @@ private struct FormNavigator: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 8) { formAuthoringButtons }
-                    VStack(spacing: 8) { formAuthoringButtons }
-                }
+                if session.formMode == .build {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 8) { formAuthoringButtons }
+                        VStack(spacing: 8) { formAuthoringButtons }
+                    }
 
-                if isSuggestingFields {
-                    HStack(spacing: 10) {
-                        ProgressView()
-                        Text("Looking for labels, boxes, and checkboxes…")
+                    if isSuggestingFields {
+                        HStack(spacing: 10) {
+                            ProgressView()
+                            Text("Looking for labels, boxes, and checkboxes…")
+                                .font(.footnote)
+                                .foregroundStyle(FolikTheme.mutedInk)
+                            Spacer(minLength: 4)
+                            Button("Cancel") { suggestionTask?.cancel() }
+                                .frame(minHeight: 44)
+                        }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("Looking for suggested form fields")
+                    } else if let suggestionMessage {
+                        Label(suggestionMessage, systemImage: "info.circle")
                             .font(.footnote)
                             .foregroundStyle(FolikTheme.mutedInk)
-                        Spacer(minLength: 4)
-                        Button("Cancel") { suggestionTask?.cancel() }
-                            .frame(minHeight: 44)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel("Looking for suggested form fields")
-                } else if let suggestionMessage {
-                    Label(suggestionMessage, systemImage: "info.circle")
-                        .font(.footnote)
-                        .foregroundStyle(FolikTheme.mutedInk)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 if session.isModified {
@@ -763,7 +777,10 @@ private struct FormNavigator: View {
                     Button {
                         close()
                         DispatchQueue.main.async {
-                            session.goToFormField(field)
+                            if session.formMode == .build {
+                                session.beginFormLayoutEditing()
+                                session.selectAnnotation(field.annotation, pageIndex: field.pageIndex)
+                            } else { session.goToFormField(field) }
                         }
                     } label: {
                         HStack(spacing: 12) {
@@ -787,7 +804,7 @@ private struct FormNavigator: View {
                                 Text("\(field.kind.title) · Page \(field.pageIndex + 1)\(field.limitation.map { " · \($0)" } ?? "")")
                                     .font(.caption)
                                     .foregroundStyle(FolikTheme.mutedInk)
-                                if field.limitation == nil {
+                                if session.formMode == .fill && field.limitation == nil {
                                     Text(field.statusText)
                                         .font(.caption)
                                         .foregroundStyle(field.isFilled ? FolikTheme.cobalt : FolikTheme.mutedInk)
@@ -803,11 +820,11 @@ private struct FormNavigator: View {
                         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     }
                     .buttonStyle(.plain)
-                    .disabled(!field.isEditable || !session.canFillForms)
+                    .disabled((session.formMode == .fill && !field.isEditable) || !session.canFillForms)
                     .accessibilityIdentifier("reader.form.field.\(field.id)")
                     .accessibilityValue("\(field.isRequired ? "Required, " : "")\(field.statusText)")
 
-                    if field.isAuthoredByFolik {
+                    if session.formMode == .build && field.isAuthoredByFolik {
                         Button(role: .destructive) {
                             fieldPendingDeletion = field
                         } label: {
@@ -959,6 +976,9 @@ private struct FormNavigator: View {
     }
 
     private var formSummaryTitle: String {
+        if session.formMode == .build {
+            return session.formFields.isEmpty ? "No fields yet" : "\(session.formFieldCount) field\(session.formFieldCount == 1 ? "" : "s") to arrange"
+        }
         if session.formFields.isEmpty {
             return session.formCompatibilityNotice == nil ? "No fields yet" : "Form unavailable"
         }
@@ -969,6 +989,7 @@ private struct FormNavigator: View {
     }
 
     private var formInstructions: String {
+        if session.formMode == .build { return "Add and arrange fields, then switch to Fill to try your form. Values entered in Fill are saved." }
         if session.formFields.isEmpty { return "Add fields to turn this PDF into a fillable form." }
         if session.remainingRequiredFormFieldCount > 0 {
             let count = session.remainingRequiredFormFieldCount
@@ -1083,7 +1104,7 @@ private struct FormFieldSetupView: View {
                 if kind == .signature {
                     Section {
                         Label(
-                            "This creates a standard PDF signature field for compatible signing apps. In Folik, use Annotations > Add > Signature to place a visual signature.",
+                            "This creates a standard PDF signature field for compatible signing apps. In Folik, switch to Fill and use Sign to place a visual signature.",
                             systemImage: "info.circle"
                         )
                         .font(.footnote)

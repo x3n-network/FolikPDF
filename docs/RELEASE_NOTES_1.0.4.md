@@ -86,3 +86,9 @@ Final validation for this pass: 143 unit tests passed with one optional fixture 
 Make Fillable Copy opens an autosaved working copy directly in the editor with Forms ready. The redundant unchanged-PDF preview and upfront naming step are removed. Finish saves pending edits and offers a final name; name conflicts and save failures retain the editor for retry. The original PDF stays unchanged.
 
 Validation: the source-preservation/save/rename regression and direct-entry/Finish UI test passed on iPhone 17e Simulator. Result: `/tmp/folik-form-entry.xcresult`.
+
+## Build and Fill modes
+
+Forms now separates field authoring and arrangement from signing, completion tracking, and next-field navigation. New fillable copies enter Build. Fill uses the actual PDF values, and its instructions explain that test entries are saved. Switching modes ends placement and layout selection without clearing data.
+
+Validation: mode-switch value preservation, Build/Fill UI separation, and scanned form authoring/deletion passed on iPhone 17e Simulator. Both mode screenshots were reviewed. Result: `/tmp/folik-form-modes.xcresult`.
