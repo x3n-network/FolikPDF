@@ -3,7 +3,8 @@ import SwiftUI
 
 /// A disposable document copy: preview marks and field locking never touch the source.
 struct ReadOnlyPDFPreview: UIViewRepresentable {
-    let data: Data
+    var data: Data? = nil
+    var url: URL? = nil
     var pageIndex = 0
     var suggestions: [FormFieldSuggestion] = []
     var selectedIDs: Set<UUID> = []
@@ -12,7 +13,7 @@ struct ReadOnlyPDFPreview: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
     func makeUIView(context: Context) -> PDFView {
         let view = PDFView()
-        view.document = PDFDocument(data: data)
+        view.document = url.flatMap { PDFDocument(url: $0) } ?? data.flatMap { PDFDocument(data: $0) }
         view.autoScales = true
         view.displayMode = .singlePage
         view.displayDirection = .vertical

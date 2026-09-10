@@ -54,6 +54,8 @@ struct ReaderView: View {
     @State private var preparedExport: PreparedExport?
     @State private var showingShareOptions = false
     @State private var pendingExportMode: DocumentExportMode?
+    @State private var pendingPreviewExport: URL?
+    @State private var reviewRequiredAfterShare = false
     @State private var pageOrganizerPresented = false
     @State private var pageOrganizerPending = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -164,6 +166,17 @@ struct ReaderView: View {
                 .interactiveDismissDisabled(session.isLocked)
         }
         .sheet(isPresented: $showingShareOptions, onDismiss: {
+            if reviewRequiredAfterShare {
+                reviewRequiredAfterShare = false
+                presentedPanel = nil
+                session.goToNextIncompleteFormField()
+                return
+            }
+            if let url = pendingPreviewExport {
+                pendingPreviewExport = nil
+                preparedExport = PreparedExport(url: url)
+                return
+            }
             if pendingExportMode == nil { exportFocused = true }
             if let mode = pendingExportMode {
                 pendingExportMode = nil
@@ -179,11 +192,27 @@ struct ReaderView: View {
                     } footer: {
                         Text("Your latest changes are saved before sharing.")
                     }
+                    if session.remainingRequiredFormFieldCount > 0 {
+                        Section {
+                            Label("\(session.remainingRequiredFormFieldCount) required field\(session.remainingRequiredFormFieldCount == 1 ? "" : "s") unanswered", systemImage: "list.clipboard")
+                            Button("Review required fields") {
+                                reviewRequiredAfterShare = true
+                                showingShareOptions = false
+                            }.accessibilityIdentifier("share.reviewRequired")
+                        } footer: { Text("You can review them now or share the form as it is.") }
+                    }
                     Section {
-                        shareOption("Share PDF", detail: "Keep annotations and form fields editable.", icon: "square.and.arrow.up", mode: .editable)
-                        shareOption("Share flattened copy", detail: "Bake visible annotations and filled values into the pages.", icon: "checkmark.seal", mode: .flattened)
+                        shareOption("Keep fields editable", detail: "Recipients can continue filling fields and editing annotations.", icon: "square.and.arrow.up", mode: .editable)
+                            .accessibilityIdentifier("reader.share.editable")
+                        exportPreviewLink("Preview editable copy", mode: .editable)
+                    }
+                    Section {
+                        shareOption("Make entries part of the page", detail: "Creates a flattened copy with current values and annotations fixed into the page appearance.", icon: "checkmark.seal", mode: .flattened)
+                            .accessibilityIdentifier("reader.share.flattened")
+                        exportPreviewLink("Preview flattened copy", mode: .flattened)
                     }
                 }
+                .task { session.noteFormEditing() }
                 .navigationTitle("Share PDF")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
@@ -192,7 +221,7 @@ struct ReaderView: View {
                     }
                 }
             }
-            .presentationDetents([.medium, .large])
+            .presentationDetents([.large])
         }
         .sheet(item: $preparedExport, onDismiss: { exportFocused = true }) { export in
             ActivityView(exportURL: export.url)
@@ -477,6 +506,16 @@ struct ReaderView: View {
                 }
             }
         }
+    }
+
+    private func exportPreviewLink(_ title: String, mode: DocumentExportMode) -> some View {
+        NavigationLink {
+            ExportPreviewView(session: session, mode: mode) { url in
+                pendingPreviewExport = url
+                showingShareOptions = false
+            }
+        } label: { Label(title, systemImage: "eye").frame(minHeight: 44) }
+        .accessibilityIdentifier("reader.share.preview." + mode.rawValue)
     }
 
     private func shareOption(_ title: String, detail: String, icon: String, mode: DocumentExportMode) -> some View {

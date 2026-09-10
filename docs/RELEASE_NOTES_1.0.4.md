@@ -139,3 +139,13 @@ Validation: bulk geometry, batch undo/redo, spacing, matching size, preserved va
 New scans show dismissible next actions: add form fields on a working copy, find recognized text, or make the scan searchable when the current page has no text. Finishing a form opens Fill immediately. Returning to the library clears the scan-action launch context.
 
 Validation: finish-to-Fill passed in `/tmp/folik-next-actions.xcresult`; scan-to-builder passed after fixing inherited accessibility identifiers in `/tmp/folik-next-final.xcresult`. Scan actions have at least 44-point label targets.
+
+## Sharing clarity and export previews
+
+Sharing now describes editable versus flattened copies in plain language. Either can be shared directly or previewed page by page before sharing the exact prepared file. Previews load from the temporary export URL to avoid another full in-memory byte copy. Leaving an unshared preview removes the temporary export. Unanswered required fields offer a non-blocking return-to-field action.
+
+Validation: direct sharing, editable/flattened output preservation, and export cleanup passed in `/tmp/folik-share-tests.xcresult`. Expanded the sharing sheet after UI checks found lower options offscreen; preview sharing, both choices, and required-field review passed in `/tmp/folik-share-final.xcresult`.
+
+## Final five-feature regression
+
+`/tmp/folik-five-features-final.xcresult`: 156 passed (151 unit tests and five iPad UI tests), zero failures, one optional private-document fixture test skipped. The iPad checks cover personal-template saving, layout/fill order, suggested-field preview/editing, export preview sharing, and first-use/share accessibility semantics. Inspected iPhone and iPad screenshots. Release simulator build passed in `/tmp/folik-five-features-release.log`; bundle version remains 1.0.4. Physical VoiceOver, keyboard, interruption, rotated-page, and cross-viewer checks remain in the device QA checklist and are not marked complete by simulator results.

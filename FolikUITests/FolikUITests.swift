@@ -1228,7 +1228,7 @@ final class FolikUITests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
         app.buttons["reader.export"].tap()
         XCTAssertTrue(app.navigationBars["Share PDF"].waitForExistence(timeout: 3))
-        let share = app.buttons["Share PDF"]
+        let share = app.buttons["reader.share.editable"]
         if !share.isHittable { app.swipeUp() }
         XCTAssertTrue(share.isHittable)
         capture("polish-share-large-text", in: app)
@@ -1352,7 +1352,7 @@ final class FolikUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["reader.export"].waitForExistence(timeout: 5))
         app.buttons["reader.export"].tap()
-        XCTAssertTrue(app.buttons["Share PDF"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["reader.share.editable"].waitForExistence(timeout: 3))
         try app.performAccessibilityAudit(for: [.sufficientElementDescription, .trait])
         app.buttons["Cancel"].tap()
         XCTAssertTrue(app.buttons["reader.export"].isHittable)
@@ -1365,7 +1365,7 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(app.buttons["reader.export"].waitForExistence(timeout: 5))
         app.buttons["reader.export"].tap()
         XCTAssertTrue(app.navigationBars["Share PDF"].waitForExistence(timeout: 3))
-        app.buttons["Share PDF"].tap()
+        app.buttons["reader.share.editable"].tap()
         XCTAssertTrue(app.otherElements["ActivityListView"].waitForExistence(timeout: 10))
         capture("polish-system-share", in: app)
     }
@@ -1381,8 +1381,8 @@ final class FolikUITests: XCTestCase {
         XCTAssertEqual(export.label, "Export and share")
         export.tap()
         XCTAssertTrue(app.navigationBars["Share PDF"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["Share PDF"].exists)
-        XCTAssertTrue(app.buttons["Share flattened copy"].exists)
+        XCTAssertTrue(app.buttons["reader.share.editable"].exists)
+        XCTAssertTrue(app.buttons["reader.share.flattened"].exists)
         XCTAssertTrue(app.staticTexts["Folik UI Test.pdf"].exists)
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.lifetime = .keepAlways
@@ -1692,6 +1692,34 @@ final class FolikUITests: XCTestCase {
         app.buttons["reader.scanMakeFillable"].tap()
         XCTAssertTrue(app.buttons["builder.add.text"].waitForExistence(timeout: 15))
         XCTAssertTrue(app.buttons["fillable.finish"].exists)
+    }
+
+    func testPreviewFlattenedCopyBeforeSharing() {
+        let app = launchApp(additionalArguments: ["--ui-test-fixture", "--open-first-document", "--place-test-signature"])
+        XCTAssertTrue(app.buttons["reader.export"].waitForExistence(timeout: 8))
+        app.buttons["reader.export"].tap()
+        let preview = app.buttons["reader.share.preview.flattened"]
+        XCTAssertTrue(preview.waitForExistence(timeout: 5))
+        if !preview.isHittable { app.swipeUp() }
+        preview.tap()
+        XCTAssertTrue(app.buttons["export.preview.share"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Page 1 of 2"].waitForExistence(timeout: 10))
+        app.buttons["Next"].tap()
+        XCTAssertTrue(app.staticTexts["Page 2 of 2"].waitForExistence(timeout: 5))
+        capture("flattened-export-preview", in: app)
+        app.buttons["export.preview.share"].tap()
+        XCTAssertTrue(app.otherElements["ActivityListView"].waitForExistence(timeout: 10))
+    }
+
+    func testShareReminderCanReturnToRequiredField() {
+        let app = launchApp(additionalArguments: ["--ui-test-fixture", "--open-first-document"])
+        XCTAssertTrue(app.buttons["reader.export"].waitForExistence(timeout: 8))
+        app.buttons["reader.export"].tap()
+        let review = app.buttons["share.reviewRequired"]
+        XCTAssertTrue(review.waitForExistence(timeout: 5))
+        review.tap()
+        XCTAssertTrue(app.navigationBars["Folik UI Test"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.navigationBars["Share PDF"].exists)
     }
 
     private func launchApp(

@@ -245,3 +245,5 @@ Suggested fields can be reviewed over a zoomable PDF preview before adding them.
 Build’s **Layout tools** can select several fields on one page, align edges, match dimensions, or distribute spacing. Each arrangement is one undoable change and stays inside the page. **Fill order** changes Folik’s field list and next-empty-field navigation, persists in the PDF, and supports earlier/later buttons. Unfinished required fields still take priority; other PDF apps may use their own navigation order.
 
 After scanning, a dismissible action strip leads straight to adding form fields or finding recognized text; pages without recognized text offer Make searchable. Finishing a new form opens its Fill panel so you can try it immediately.
+
+Sharing offers **Keep fields editable** and **Make entries part of the page**, with optional previews of the exact exported copy and page navigation. Share directly or share the previewed file. Unanswered required fields have a non-blocking review action; sharing still waits for the latest changes to save. Leaving an unshared preview removes its temporary export.

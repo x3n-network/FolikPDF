@@ -49,3 +49,7 @@ Select mixed-size fields, align and distribute them, undo/redo, then reopen to c
 ### Contextual next actions
 
 Scan a page with recognizable text and one without. Check the relevant Find text/Make searchable action, create a fillable copy from the scan banner, and finish into Fill mode. Dismiss the banner and return to the library; normal document reopening should remain unobstructed.
+
+### Sharing preview and required fields
+
+Edit the currently focused field, open sharing, and check both export previews against the latest value. Navigate pages, cancel an unfinished preview, retry, and share to a second PDF viewer. Review an unanswered required field from the sharing reminder. Check VoiceOver focus after preview cancellation and the system share sheet, plus large text and iPad split view.
