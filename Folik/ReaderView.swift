@@ -397,7 +397,7 @@ private struct ReaderBottomChrome: View {
                 AnnotationEditingToolbar(session: session)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-            } else if session.annotationPlacement != nil {
+            } else if session.isPlacementActive {
                 PlacementToolbar(session: session)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
@@ -443,9 +443,7 @@ private struct ReaderBottomChrome: View {
     }
 
     private var availablePanels: [ReaderPanel] {
-        var panels: [ReaderPanel] = [.pages, .outline, .search, .annotations]
-        if !session.formFields.isEmpty || session.formCompatibilityNotice != nil { panels.append(.forms) }
-        return panels
+        [.pages, .outline, .search, .annotations, .forms]
     }
 }
 
@@ -500,7 +498,7 @@ private struct AnnotationEditingToolbar: View {
 
     private var modeLabel: some View {
         Label(
-            session.selectedAnnotation?.title ?? "Edit annotations",
+            session.selectedAnnotation?.title ?? (session.isFormLayoutEditingEnabled ? "Edit form layout" : "Edit annotations"),
             systemImage: "square.dashed"
         )
         .font(.subheadline.weight(.semibold))
@@ -647,7 +645,7 @@ private struct PlacementToolbar: View {
     }
 
     private var modeLabel: some View {
-        Label(session.annotationPlacement?.title ?? "Place", systemImage: session.annotationPlacement?.icon ?? "plus")
+        Label(session.placementTitle, systemImage: session.placementIcon)
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(FolikTheme.ink)
     }

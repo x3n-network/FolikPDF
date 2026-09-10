@@ -612,6 +612,7 @@ private struct FormNavigator: View {
     @ObservedObject var session: DocumentSession
     let close: () -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var fieldSetupKind: FormFieldPlacementKind?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -664,6 +665,11 @@ private struct FormNavigator: View {
                         .font(.footnote)
                         .foregroundStyle(.orange)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) { formAuthoringButtons }
+                    VStack(spacing: 8) { formAuthoringButtons }
                 }
 
                 if session.isModified {
@@ -725,12 +731,52 @@ private struct FormNavigator: View {
             }
             .listStyle(.plain)
         }
+        .sheet(item: $fieldSetupKind) { kind in
+            FormFieldSetupView(kind: kind) { label, isRequired in
+                session.beginFormFieldPlacement(kind, label: label, isRequired: isRequired)
+                fieldSetupKind = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { close() }
+            }
+        }
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+    }
+
+    @ViewBuilder
+    private var formAuthoringButtons: some View {
+        Menu {
+            ForEach(FormFieldPlacementKind.allCases) { kind in
+                Button { fieldSetupKind = kind } label: {
+                    Label(kind.title, systemImage: kind.icon)
+                }
+            }
+        } label: {
+            Label("Add field", systemImage: "plus.rectangle.on.rectangle")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(FolikTheme.cobalt)
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .disabled(session.isLocked || !session.canFillForms)
+        .accessibilityHint(session.canFillForms ? "Choose a field type to place on the page" : "This PDF does not allow form editing")
+        .accessibilityIdentifier("reader.form.add")
+
+        Button {
+            session.beginFormLayoutEditing()
+            close()
+        } label: {
+            Label("Edit layout", systemImage: "square.dashed")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .disabled(session.formFields.isEmpty)
+        .accessibilityHint(session.formFields.isEmpty ? "Add a field first" : "Move, resize, or delete fields on the page")
+        .accessibilityIdentifier("reader.form.editLayout")
     }
 
     private var formSummary: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(session.fillableFormFieldCount > 0 ? "\(session.completedFormFieldCount) of \(session.fillableFormFieldCount) filled" : "Form unavailable")
+            Text(formSummaryTitle)
                 .font(.headline)
                 .fixedSize(horizontal: false, vertical: true)
             Text(formInstructions)
@@ -740,10 +786,21 @@ private struct FormNavigator: View {
         }
     }
 
+    private var formSummaryTitle: String {
+        if session.formFields.isEmpty {
+            return session.formCompatibilityNotice == nil ? "No fields yet" : "Form unavailable"
+        }
+        if session.fillableFormFieldCount > 0 {
+            return "\(session.completedFormFieldCount) of \(session.fillableFormFieldCount) filled"
+        }
+        return "\(session.formFieldCount) field\(session.formFieldCount == 1 ? "" : "s")"
+    }
+
     private var formInstructions: String {
-        if session.formFields.isEmpty { return "Folik found no standard fields it can edit." }
+        if session.formFields.isEmpty { return "Add fields to turn this PDF into a fillable form." }
         if session.remainingRequiredFormFieldCount > 0 {
-            return "\(session.remainingRequiredFormFieldCount) required field\(session.remainingRequiredFormFieldCount == 1 ? "" : "s") still need a value."
+            let count = session.remainingRequiredFormFieldCount
+            return "\(count) required field\(count == 1 ? "" : "s") still \(count == 1 ? "needs" : "need") a value."
         }
         return session.canFillForms
             ? "Tap a field below, then enter its value directly on the page."
@@ -758,5 +815,64 @@ private struct FormNavigator: View {
             .buttonStyle(.borderedProminent)
             .tint(FolikTheme.cobalt)
             .disabled(!session.isModified)
+    }
+}
+
+private struct FormFieldSetupView: View {
+    let kind: FormFieldPlacementKind
+    let complete: (String, Bool) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var label = ""
+    @State private var isRequired = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Field label", text: $label)
+                        .textInputAutocapitalization(.words)
+                        .submitLabel(.done)
+                        .onSubmit(place)
+                    Toggle("Required", isOn: $isRequired)
+                } header: {
+                    Label(kind.title, systemImage: kind.icon)
+                } footer: {
+                    Text("After continuing, tap the page where the field belongs. You can move or resize it afterward with Edit layout.")
+                }
+
+                if kind == .signature {
+                    Section {
+                        Label(
+                            "This creates a standard PDF signature field for compatible signing apps. In Folik, use Annotations > Add > Signature to place a visual signature.",
+                            systemImage: "info.circle"
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .navigationTitle("New Field")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Continue", action: place)
+                        .disabled(normalizedLabel.isEmpty)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private var normalizedLabel: String {
+        String(label.trimmingCharacters(in: .whitespacesAndNewlines).prefix(80))
+    }
+
+    private func place() {
+        guard !normalizedLabel.isEmpty else { return }
+        complete(normalizedLabel, isRequired)
     }
 }

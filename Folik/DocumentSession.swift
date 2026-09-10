@@ -179,6 +179,52 @@ struct AnnotationPlacement: Equatable {
     var icon: String { stamp?.icon ?? kind.icon }
 }
 
+enum FormFieldPlacementKind: String, CaseIterable, Identifiable {
+    case text
+    case multilineText
+    case checkbox
+    case date
+    case signature
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .text: "Text field"
+        case .multilineText: "Multiline field"
+        case .checkbox: "Checkbox"
+        case .date: "Date field"
+        case .signature: "Signature field"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .text: "text.cursor"
+        case .multilineText: "text.alignleft"
+        case .checkbox: "checkmark.square"
+        case .date: "calendar"
+        case .signature: "signature"
+        }
+    }
+
+    var defaultSize: CGSize {
+        switch self {
+        case .text: CGSize(width: 230, height: 38)
+        case .multilineText: CGSize(width: 260, height: 92)
+        case .checkbox: CGSize(width: 30, height: 30)
+        case .date: CGSize(width: 170, height: 38)
+        case .signature: CGSize(width: 250, height: 68)
+        }
+    }
+}
+
+struct FormFieldPlacement: Equatable {
+    let kind: FormFieldPlacementKind
+    let label: String
+    let isRequired: Bool
+}
+
 private struct AnnotationGeometry {
     let bounds: CGRect
     let paths: [UIBezierPath]
@@ -339,7 +385,9 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
     @Published private(set) var canRedoAnnotation = false
     @Published var isDrawingEnabled = false
     @Published private(set) var annotationPlacement: AnnotationPlacement?
+    @Published private(set) var formFieldPlacement: FormFieldPlacement?
     @Published private(set) var isAnnotationEditingEnabled = false
+    @Published private(set) var isFormLayoutEditingEnabled = false
     @Published private(set) var selectedAnnotation: DocumentAnnotation?
     @Published private(set) var savedSignature: SignatureAsset?
     @Published private(set) var savedInitials: SignatureAsset?
@@ -414,6 +462,9 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         }.count
     }
     var incompleteFormFieldCount: Int { max(0, fillableFormFieldCount - completedFormFieldCount) }
+    var isPlacementActive: Bool { annotationPlacement != nil || formFieldPlacement != nil }
+    var placementTitle: String { formFieldPlacement?.kind.title ?? annotationPlacement?.title ?? "Place" }
+    var placementIcon: String { formFieldPlacement?.kind.icon ?? annotationPlacement?.icon ?? "plus" }
 
     func unlock(with password: String) -> Bool {
         guard let document, document.unlock(withPassword: password) else { return false }
@@ -472,6 +523,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         isDrawingEnabled = enabled
         if enabled {
             annotationPlacement = nil
+            formFieldPlacement = nil
             finishAnnotationEditing()
             command = PDFReaderCommand(action: .fitPage)
         }
@@ -485,6 +537,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
             !kind.requiresStamp
         else { return }
         isDrawingEnabled = false
+        formFieldPlacement = nil
         finishAnnotationEditing()
         annotationPlacement = AnnotationPlacement(
             kind: kind,
@@ -496,6 +549,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
 
     func beginStampPlacement(_ stamp: AnnotationStamp) {
         isDrawingEnabled = false
+        formFieldPlacement = nil
         finishAnnotationEditing()
         annotationPlacement = AnnotationPlacement(kind: .stamp, text: "", signatureAsset: nil, stamp: stamp)
     }
@@ -503,6 +557,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
     func beginSignaturePlacement(_ asset: SignatureAsset) {
         guard asset.isValid else { return }
         isDrawingEnabled = false
+        formFieldPlacement = nil
         finishAnnotationEditing()
         annotationPlacement = AnnotationPlacement(
             kind: asset.kind == .signature ? .signature : .initials,
@@ -534,12 +589,41 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
 
     func cancelAnnotationPlacement() {
         annotationPlacement = nil
+        formFieldPlacement = nil
+    }
+
+    func beginFormFieldPlacement(_ kind: FormFieldPlacementKind, label: String, isRequired: Bool) {
+        let normalizedLabel = label
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .prefix(80)
+        guard !normalizedLabel.isEmpty, document != nil, !isLocked, canFillForms else { return }
+        isDrawingEnabled = false
+        annotationPlacement = nil
+        finishAnnotationEditing()
+        formFieldPlacement = FormFieldPlacement(
+            kind: kind,
+            label: String(normalizedLabel),
+            isRequired: isRequired
+        )
     }
 
     func beginAnnotationEditing() {
         isDrawingEnabled = false
         annotationPlacement = nil
+        formFieldPlacement = nil
         selectedAnnotation = nil
+        isFormLayoutEditingEnabled = false
+        isAnnotationEditingEnabled = true
+        command = PDFReaderCommand(action: .fitPage)
+    }
+
+    func beginFormLayoutEditing() {
+        guard !formFields.isEmpty else { return }
+        isDrawingEnabled = false
+        annotationPlacement = nil
+        formFieldPlacement = nil
+        selectedAnnotation = nil
+        isFormLayoutEditingEnabled = true
         isAnnotationEditingEnabled = true
         command = PDFReaderCommand(action: .fitPage)
     }
@@ -547,12 +631,27 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
     func finishAnnotationEditing() {
         selectedAnnotation = nil
         isAnnotationEditingEnabled = false
+        isFormLayoutEditingEnabled = false
     }
 
     func selectAnnotation(_ annotation: PDFAnnotation, pageIndex: Int, navigate: Bool = true) {
         guard isAnnotationEditingEnabled else { return }
         selectedAnnotation = annotations.first {
             $0.pageIndex == pageIndex && $0.annotation === annotation
+        }
+        if selectedAnnotation == nil,
+           let field = formFields.first(where: {
+               $0.pageIndex == pageIndex && $0.annotation === annotation
+           }) {
+            selectedAnnotation = DocumentAnnotation(
+                id: field.id,
+                annotation: annotation,
+                pageIndex: pageIndex,
+                title: field.title,
+                excerpt: field.kind.title,
+                icon: formFieldIcon(field.kind),
+                color: annotation.color
+            )
         }
         if selectedAnnotation != nil, navigate {
             command = PDFReaderCommand(action: .goToAnnotation(annotation, pageIndex: pageIndex))
@@ -565,7 +664,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
 
     var selectedAnnotationCanResize: Bool {
         guard let type = selectedAnnotation?.annotation.type?.lowercased() else { return false }
-        return ["freetext", "square", "circle", "stamp", "ink"].contains(type)
+        return ["freetext", "square", "circle", "stamp", "ink", "widget"].contains(type)
     }
 
     var selectedAnnotationCanMove: Bool {
@@ -591,6 +690,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
 
     func canMoveAnnotation(_ annotation: PDFAnnotation) -> Bool {
         guard let type = annotation.type?.lowercased() else { return false }
+        if isFormLayoutEditingEnabled { return type == "widget" }
         return ["text", "freetext", "square", "circle", "line", "stamp", "ink"].contains(type)
     }
 
@@ -946,6 +1046,10 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
     }
 
     func placeAnnotation(pageIndex: Int, point: CGPoint) {
+        if let placement = formFieldPlacement {
+            placeFormField(placement, pageIndex: pageIndex, point: point)
+            return
+        }
         guard
             let placement = annotationPlacement,
             let page = document?.page(at: pageIndex)
@@ -1040,6 +1144,70 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         isModified = true
         refreshAnnotations()
         persistChanges()
+    }
+
+    private func placeFormField(_ placement: FormFieldPlacement, pageIndex: Int, point: CGPoint) {
+        guard let page = document?.page(at: pageIndex) else { return }
+        let annotation = PDFAnnotation(
+            bounds: clampedBounds(size: placement.kind.defaultSize, centeredAt: point, on: page),
+            forType: .widget,
+            withProperties: nil
+        )
+        switch placement.kind {
+        case .text, .multilineText, .date:
+            annotation.widgetFieldType = .text
+            annotation.widgetStringValue = ""
+            annotation.font = UIFont.systemFont(ofSize: 16)
+            if placement.kind == .multilineText { annotation.isMultiline = true }
+        case .checkbox:
+            annotation.widgetFieldType = .button
+            annotation.widgetControlType = .checkBoxControl
+            annotation.buttonWidgetStateString = "Yes"
+            annotation.buttonWidgetState = .offState
+        case .signature:
+            annotation.widgetFieldType = .signature
+        }
+
+        annotation.fieldName = uniqueFormFieldName(for: placement.label)
+        annotation.contents = "Folik form field"
+        annotation.setValue(placement.label, forAnnotationKey: .widgetTextLabelUI)
+        if placement.isRequired {
+            let flags = (annotation.value(forAnnotationKey: .widgetFieldFlags) as? NSNumber)?.intValue ?? 0
+            annotation.setValue(NSNumber(value: flags | (1 << 1)), forAnnotationKey: .widgetFieldFlags)
+        }
+        annotation.backgroundColor = UIColor.white.withAlphaComponent(0.94)
+        annotation.color = FolikTheme.annotationBlue
+        let border = PDFBorder()
+        border.lineWidth = 1.5
+        annotation.border = border
+
+        page.addAnnotation(annotation)
+        formFieldPlacement = nil
+        recordAnnotationAction(.added(annotation, pageIndex: pageIndex))
+        isModified = true
+        refreshFormState(markModified: false)
+        persistChanges()
+    }
+
+    private func uniqueFormFieldName(for proposedName: String) -> String {
+        let names = Set(formFields.compactMap { $0.annotation.fieldName?.localizedLowercase })
+        guard names.contains(proposedName.localizedLowercase) else { return proposedName }
+        var suffix = 2
+        while names.contains("\(proposedName) \(suffix)".localizedLowercase) { suffix += 1 }
+        return "\(proposedName) \(suffix)"
+    }
+
+    private func formFieldIcon(_ kind: FormFieldKind) -> String {
+        switch kind {
+        case .text: "text.cursor"
+        case .multilineText: "text.alignleft"
+        case .checkbox: "checkmark.square"
+        case .radio: "circle.circle"
+        case .choice: "list.bullet.rectangle"
+        case .signature: "signature"
+        case .pushButton: "button.programmable"
+        case .unknown: "questionmark.square.dashed"
+        }
     }
 
     private func signaturePoint(_ point: SignaturePoint, in bounds: CGRect) -> CGPoint {
@@ -1255,7 +1423,20 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         guard let document else { return }
         annotations = Self.annotations(in: document)
         if let selected = selectedAnnotation {
-            selectedAnnotation = annotations.first { $0.annotation === selected.annotation }
+            if selected.annotation.type?.lowercased() == "widget",
+               let field = formFields.first(where: { $0.annotation === selected.annotation }) {
+                selectedAnnotation = DocumentAnnotation(
+                    id: field.id,
+                    annotation: field.annotation,
+                    pageIndex: field.pageIndex,
+                    title: field.title,
+                    excerpt: field.kind.title,
+                    icon: formFieldIcon(field.kind),
+                    color: field.annotation.color
+                )
+            } else {
+                selectedAnnotation = annotations.first { $0.annotation === selected.annotation }
+            }
         }
     }
 

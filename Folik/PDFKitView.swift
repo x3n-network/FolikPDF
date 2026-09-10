@@ -62,6 +62,7 @@ struct PDFKitView: UIViewRepresentable {
         private var drawingPoints: [CGPoint] = []
         private var previewPath: UIBezierPath?
         private let previewLayer = CAShapeLayer()
+        private let authoredFormFieldLayer = CAShapeLayer()
         private let annotationSelectionLayer = CAShapeLayer()
         private let resizeHandleLayer = CAShapeLayer()
         private var transformStartPoint: CGPoint?
@@ -75,7 +76,10 @@ struct PDFKitView: UIViewRepresentable {
         init(session: DocumentSession) {
             self.session = session
             super.init()
-            pdfView.didLayout = { [weak self] in self?.restoreAfterLayout() }
+            pdfView.didLayout = { [weak self] in
+                self?.restoreAfterLayout()
+                self?.updateAuthoredFormFieldOverlay()
+            }
             pdfView.backgroundColor = FolikTheme.readerCanvasUIColor
             pdfView.clipsToBounds = true
             pdfView.autoScales = true
@@ -109,6 +113,10 @@ struct PDFKitView: UIViewRepresentable {
             previewLayer.lineCap = .round
             previewLayer.lineJoin = .round
             pdfView.layer.addSublayer(previewLayer)
+            authoredFormFieldLayer.fillColor = FolikTheme.annotationBlue.withAlphaComponent(0.06).cgColor
+            authoredFormFieldLayer.strokeColor = FolikTheme.annotationBlue.cgColor
+            authoredFormFieldLayer.lineWidth = 1.5
+            pdfView.layer.addSublayer(authoredFormFieldLayer)
             annotationSelectionLayer.fillColor = UIColor.clear.cgColor
             annotationSelectionLayer.strokeColor = FolikTheme.annotationBlue.cgColor
             annotationSelectionLayer.lineWidth = 2
@@ -142,7 +150,7 @@ struct PDFKitView: UIViewRepresentable {
         func updateDrawingState() {
             previewLayer.frame = CGRect(origin: .zero, size: pdfView.bounds.size)
             inkGesture.isEnabled = session.isDrawingEnabled
-            placementTap.isEnabled = session.annotationPlacement != nil
+            placementTap.isEnabled = session.isPlacementActive
             annotationSelectionTap.isEnabled = session.isAnnotationEditingEnabled
             annotationTransformPan.isEnabled = session.isAnnotationEditingEnabled
             let allowsDocumentGestures = !session.isDrawingEnabled && !session.isAnnotationEditingEnabled
@@ -152,6 +160,19 @@ struct PDFKitView: UIViewRepresentable {
             }
             if !session.isDrawingEnabled { resetDrawingPreview() }
             updateAnnotationSelectionOverlay()
+        }
+
+        private func updateAuthoredFormFieldOverlay() {
+            authoredFormFieldLayer.frame = CGRect(origin: .zero, size: pdfView.bounds.size)
+            let path = UIBezierPath()
+            for field in session.formFields where field.annotation.contents == "Folik form field" {
+                guard let page = pdfView.document?.page(at: field.pageIndex) else { continue }
+                let viewBounds = annotationViewBounds(field.annotation, on: page)
+                guard viewBounds.intersects(pdfView.bounds.insetBy(dx: -20, dy: -20)) else { continue }
+                path.append(UIBezierPath(roundedRect: viewBounds, cornerRadius: 3))
+            }
+            authoredFormFieldLayer.path = path.cgPath
+            authoredFormFieldLayer.isHidden = path.isEmpty
         }
 
         func gestureRecognizer(
@@ -244,7 +265,9 @@ struct PDFKitView: UIViewRepresentable {
                 return
             }
             let pagePoint = pdfView.convert(viewPoint, to: page)
-            let annotation = page.annotations.reversed().first { $0.bounds.insetBy(dx: -8, dy: -8).contains(pagePoint) }
+            let annotation = page.annotations.reversed().first {
+                session.canMoveAnnotation($0) && $0.bounds.insetBy(dx: -8, dy: -8).contains(pagePoint)
+            }
             if let annotation {
                 session.selectAnnotation(annotation, pageIndex: document.index(for: page))
             } else {
@@ -307,6 +330,7 @@ struct PDFKitView: UIViewRepresentable {
         }
 
         private func updateAnnotationSelectionOverlay() {
+            updateAuthoredFormFieldOverlay()
             let overlayFrame = CGRect(origin: .zero, size: pdfView.bounds.size)
             annotationSelectionLayer.frame = overlayFrame
             resizeHandleLayer.frame = overlayFrame

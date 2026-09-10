@@ -1,16 +1,17 @@
 import SwiftUI
 
 nonisolated enum LibraryTool: String, Identifiable {
-    case scan, importPDF, images, documents, text, searchable, compress, batch, redact, sanitize, protect, compare
+    case scan, importPDF, images, documents, text, searchable, fillable, compress, batch, redact, sanitize, protect, compare
     var id: Self { self }
 }
 
 nonisolated enum LibraryPDFTool: String, CaseIterable, Identifiable {
-    case searchable, compress, redact, sanitize, protect, compare
+    case searchable, fillable, compress, redact, sanitize, protect, compare
     var id: Self { self }
     var title: String {
         switch self {
         case .searchable: "Make PDF Searchable"
+        case .fillable: "Make Fillable Copy"
         case .compress: "Compress PDF"
         case .redact: "Redact PDF"
         case .sanitize: "Inspect & Sanitize"
@@ -21,6 +22,7 @@ nonisolated enum LibraryPDFTool: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .searchable: "text.viewfinder"
+        case .fillable: "list.clipboard"
         case .compress: "arrow.down.right.and.arrow.up.left"
         case .redact: "eye.slash"
         case .sanitize: "checkmark.shield"
@@ -51,6 +53,7 @@ struct LibraryToolsView: View {
                 }
                 Section("Improve and protect") {
                     tool(.searchable, title: "Make PDF Searchable", subtitle: "Add an on-device OCR text layer", icon: "text.viewfinder")
+                    tool(.fillable, title: "Make Fillable Copy", subtitle: "Add editable fields over a scan or PDF", icon: "list.clipboard")
                     tool(.compress, title: "Compress PDF", subtitle: "Reduce image-heavy file sizes", icon: "arrow.down.right.and.arrow.up.left")
                     tool(.redact, title: "Redact PDF", subtitle: "Permanently remove marked information in a new copy", icon: "eye.slash")
                     tool(.sanitize, title: "Inspect & Sanitize", subtitle: "See what a PDF carries, then make a safer copy", icon: "checkmark.shield")

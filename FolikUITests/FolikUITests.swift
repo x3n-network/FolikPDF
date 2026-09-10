@@ -169,6 +169,45 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["2 of 2"].waitForExistence(timeout: 3))
     }
 
+    func testScannedPDFCanAuthorFillableFields() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--ui-test-fixture",
+            "--ui-test-image-only",
+            "--open-document-named",
+            "Scan.pdf"
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.navigationBars["Scan"].waitForExistence(timeout: 5))
+        app.buttons["reader.panel.forms"].tap()
+        XCTAssertTrue(app.navigationBars["Forms"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Add fields to turn this PDF into a fillable form."].exists)
+
+        app.buttons["reader.form.add"].tap()
+        app.buttons["Text field"].tap()
+        let label = app.textFields["Field label"]
+        XCTAssertTrue(label.waitForExistence(timeout: 3))
+        label.tap()
+        label.typeText("Customer name")
+        app.switches["Required"].tap()
+        app.buttons["Continue"].tap()
+
+        let placeCenter = app.buttons["reader.annotation.placeCenter"]
+        XCTAssertTrue(placeCenter.waitForExistence(timeout: 3))
+        placeCenter.tap()
+        capture("fillable-scanned-field", in: app)
+
+        app.buttons["reader.panel.forms"].tap()
+        XCTAssertTrue(app.staticTexts["Customer name"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["0 of 1 filled"].exists)
+        XCTAssertTrue(app.buttons["reader.form.editLayout"].isEnabled)
+        app.buttons["reader.form.editLayout"].tap()
+        XCTAssertTrue(app.staticTexts["Edit form layout"].waitForExistence(timeout: 3))
+        capture("fillable-edit-layout", in: app)
+        app.buttons["reader.annotation.doneEditing"].tap()
+    }
+
     func testContinueReadingResumesAndDismissalPersists() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-fixture"]
@@ -371,6 +410,7 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Choose PDFs"].exists)
         XCTAssertTrue(app.buttons["Images to PDF"].exists)
         XCTAssertTrue(app.buttons["Text/RTF to PDF"].exists)
+        XCTAssertTrue(app.buttons["Make Fillable Copy"].exists)
     }
 
     func testLibrarySelectionCanFavoriteDocuments() {

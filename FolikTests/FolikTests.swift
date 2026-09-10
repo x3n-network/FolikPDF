@@ -435,6 +435,80 @@ final class DocumentSessionTests: XCTestCase {
         XCTAssertEqual(savedField.widgetStringValue, "Joseph Spears")
     }
 
+    func testFillableCopyAuthorsStandardWidgetsAndPreservesSource() throws {
+        let sourceURL = workspace.appendingPathComponent("Scanned Source.pdf")
+        try PDFTestFixture.write(to: sourceURL, pages: ["Scanned application background"])
+        let sourceData = try Data(contentsOf: sourceURL)
+        let preview = try FillablePDFPreparation.prepare(sourceData)
+        XCTAssertEqual(preview.data, sourceData)
+        XCTAssertEqual(preview.pageCount, 1)
+
+        let copyURL = workspace.appendingPathComponent("Scanned Source Fillable.pdf")
+        try preview.data.write(to: copyURL)
+        let session = DocumentSession(item: PDFTestFixture.item(for: copyURL))
+
+        session.beginFormFieldPlacement(.text, label: "Full name", isRequired: true)
+        XCTAssertTrue(session.isPlacementActive)
+        session.placeAnnotation(pageIndex: 0, point: CGPoint(x: 220, y: 620))
+
+        session.beginFormFieldPlacement(.multilineText, label: "Comments", isRequired: false)
+        session.placeAnnotation(pageIndex: 0, point: CGPoint(x: 230, y: 500))
+
+        session.beginFormFieldPlacement(.checkbox, label: "I agree", isRequired: true)
+        session.placeAnnotation(pageIndex: 0, point: CGPoint(x: 90, y: 420))
+
+        session.beginFormFieldPlacement(.date, label: "Date", isRequired: false)
+        session.placeAnnotation(pageIndex: 0, point: CGPoint(x: 180, y: 360))
+
+        session.beginFormFieldPlacement(.signature, label: "Signature", isRequired: false)
+        session.placeAnnotation(pageIndex: 0, point: CGPoint(x: 230, y: 270))
+
+        XCTAssertEqual(session.formFields.count, 5)
+        XCTAssertEqual(session.formFields.first(where: { $0.title == "Full name" })?.kind, .text)
+        XCTAssertTrue(session.formFields.first(where: { $0.title == "Full name" })?.isRequired == true)
+        XCTAssertFalse(session.formFields.first(where: { $0.title == "Full name" })?.isFilled == true)
+        XCTAssertEqual(session.remainingRequiredFormFieldCount, 2)
+        XCTAssertEqual(session.formFields.first(where: { $0.title == "Comments" })?.kind, .multilineText)
+        XCTAssertEqual(session.formFields.first(where: { $0.title == "I agree" })?.kind, .checkbox)
+        XCTAssertEqual(session.formFields.first(where: { $0.title == "Date" })?.kind, .text)
+        XCTAssertEqual(session.formFields.first(where: { $0.title == "Signature" })?.kind, .signature)
+        XCTAssertFalse(session.isPlacementActive)
+
+        let nameField = try XCTUnwrap(session.formFields.first(where: { $0.title == "Full name" }))
+        let originalBounds = nameField.annotation.bounds
+        session.beginFormLayoutEditing()
+        session.selectAnnotation(nameField.annotation, pageIndex: nameField.pageIndex)
+        XCTAssertTrue(session.isFormLayoutEditingEnabled)
+        XCTAssertTrue(session.selectedAnnotationCanMove)
+        XCTAssertTrue(session.selectedAnnotationCanResize)
+        session.moveSelectedAnnotation(horizontal: 12, vertical: -12)
+        session.resizeSelectedAnnotation(by: 10)
+        XCTAssertNotEqual(nameField.annotation.bounds, originalBounds)
+        session.finishAnnotationEditing()
+
+        let reopened = try XCTUnwrap(PDFDocument(url: copyURL))
+        XCTAssertTrue(PDFTestFixture.hasCanonicalFormFieldTree(reopened))
+        XCTAssertEqual(
+            (0..<reopened.pageCount).flatMap { reopened.page(at: $0)?.annotations.filter { $0.type == "Widget" } ?? [] }.count,
+            5
+        )
+        XCTAssertEqual(try Data(contentsOf: sourceURL), sourceData)
+    }
+
+    func testAuthoredFormFieldNamesRemainIndependent() throws {
+        let url = workspace.appendingPathComponent("Repeated Fields.pdf")
+        try PDFTestFixture.write(to: url, pages: ["Two names"])
+        let session = DocumentSession(item: PDFTestFixture.item(for: url))
+
+        session.beginFormFieldPlacement(.text, label: "Name", isRequired: false)
+        session.placeAnnotation(pageIndex: 0, point: CGPoint(x: 180, y: 620))
+        session.beginFormFieldPlacement(.text, label: "Name", isRequired: false)
+        session.placeAnnotation(pageIndex: 0, point: CGPoint(x: 180, y: 560))
+
+        XCTAssertEqual(Set(session.formFields.compactMap { $0.annotation.fieldName }), ["Name", "Name 2"])
+        XCTAssertEqual(session.formFields.map(\.title), ["Name", "Name"])
+    }
+
     func testCompatibilityFormClassifiesStandardWidgetsAndGroupsRadioOptions() throws {
         let url = workspace.appendingPathComponent("Compatibility.pdf")
         try PDFTestFixture.writeCompatibilityForm(to: url)

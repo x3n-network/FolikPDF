@@ -130,7 +130,12 @@ struct ContentView: View {
         .sheet(item: $pdfToolRequest, onDismiss: {
             if let document = convertedDocument { convertedDocument = nil; path.append(document) }
         }) { request in
-            if request.tool == .redact {
+            if request.tool == .fillable {
+                FillablePDFView(initialURL: request.sourceURL) { document in
+                    convertedDocument = document
+                    pdfToolRequest = nil
+                }
+            } else if request.tool == .redact {
                 RedactionView(initialURL: request.sourceURL) { document in
                     convertedDocument = document
                     pdfToolRequest = nil
@@ -289,6 +294,7 @@ struct ContentView: View {
         case .documents: officeConverterPresented = true
         case .text: conversionMode = .text
         case .searchable: pdfToolRequest = LibraryPDFToolRequest(tool: .searchable)
+        case .fillable: pdfToolRequest = LibraryPDFToolRequest(tool: .fillable)
         case .compress: pdfToolRequest = LibraryPDFToolRequest(tool: .compress)
         case .batch: batchPresented = true
         case .redact: pdfToolRequest = LibraryPDFToolRequest(tool: .redact)
