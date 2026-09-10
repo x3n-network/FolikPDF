@@ -304,6 +304,7 @@ struct FormField: Identifiable {
     }
 
     var isEditable: Bool { !isReadOnly && kind.supportsEditing }
+    var isAuthoredByFolik: Bool { annotation.contents == "Folik form field" }
 
     var limitation: String? {
         switch kind {
@@ -855,6 +856,25 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         guard let selectedAnnotation else { return }
         deleteAnnotation(selectedAnnotation)
         self.selectedAnnotation = nil
+    }
+
+    func deleteAuthoredFormField(_ field: FormField) {
+        guard
+            field.isAuthoredByFolik,
+            let currentField = formFields.first(where: { $0.annotation === field.annotation })
+        else { return }
+        if selectedAnnotation?.annotation === currentField.annotation {
+            selectedAnnotation = nil
+        }
+        deleteAnnotation(DocumentAnnotation(
+            id: currentField.id,
+            annotation: currentField.annotation,
+            pageIndex: currentField.pageIndex,
+            title: currentField.title,
+            excerpt: currentField.kind.title,
+            icon: formFieldIcon(currentField.kind),
+            color: currentField.annotation.color
+        ))
     }
 
     func placeAnnotationAtCurrentPageCenter() {

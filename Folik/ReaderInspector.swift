@@ -618,6 +618,7 @@ private struct FormNavigator: View {
     @State private var isSuggestingFields = false
     @State private var suggestionMessage: String?
     @State private var suggestionTask: Task<Void, Never>?
+    @State private var fieldPendingDeletion: FormField?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -706,52 +707,68 @@ private struct FormNavigator: View {
             Divider()
 
             List(session.formFields) { field in
-                Button {
-                    close()
-                    DispatchQueue.main.async {
-                        session.goToFormField(field)
-                    }
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: field.isFilled ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(field.isFilled ? FolikTheme.cobalt : FolikTheme.mutedInk)
-                            .accessibilityHidden(true)
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 6) {
-                                Text(field.title)
-                                    .font(.body.weight(.medium))
-                                    .foregroundStyle(FolikTheme.ink)
-                                if field.isRequired {
-                                    Text("Required")
-                                        .font(.caption2.weight(.bold))
-                                        .foregroundStyle(FolikTheme.cobalt)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
-                                        .background(FolikTheme.cobalt.opacity(0.1), in: Capsule())
+                HStack(spacing: 4) {
+                    Button {
+                        close()
+                        DispatchQueue.main.async {
+                            session.goToFormField(field)
+                        }
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: field.isFilled ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(field.isFilled ? FolikTheme.cobalt : FolikTheme.mutedInk)
+                                .accessibilityHidden(true)
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 6) {
+                                    Text(field.title)
+                                        .font(.body.weight(.medium))
+                                        .foregroundStyle(FolikTheme.ink)
+                                    if field.isRequired {
+                                        Text("Required")
+                                            .font(.caption2.weight(.bold))
+                                            .foregroundStyle(FolikTheme.cobalt)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(FolikTheme.cobalt.opacity(0.1), in: Capsule())
+                                    }
+                                }
+                                Text("\(field.kind.title) · Page \(field.pageIndex + 1)\(field.limitation.map { " · \($0)" } ?? "")")
+                                    .font(.caption)
+                                    .foregroundStyle(FolikTheme.mutedInk)
+                                if field.limitation == nil {
+                                    Text(field.statusText)
+                                        .font(.caption)
+                                        .foregroundStyle(field.isFilled ? FolikTheme.cobalt : FolikTheme.mutedInk)
+                                        .lineLimit(1)
                                 }
                             }
-                            Text("\(field.kind.title) · Page \(field.pageIndex + 1)\(field.limitation.map { " · \($0)" } ?? "")")
-                                .font(.caption)
+                            Spacer(minLength: 4)
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
                                 .foregroundStyle(FolikTheme.mutedInk)
-                            if field.limitation == nil {
-                                Text(field.statusText)
-                                    .font(.caption)
-                                    .foregroundStyle(field.isFilled ? FolikTheme.cobalt : FolikTheme.mutedInk)
-                                    .lineLimit(1)
-                            }
+                                .accessibilityHidden(true)
                         }
-                        Spacer(minLength: 4)
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(FolikTheme.mutedInk)
-                            .accessibilityHidden(true)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     }
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .buttonStyle(.plain)
+                    .disabled(!field.isEditable || !session.canFillForms)
+                    .accessibilityIdentifier("reader.form.field.\(field.id)")
+                    .accessibilityValue("\(field.isRequired ? "Required, " : "")\(field.statusText)")
+
+                    if field.isAuthoredByFolik {
+                        Button(role: .destructive) {
+                            fieldPendingDeletion = field
+                        } label: {
+                            Image(systemName: "trash")
+                                .frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.red)
+                        .accessibilityLabel("Delete \(field.title) form area")
+                        .accessibilityHint("Asks for confirmation before removing this added field")
+                        .accessibilityIdentifier("reader.form.delete.\(field.id)")
+                    }
                 }
-                .buttonStyle(.plain)
-                .disabled(!field.isEditable || !session.canFillForms)
-                .accessibilityIdentifier("reader.form.field.\(field.id)")
-                .accessibilityValue("\(field.isRequired ? "Required, " : "")\(field.statusText)")
             }
             .listStyle(.plain)
         }
@@ -771,6 +788,24 @@ private struct FormNavigator: View {
                 selectedIDs: $selectedSuggestionIDs,
                 apply: applySelectedSuggestions
             )
+        }
+        .confirmationDialog(
+            "Delete form area?",
+            isPresented: Binding(
+                get: { fieldPendingDeletion != nil },
+                set: { if !$0 { fieldPendingDeletion = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let field = fieldPendingDeletion {
+                Button("Delete \(field.title)", role: .destructive) {
+                    session.deleteAuthoredFormField(field)
+                    fieldPendingDeletion = nil
+                }
+            }
+            Button("Cancel", role: .cancel) { fieldPendingDeletion = nil }
+        } message: {
+            Text("This removes the added PDF field. You can undo it while this document remains open.")
         }
         .onDisappear { suggestionTask?.cancel() }
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)

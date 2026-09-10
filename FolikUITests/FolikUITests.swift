@@ -206,6 +206,17 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Edit form layout"].waitForExistence(timeout: 3))
         capture("fillable-edit-layout", in: app)
         app.buttons["reader.annotation.doneEditing"].tap()
+
+        app.buttons["reader.panel.forms"].tap()
+        let deleteArea = app.buttons["Delete Customer name form area"]
+        XCTAssertTrue(deleteArea.waitForExistence(timeout: 3))
+        capture("fillable-field-delete-option", in: app)
+        deleteArea.tap()
+        XCTAssertTrue(app.sheets["Delete form area?"].waitForExistence(timeout: 3))
+        app.sheets["Delete form area?"].buttons["Delete Customer name"].tap()
+        XCTAssertTrue(app.staticTexts["No fields yet"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["reader.form.editLayout"].isEnabled)
+        capture("fillable-field-deleted", in: app)
     }
 
     func testScannedPDFCanReviewSuggestedFieldsAndKeepOverlaysAlignedWhenZoomed() {

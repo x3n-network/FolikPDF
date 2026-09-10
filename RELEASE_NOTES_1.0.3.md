@@ -64,7 +64,7 @@ Your documents and search index remain on your device. No accounts, ads, analyti
 - Creates a separately named authoring copy while keeping the source scan or PDF unchanged.
 - Suggests likely text fields, multiline areas, dates, signatures, and checkboxes using on-device text and shape recognition, then lets you review and select results before anything is added.
 - Adds standard text, multiline, checkbox, date, and signature widgets from the reader's Forms panel.
-- Places fields directly on the page, with accessible controls for moving, resizing, and deleting them afterward.
+- Places fields directly on the page, with accessible controls for moving and resizing them plus a confirmed trash action beside every Folik-added field.
 - Keeps the blue form-layout selection outline aligned with its field while panning or zooming the PDF.
 - Supports readable labels, required-field tracking, and independent internal names when a label is reused.
 - Uses a standard text widget for dates instead of embedding PDF JavaScript; signature widgets can be completed by compatible signing apps, while Folik's existing handwritten or typed signatures remain available as visual annotations.

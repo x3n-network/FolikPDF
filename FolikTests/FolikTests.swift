@@ -486,7 +486,22 @@ final class DocumentSessionTests: XCTestCase {
         XCTAssertNotEqual(nameField.annotation.bounds, originalBounds)
         session.finishAnnotationEditing()
 
-        let reopened = try XCTUnwrap(PDFDocument(url: copyURL))
+        let commentsField = try XCTUnwrap(session.formFields.first(where: { $0.title == "Comments" }))
+        session.deleteAuthoredFormField(commentsField)
+        XCTAssertEqual(session.formFields.count, 4)
+        XCTAssertFalse(session.formFields.contains(where: { $0.title == "Comments" }))
+
+        var reopened = try XCTUnwrap(PDFDocument(url: copyURL))
+        XCTAssertEqual(
+            (0..<reopened.pageCount).flatMap { reopened.page(at: $0)?.annotations.filter { $0.type == "Widget" } ?? [] }.count,
+            4
+        )
+
+        session.undoAnnotationAction()
+        XCTAssertEqual(session.formFields.count, 5)
+        XCTAssertTrue(session.formFields.contains(where: { $0.title == "Comments" }))
+
+        reopened = try XCTUnwrap(PDFDocument(url: copyURL))
         XCTAssertTrue(PDFTestFixture.hasCanonicalFormFieldTree(reopened))
         XCTAssertEqual(
             (0..<reopened.pageCount).flatMap { reopened.page(at: $0)?.annotations.filter { $0.type == "Widget" } ?? [] }.count,
