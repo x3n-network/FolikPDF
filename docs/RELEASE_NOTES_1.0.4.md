@@ -133,3 +133,9 @@ Validation: the scan → suggest → preview/zoom → edit → add UI flow passe
 Build → Layout tools now aligns selected fields, matches width/height/size, and distributes spacing within one page. Changes stay within page bounds and are grouped into one undo action. Filling order has accessible earlier/later controls and persists as Folik-specific PDF annotation metadata; required unfinished fields retain priority and external readers may use their own order.
 
 Validation: bulk geometry, batch undo/redo, spacing, matching size, preserved values, saved/reopened filling order, and the layout/order UI flow passed in `/tmp/folik-layout-final.xcresult` on iPhone.
+
+## Contextual next actions
+
+New scans show dismissible next actions: add form fields on a working copy, find recognized text, or make the scan searchable when the current page has no text. Finishing a form opens Fill immediately. Returning to the library clears the scan-action launch context.
+
+Validation: finish-to-Fill passed in `/tmp/folik-next-actions.xcresult`; scan-to-builder passed after fixing inherited accessibility identifiers in `/tmp/folik-next-final.xcresult`. Scan actions have at least 44-point label targets.

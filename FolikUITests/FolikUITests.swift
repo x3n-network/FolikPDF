@@ -183,6 +183,8 @@ final class FolikUITests: XCTestCase {
         app.buttons["fillable.finishNaming"].tap()
         XCTAssertTrue(app.buttons["reader.export"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["fillable.finish"].exists)
+        XCTAssertTrue(app.segmentedControls["reader.form.mode"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.segmentedControls["reader.form.mode"].buttons["Fill"].isSelected)
         capture("direct-form-builder-finished", in: app)
     }
 
@@ -1681,6 +1683,15 @@ final class FolikUITests: XCTestCase {
         app.buttons["Move Work order number later"].tap()
         capture("form-fill-order", in: app)
         app.navigationBars["Form Layout Tools"].buttons["Done"].tap()
+    }
+
+    func testScanOffersNextActionIntoFormBuilder() {
+        let app = launchApp(additionalArguments: ["--ui-test-fixture", "--ui-test-scan-fixture"])
+        XCTAssertTrue(app.buttons["reader.scanMakeFillable"].waitForExistence(timeout: 20))
+        capture("scan-next-actions", in: app)
+        app.buttons["reader.scanMakeFillable"].tap()
+        XCTAssertTrue(app.buttons["builder.add.text"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["fillable.finish"].exists)
     }
 
     private func launchApp(

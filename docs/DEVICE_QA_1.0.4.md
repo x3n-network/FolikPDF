@@ -45,3 +45,7 @@ On a rotated, cropped, multipage scan, pinch and pan the preview and toggle boxe
 ### Bulk form layout and filling order
 
 Select mixed-size fields, align and distribute them, undo/redo, then reopen to check geometry and answers. Try page edges and rotated pages. Change fill order across multiple pages with both touch and VoiceOver controls; verify required-field priority and preservation after saving. Other readers may ignore Folik’s filling-order metadata.
+
+### Contextual next actions
+
+Scan a page with recognizable text and one without. Check the relevant Find text/Make searchable action, create a fillable copy from the scan banner, and finish into Fill mode. Dismiss the banner and return to the library; normal document reopening should remain unobstructed.

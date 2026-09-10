@@ -34,6 +34,10 @@ struct ReaderView: View {
     @StateObject private var session: DocumentSession
     @EnvironmentObject private var library: DocumentLibrary
     private let initialPanel: ReaderPanel?
+    private let showScanActions: Bool
+    private let scanAction: ((LibraryPDFTool) -> Void)?
+    @State private var scanActionsDismissed = false
+    @State private var startingScanAction = false
     private let startInFormBuilder: Bool
     private let finishForm: ((LibraryDocument) -> Void)?
     @State private var namingForm = false
@@ -56,8 +60,10 @@ struct ReaderView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    init(item: LibraryDocument, startInFormBuilder: Bool = false, finishForm: ((LibraryDocument) -> Void)? = nil, initialPanel: ReaderPanel? = nil) {
+    init(item: LibraryDocument, startInFormBuilder: Bool = false, finishForm: ((LibraryDocument) -> Void)? = nil, initialPanel: ReaderPanel? = nil, showScanActions: Bool = false, scanAction: ((LibraryPDFTool) -> Void)? = nil) {
         self.initialPanel = initialPanel
+        self.showScanActions = showScanActions
+        self.scanAction = scanAction
         self.startInFormBuilder = startInFormBuilder
         self.finishForm = finishForm
         #if DEBUG
@@ -92,6 +98,11 @@ struct ReaderView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(finishForm != nil || session.isModified || session.saveFailed || session.isSaving || leaving)
         .toolbar { readerToolbar }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if showScanActions && !scanActionsDismissed && !session.isLocked && !session.isPreparingDocument {
+                scanNextActions
+            }
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             ReaderBottomChrome(session: session, presentedPanel: $presentedPanel)
                 .disabled(isExporting || session.isPreparingDocument)
@@ -114,7 +125,7 @@ struct ReaderView: View {
                     Section("Form name") {
                         TextField("Filename", text: $formName)
                             .accessibilityIdentifier("fillable.filename")
-                        Text("Your working copy is already in the library. Finish keeps your latest fields and values.")
+                        Text("Your working copy is already in the library. Finish keeps your latest fields and values, then opens Fill so you can try the form.")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                     if let formFinishError { Section { ProcessingErrorView(message: formFinishError) } }
@@ -401,6 +412,52 @@ struct ReaderView: View {
             .accessibilityFocused($exportFocused)
             .accessibilityIdentifier("reader.export")
             .accessibilityLabel(isExporting ? "Preparing PDF" : "Export and share")
+        }
+    }
+
+    private var scanNextActions: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Your scan is saved").font(.headline)
+                Spacer()
+                Button { scanActionsDismissed = true } label: {
+                    Image(systemName: "xmark").frame(width: 44, height: 44)
+                }.accessibilityLabel("Dismiss scan suggestions")
+            }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) { scanActionButtons }
+                VStack(alignment: .leading, spacing: 8) { scanActionButtons }
+            }
+        }
+        .padding(.horizontal).padding(.bottom, 12)
+        .background(.regularMaterial)
+        .disabled(startingScanAction)
+    }
+
+    @ViewBuilder private var scanActionButtons: some View {
+        Button { startScanTool(.fillable) } label: { Text("Add form fields").frame(minHeight: 44) }
+            .buttonStyle(.borderedProminent)
+            .disabled(!session.canFillForms || scanAction == nil)
+            .accessibilityIdentifier("reader.scanMakeFillable")
+            .accessibilityHint("Creates an independent working copy for adding fillable fields")
+        if session.document?.page(at: session.pageIndex)?.string?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+            Button { scanActionsDismissed = true; presentedPanel = .search } label: { Text("Find text").frame(minHeight: 44) }
+                .buttonStyle(.bordered)
+        } else {
+            Button { startScanTool(.searchable) } label: { Text("Make searchable").frame(minHeight: 44) }
+                .buttonStyle(.bordered)
+                .disabled(scanAction == nil)
+        }
+    }
+
+    private func startScanTool(_ tool: LibraryPDFTool) {
+        guard !startingScanAction else { return }
+        startingScanAction = true
+        Task {
+            defer { startingScanAction = false }
+            guard await session.saveForSharing() else { return }
+            scanActionsDismissed = true
+            scanAction?(tool)
         }
     }
 

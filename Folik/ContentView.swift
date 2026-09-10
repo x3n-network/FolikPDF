@@ -15,6 +15,7 @@ struct ContentView: View {
     @EnvironmentObject private var library: DocumentLibrary
     @State private var path: [LibraryDocument] = []
     @State private var initialFormDocumentID: UUID?
+    @State private var scannedDocumentID: UUID?
     @State private var isImporterPresented = false
     @State private var isScannerPresented = false
     @State private var cameraPermissionAlertPresented = false
@@ -40,7 +41,9 @@ struct ContentView: View {
         NavigationStack(path: $path) {
             libraryRoot
                 .navigationDestination(for: LibraryDocument.self) { item in
-                    ReaderView(item: item, initialPanel: item.id == initialFormDocumentID ? .forms : nil)
+                    ReaderView(item: item, initialPanel: item.id == initialFormDocumentID ? .forms : nil,
+                               showScanActions: item.id == scannedDocumentID,
+                               scanAction: { tool in pdfToolRequest = LibraryPDFToolRequest(tool: tool, sourceURL: item.url) })
                 }
         }
         .pdfDropDestination(
@@ -93,6 +96,7 @@ struct ContentView: View {
                     isScannerPresented = false
                     Task {
                         if let document = await library.importScannedPages(pages) {
+                            scannedDocumentID = document.id
                             path.append(document)
                         }
                     }
@@ -153,6 +157,7 @@ struct ContentView: View {
         }) { request in
             if request.tool == .fillable {
                 FillablePDFView(initialURL: request.sourceURL) { document in
+                    initialFormDocumentID = document.id
                     convertedDocument = document
                     pdfToolRequest = nil
                 }
@@ -189,7 +194,7 @@ struct ContentView: View {
             }
         }
         .onChange(of: path.count) { _, count in
-            if count == 0 { Task { await library.refreshInBackground() } }
+            if count == 0 { scannedDocumentID = nil; Task { await library.refreshInBackground() } }
         }
         .onAppear {
             #if DEBUG
@@ -220,6 +225,7 @@ struct ContentView: View {
             if arguments.contains("--ui-test-scan-fixture") {
                 Task {
                     if let document = await library.prepareUITestScanFixture() {
+                        scannedDocumentID = document.id
                         path.append(document)
                     }
                 }

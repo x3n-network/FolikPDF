@@ -243,3 +243,5 @@ In a document’s **Forms** panel, choose **Save as My Template** to keep a pers
 Suggested fields can be reviewed over a zoomable PDF preview before adding them. Tap a proposed box to include or skip it, or use its list toggle; edit labels and field types before applying. Multipage suggestions have page navigation. Review marks exist only in the disposable preview.
 
 Build’s **Layout tools** can select several fields on one page, align edges, match dimensions, or distribute spacing. Each arrangement is one undoable change and stays inside the page. **Fill order** changes Folik’s field list and next-empty-field navigation, persists in the PDF, and supports earlier/later buttons. Unfinished required fields still take priority; other PDF apps may use their own navigation order.
+
+After scanning, a dismissible action strip leads straight to adding form fields or finding recognized text; pages without recognized text offer Make searchable. Finishing a new form opens its Fill panel so you can try it immediately.
