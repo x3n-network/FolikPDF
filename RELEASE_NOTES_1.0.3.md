@@ -12,6 +12,7 @@ Folik 1.0.3 makes private document libraries faster to search, easier to manage,
 - Inspect what a PDF carries beyond its visible pages and make a sanitized image-only copy.
 - Run Sanitize PDF directly from Shortcuts, Siri, Spotlight, or an automation.
 - Create a verified password-protected copy without storing its password.
+- Compare two PDFs privately and review added, removed, or changed pages.
 
 Your documents and search index remain on your device. No accounts, ads, analytics, or uploads.
 
@@ -55,6 +56,14 @@ Your documents and search index remain on your device. No accounts, ads, analyti
 - Clears password fields after processing and never stores the password for recovery.
 - Distinguishes unsigned digital-signature fields from fields containing signed data without claiming cryptographic verification Folik cannot perform.
 
+## Local PDF comparison
+
+- Compares selectable PDF text entirely on-device without retaining a comparison history.
+- Aligns unchanged pages across insertions and removals so later pages do not all appear changed.
+- Reports added, removed, changed, and unchanged page counts with bounded before/after excerpts.
+- Clearly labels the result as text-based: image, layout, color, font, and annotation-only changes are not detected.
+- Directs scanned documents through the existing OCR workflow and rejects protected or oversized input.
+
 ## Compatibility and privacy
 
 - Documents, extracted search text, authentication state, and processing remain on-device.
@@ -64,8 +73,8 @@ Your documents and search index remain on your device. No accounts, ads, analyti
 ## Validation
 
 - Debug and Release generic iOS Simulator builds succeed, and Xcode static analysis passes.
-- The complete simulator unit suite passed 105 tests; one optional private-document fixture test was skipped.
-- The complete iPhone 17e UI suite passed 40 tests; one optional App Store screenshot fixture test was skipped.
+- The complete simulator unit suite passed 110 tests; one optional private-document fixture test was skipped.
+- The complete iPhone 17e UI suite passed 42 tests; one optional App Store screenshot fixture test was skipped.
 - Focused iPad mini UI checks passed for multi-page search results, document duplication, bulk recovery, and the lock-screen cover.
 - Focused iPhone and iPad mini UI checks passed for inspecting, previewing, saving, and preserving the original during sanitizing.
 - New unit coverage exercises search-index persistence and invalidation, document duplication, App Lock enrollment, startup state, relock delays, privacy reporting, catalog-level active/embedded content detection, and sanitized-output structure.

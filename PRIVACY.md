@@ -26,6 +26,10 @@ PDF privacy reports are generated on-device and are not retained as separate rec
 
 Folik's Sanitize PDF Shortcuts action receives the file the user supplies through Apple's App Intents system, performs the same image-only operation locally, and returns a new file to the shortcut. Folik does not upload or retain a separate copy through this action.
 
+## PDF comparison
+
+PDF comparison extracts and normalizes selectable page text on-device, aligns matching pages, and creates an in-memory change report. Folik does not upload the PDFs or retain comparison text or reports after the comparison screen is dismissed. This feature does not inspect visual-only differences and requires OCR first for scanned pages without selectable text.
+
 ## Network access
 
 The current app does not require network access for its functionality.

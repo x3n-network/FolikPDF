@@ -400,7 +400,7 @@ final class FolikUITests: XCTestCase {
         app.launchArguments = ["--ui-test-fixture"]
         app.launch()
         XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
-        for title in ["Make PDF Searchable", "Compress PDF", "Redact PDF", "Inspect & Sanitize", "Protect PDF"] {
+        for title in ["Make PDF Searchable", "Compress PDF", "Redact PDF", "Inspect & Sanitize", "Protect PDF", "Compare PDFs"] {
             app.buttons["Document actions"].tap()
             app.buttons["Tools"].tap()
             app.buttons[title].tap()
@@ -414,6 +414,10 @@ final class FolikUITests: XCTestCase {
                 XCTAssertTrue(app.staticTexts["protect.source"].waitForExistence(timeout: 10))
                 XCTAssertEqual(app.staticTexts["protect.source"].label, "Folik UI Test.pdf")
                 XCTAssertFalse(app.buttons["protect.review"].isEnabled)
+            } else if title == "Compare PDFs" {
+                XCTAssertTrue(app.staticTexts["compare.original"].waitForExistence(timeout: 10))
+                XCTAssertEqual(app.staticTexts["compare.original"].label, "Folik UI Test.pdf")
+                XCTAssertFalse(app.buttons["compare.run"].isEnabled)
             } else {
                 XCTAssertTrue(app.staticTexts["pdfTool.source"].waitForExistence(timeout: 10))
                 XCTAssertEqual(app.staticTexts["pdfTool.source"].label, "Folik UI Test.pdf")
@@ -421,7 +425,7 @@ final class FolikUITests: XCTestCase {
             if title == "Redact PDF" {
                 XCTAssertTrue(app.staticTexts["Page 1 of 2"].waitForExistence(timeout: 10))
                 XCTAssertFalse(app.buttons["redaction.preview"].isEnabled)
-            } else if title != "Inspect & Sanitize" && title != "Protect PDF" {
+            } else if title != "Inspect & Sanitize" && title != "Protect PDF" && title != "Compare PDFs" {
                 XCTAssertTrue(app.buttons["pdfTool.preview"].isEnabled)
                 XCTAssertEqual(app.textFields["Filename"].value as? String,
                                title == "Compress PDF" ? "Folik UI Test Compressed" : "Folik UI Test Searchable")
@@ -512,6 +516,37 @@ final class FolikUITests: XCTestCase {
         app.navigationBars.buttons["Library"].tap()
         XCTAssertTrue(app.buttons["library.document.Folik UI Test.pdf"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["library.document.Folik UI Test Protected.pdf"].exists)
+    }
+
+    func testPDFComparisonAlignsAnInsertedPage() {
+        func pdf(_ pages: [String]) -> Data {
+            UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 612, height: 792)).pdfData { context in
+                for text in pages {
+                    context.beginPage()
+                    (text as NSString).draw(at: CGPoint(x: 72, y: 96), withAttributes: [.font: UIFont.systemFont(ofSize: 22)])
+                }
+            }
+        }
+        let original = pdf(["Cover", "Terms", "Signature page"])
+        let revised = pdf(["Cover", "New disclosure", "Terms", "Signature page"])
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--ui-test-fixture",
+            "--ui-test-compare-original", original.base64EncodedString(),
+            "--ui-test-compare-revised", revised.base64EncodedString()
+        ]
+        app.launch()
+        app.buttons["library.addDocument"].tap()
+        let compare = app.buttons["Compare PDFs"]
+        for _ in 0..<4 where !compare.exists || !compare.isHittable { app.swipeUp() }
+        XCTAssertTrue(compare.waitForExistence(timeout: 5))
+        compare.tap()
+        XCTAssertTrue(app.navigationBars["Compare PDFs"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["compare.run"].isEnabled)
+        app.buttons["compare.run"].tap()
+        XCTAssertTrue(app.navigationBars["Comparison Report"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["Page 2 added"].exists)
+        XCTAssertTrue(app.staticTexts["Text-based result only. Review both PDFs for image, layout, color, annotation, and other visual changes."].exists)
     }
 
     func testConversionScreensCanBeCancelledWithoutCreatingDocuments() {

@@ -23,6 +23,7 @@ The updated library in **Folik 1.0.2**. Browse in a list or grid, resume reading
 - Find literal text, email addresses, phone numbers, and Social Security numbers on-device, review each match, and add selected matches to a redacted copy
 - Inspect PDFs for metadata, filled forms, comments, links, outlines, attachments, scripts/actions, and digital-signature fields, then review and save a sanitized image-only copy
 - Create a separately named, password-protected PDF and verify that the new copy stays locked until the chosen password is entered
+- Compare selectable text between two PDFs on-device, align unchanged pages across insertions or removals, and review added, removed, or changed pages with excerpts
 - Run Sanitize PDF from Shortcuts, Siri, Spotlight, or an automation and receive a new local file without changing the original
 - Convert JPEG, PNG, or HEIC images from Photos or Files into a named, ordered, searchable multipage PDF (up to 30 images, 20 MB each and 100 MB total)
 - Convert Word DOCX and LibreOffice ODT documents on-device, review the generated PDF and conversion notes, then save the exact preview to the library
@@ -81,6 +82,12 @@ The same image-only operation is available as **Sanitize PDF** in Apple Shortcut
 ### Password-protected copies
 
 Choose **Add (+) → Protect PDF** to create a new PDF that requires a password to open. Folik requires 6–128 characters, asks for confirmation, verifies that an empty password cannot open the result, and then verifies the chosen password before offering the copy for saving. The password is cleared from the workflow after processing and is never stored for recovery. Existing protected PDFs must first be exported as an unprotected copy before applying a different password. Keep the unchanged original until the protected copy has been reopened and checked.
+
+### Local PDF comparison
+
+Choose **Add (+) → Compare PDFs**, or begin from a document's **… → Tools** menu, to compare selectable text in two PDFs entirely on-device. Folik aligns identical pages using their normalized extracted text so inserted or removed pages do not automatically make every later page look changed. The report counts aligned, added, removed, and changed pages and provides bounded before/after excerpts.
+
+This is a text-and-page-structure comparison, not a visual or cryptographic comparison. It does not detect changes limited to images, positioning, fonts, colors, annotations, or other appearance details. Scanned PDFs need searchable copies from OCR first. Protected PDFs are rejected. Each input is limited to 100 MB, 500 pages, and 16 MB of extracted text; nothing is uploaded or retained as a comparison history.
 
 ### Batch conversion
 
@@ -158,6 +165,7 @@ DocumentLibrary    Imports and owns local PDF copies
 LibrarySearchIndex Bounded, disposable on-device cache for cross-library text search
 PDFPrivacy         On-device document inspection and image-only sanitizing
 PDFProtection      Verified password-protected PDF copy generation
+PDFComparison      Bounded local text extraction, page alignment, and change reports
 FolikShortcuts     System Sanitize PDF action for Shortcuts, Siri, and Spotlight
 DocumentScanner    Native camera capture and scanned-image PDF generation
 PDFConverter       Local image and paginated TXT/RTF conversion

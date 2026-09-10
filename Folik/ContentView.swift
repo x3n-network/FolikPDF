@@ -130,6 +130,8 @@ struct ContentView: View {
                     convertedDocument = document
                     pdfToolRequest = nil
                 }
+            } else if request.tool == .compare {
+                ComparePDFView(initialURL: request.sourceURL)
             } else {
                 PDFToolView(compress: request.tool == .compress, initialURL: request.sourceURL) { document in
                     convertedDocument = document
@@ -263,6 +265,7 @@ struct ContentView: View {
         case .redact: pdfToolRequest = LibraryPDFToolRequest(tool: .redact)
         case .sanitize: pdfToolRequest = LibraryPDFToolRequest(tool: .sanitize)
         case .protect: pdfToolRequest = LibraryPDFToolRequest(tool: .protect)
+        case .compare: pdfToolRequest = LibraryPDFToolRequest(tool: .compare)
         }
     }
 
