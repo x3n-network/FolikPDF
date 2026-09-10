@@ -400,7 +400,7 @@ final class FolikUITests: XCTestCase {
         app.launchArguments = ["--ui-test-fixture"]
         app.launch()
         XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
-        for title in ["Make PDF Searchable", "Compress PDF", "Redact PDF", "Inspect & Sanitize"] {
+        for title in ["Make PDF Searchable", "Compress PDF", "Redact PDF", "Inspect & Sanitize", "Protect PDF"] {
             app.buttons["Document actions"].tap()
             app.buttons["Tools"].tap()
             app.buttons[title].tap()
@@ -410,6 +410,10 @@ final class FolikUITests: XCTestCase {
                 XCTAssertEqual(app.staticTexts["privacy.source"].label, "Folik UI Test.pdf")
                 XCTAssertTrue(app.buttons["privacy.preview"].waitForExistence(timeout: 10))
                 XCTAssertTrue(app.buttons["privacy.preview"].isEnabled)
+            } else if title == "Protect PDF" {
+                XCTAssertTrue(app.staticTexts["protect.source"].waitForExistence(timeout: 10))
+                XCTAssertEqual(app.staticTexts["protect.source"].label, "Folik UI Test.pdf")
+                XCTAssertFalse(app.buttons["protect.review"].isEnabled)
             } else {
                 XCTAssertTrue(app.staticTexts["pdfTool.source"].waitForExistence(timeout: 10))
                 XCTAssertEqual(app.staticTexts["pdfTool.source"].label, "Folik UI Test.pdf")
@@ -417,7 +421,7 @@ final class FolikUITests: XCTestCase {
             if title == "Redact PDF" {
                 XCTAssertTrue(app.staticTexts["Page 1 of 2"].waitForExistence(timeout: 10))
                 XCTAssertFalse(app.buttons["redaction.preview"].isEnabled)
-            } else if title != "Inspect & Sanitize" {
+            } else if title != "Inspect & Sanitize" && title != "Protect PDF" {
                 XCTAssertTrue(app.buttons["pdfTool.preview"].isEnabled)
                 XCTAssertEqual(app.textFields["Filename"].value as? String,
                                title == "Compress PDF" ? "Folik UI Test Compressed" : "Folik UI Test Searchable")
@@ -474,6 +478,40 @@ final class FolikUITests: XCTestCase {
         app.navigationBars.buttons["Library"].tap()
         XCTAssertTrue(app.buttons["library.document.Folik UI Test.pdf"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["library.document.Folik UI Test Sanitized.pdf"].exists)
+    }
+
+    func testPasswordProtectedCopyRequiresPasswordAndKeepsOriginal() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture"]
+        app.launch()
+        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
+        app.buttons["Document actions"].tap()
+        app.buttons["Tools"].tap()
+        app.buttons["Protect PDF"].tap()
+        XCTAssertTrue(app.navigationBars["Protect PDF"].waitForExistence(timeout: 5))
+
+        let password = app.secureTextFields["protect.password"]
+        let confirmation = app.secureTextFields["protect.confirmation"]
+        XCTAssertTrue(password.waitForExistence(timeout: 10))
+        password.tap()
+        password.typeText("secret12")
+        confirmation.tap()
+        confirmation.typeText("secret12")
+        XCTAssertTrue(app.buttons["protect.review"].isEnabled)
+        app.buttons["protect.review"].tap()
+
+        XCTAssertTrue(app.navigationBars["Protection Preview"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["Password protection verified"].exists)
+        app.buttons["protect.save"].tap()
+        XCTAssertTrue(app.staticTexts["This PDF is locked"].waitForExistence(timeout: 10))
+        let unlockPassword = app.secureTextFields["PDF password"]
+        unlockPassword.tap()
+        unlockPassword.typeText("secret12")
+        app.buttons["Unlock"].tap()
+        XCTAssertTrue(app.staticTexts["reader.pageStatus"].waitForExistence(timeout: 10))
+        app.navigationBars.buttons["Library"].tap()
+        XCTAssertTrue(app.buttons["library.document.Folik UI Test.pdf"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["library.document.Folik UI Test Protected.pdf"].exists)
     }
 
     func testConversionScreensCanBeCancelledWithoutCreatingDocuments() {

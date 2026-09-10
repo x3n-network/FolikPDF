@@ -19,6 +19,7 @@ nonisolated struct PDFPrivacyReport: Equatable, Sendable {
     let linkCount: Int
     let attachmentCount: Int
     let signatureFieldCount: Int
+    let signedSignatureCount: Int
     let outlineItemCount: Int
     let hasEmbeddedFiles: Bool
     let hasScriptsOrAutomaticActions: Bool
@@ -69,6 +70,7 @@ nonisolated enum PDFPrivacy {
         }
 
         let catalog = catalogFlags(data)
+        let catalogSignatures = catalogSignatureCounts(data)
         return PDFPrivacyReport(
             pageCount: pdf.pageCount,
             fileSize: data.count,
@@ -79,7 +81,8 @@ nonisolated enum PDFPrivacy {
             filledFormFieldCount: filledFields,
             linkCount: links,
             attachmentCount: attachments,
-            signatureFieldCount: signatures,
+            signatureFieldCount: max(signatures, catalogSignatures.fields),
+            signedSignatureCount: catalogSignatures.signed,
             outlineItemCount: outlineCount(pdf.outlineRoot),
             hasEmbeddedFiles: catalog.embeddedFiles || attachments > 0,
             hasScriptsOrAutomaticActions: catalog.scriptsOrActions
@@ -189,6 +192,46 @@ nonisolated enum PDFPrivacy {
             || hasObject(catalog, key: "AA")
             || (hasNames && names.map { hasObject($0, key: "JavaScript") } == true)
         return (embedded, scripts)
+    }
+
+    private static func catalogSignatureCounts(_ data: Data) -> (fields: Int, signed: Int) {
+        guard let provider = CGDataProvider(data: data as CFData),
+              let document = CGPDFDocument(provider),
+              let catalog = document.catalog else { return (0, 0) }
+        var form: CGPDFDictionaryRef?
+        guard CGPDFDictionaryGetDictionary(catalog, "AcroForm", &form), let form else { return (0, 0) }
+        var fields: CGPDFArrayRef?
+        guard CGPDFDictionaryGetArray(form, "Fields", &fields), let fields else { return (0, 0) }
+        var result = (fields: 0, signed: 0)
+        walkSignatureFields(fields, result: &result, depth: 0)
+        return result
+    }
+
+    private static func walkSignatureFields(
+        _ fields: CGPDFArrayRef,
+        result: inout (fields: Int, signed: Int),
+        depth: Int
+    ) {
+        guard depth < 32, result.fields < 10_000 else { return }
+        for index in 0..<CGPDFArrayGetCount(fields) {
+            var field: CGPDFDictionaryRef?
+            guard CGPDFArrayGetDictionary(fields, index, &field), let field else { continue }
+            var fieldType: UnsafePointer<CChar>?
+            let isSignature = CGPDFDictionaryGetName(field, "FT", &fieldType)
+                && fieldType.map { String(cString: $0) == "Sig" } == true
+            if isSignature {
+                result.fields += 1
+                var value: CGPDFDictionaryRef?
+                if CGPDFDictionaryGetDictionary(field, "V", &value), let value,
+                   hasObject(value, key: "ByteRange"), hasObject(value, key: "Contents") {
+                    result.signed += 1
+                }
+            }
+            var children: CGPDFArrayRef?
+            if CGPDFDictionaryGetArray(field, "Kids", &children), let children {
+                walkSignatureFields(children, result: &result, depth: depth + 1)
+            }
+        }
     }
 
     private static func hasObject(_ dictionary: CGPDFDictionaryRef, key: String) -> Bool {

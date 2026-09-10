@@ -1,12 +1,12 @@
 import SwiftUI
 
 nonisolated enum LibraryTool: String, Identifiable {
-    case scan, importPDF, images, documents, text, searchable, compress, batch, redact, sanitize
+    case scan, importPDF, images, documents, text, searchable, compress, batch, redact, sanitize, protect
     var id: Self { self }
 }
 
 nonisolated enum LibraryPDFTool: String, CaseIterable, Identifiable {
-    case searchable, compress, redact, sanitize
+    case searchable, compress, redact, sanitize, protect
     var id: Self { self }
     var title: String {
         switch self {
@@ -14,6 +14,7 @@ nonisolated enum LibraryPDFTool: String, CaseIterable, Identifiable {
         case .compress: "Compress PDF"
         case .redact: "Redact PDF"
         case .sanitize: "Inspect & Sanitize"
+        case .protect: "Protect PDF"
         }
     }
     var icon: String {
@@ -22,6 +23,7 @@ nonisolated enum LibraryPDFTool: String, CaseIterable, Identifiable {
         case .compress: "arrow.down.right.and.arrow.up.left"
         case .redact: "eye.slash"
         case .sanitize: "checkmark.shield"
+        case .protect: "lock.doc"
         }
     }
 }
@@ -50,6 +52,7 @@ struct LibraryToolsView: View {
                     tool(.compress, title: "Compress PDF", subtitle: "Reduce image-heavy file sizes", icon: "arrow.down.right.and.arrow.up.left")
                     tool(.redact, title: "Redact PDF", subtitle: "Permanently remove marked information in a new copy", icon: "eye.slash")
                     tool(.sanitize, title: "Inspect & Sanitize", subtitle: "See what a PDF carries, then make a safer copy", icon: "checkmark.shield")
+                    tool(.protect, title: "Protect PDF", subtitle: "Require a password to open a new copy", icon: "lock.doc")
                 }
             }
             .navigationTitle("Add & Tools")

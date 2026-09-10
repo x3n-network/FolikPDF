@@ -11,6 +11,7 @@ Folik 1.0.3 makes private document libraries faster to search, easier to manage,
 - Restore or permanently delete several removed documents together.
 - Inspect what a PDF carries beyond its visible pages and make a sanitized image-only copy.
 - Run Sanitize PDF directly from Shortcuts, Siri, Spotlight, or an automation.
+- Create a verified password-protected copy without storing its password.
 
 Your documents and search index remain on your device. No accounts, ads, analytics, or uploads.
 
@@ -47,6 +48,13 @@ Your documents and search index remain on your device. No accounts, ads, analyti
 - Keeps the source PDF unchanged and rejects protected or oversized input.
 - Exposes the same local operation as a composable Apple Shortcuts action that returns a new PDF file.
 
+## Password protection and signature status
+
+- Creates a separately named PDF that requires the chosen password to open while preserving the unchanged original.
+- Validates and confirms the password, verifies the output remains locked without it, then verifies the chosen password before saving is offered.
+- Clears password fields after processing and never stores the password for recovery.
+- Distinguishes unsigned digital-signature fields from fields containing signed data without claiming cryptographic verification Folik cannot perform.
+
 ## Compatibility and privacy
 
 - Documents, extracted search text, authentication state, and processing remain on-device.
@@ -56,7 +64,7 @@ Your documents and search index remain on your device. No accounts, ads, analyti
 ## Validation
 
 - Debug and Release generic iOS Simulator builds succeed, and Xcode static analysis passes.
-- The complete simulator unit suite passed 102 tests; one optional private-document fixture test was skipped.
+- The complete simulator unit suite passed 105 tests; one optional private-document fixture test was skipped.
 - The complete iPhone 17e UI suite passed 40 tests; one optional App Store screenshot fixture test was skipped.
 - Focused iPad mini UI checks passed for multi-page search results, document duplication, bulk recovery, and the lock-screen cover.
 - Focused iPhone and iPad mini UI checks passed for inspecting, previewing, saving, and preserving the original during sanitizing.

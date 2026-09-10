@@ -12,6 +12,8 @@ Folik does not upload documents or document contents. A document leaves the app 
 
 Passwords entered for protected PDFs are passed to PDFKit for the active document session. Folik does not save them.
 
+When the user creates a password-protected copy, Folik passes the confirmed password to PDFKit, verifies the output is locked and can be reopened with that password, then clears the password fields. The password is not written to Folik's library metadata or retained for recovery. The newly protected PDF remains in the local app container after the user explicitly saves it, just like other library documents.
+
 ## Signatures and initials
 
 Reusable signatures and initials are stored as files in Folik's local app container using iOS data protection (`completeUnlessOpen`). Folik does not upload them. Removing Folik removes these saved assets unless they are restored as part of an operating-system device backup. A signature already placed in a PDF becomes part of that local document copy and is included when the user exports or shares the PDF.
@@ -20,7 +22,7 @@ Folik never overwrites the original when preparing an editable, flattened, redac
 
 ## Privacy reports
 
-PDF privacy reports are generated on-device and are not retained as separate records. Folik inspects common metadata and supported PDF structures, including forms, annotations, links, outlines, attachments, embedded files, catalog-level scripts/actions, and digital-signature fields. A report is a bounded compatibility check, not a guarantee that every vendor-specific or malformed PDF object can be identified.
+PDF privacy reports are generated on-device and are not retained as separate records. Folik inspects common metadata and supported PDF structures, including forms, annotations, links, outlines, attachments, embedded files, catalog-level scripts/actions, and digital-signature fields. Signature reporting can distinguish an unsigned field from a field that contains a PDF signature dictionary, but it does not cryptographically verify identity, certificate trust, or integrity. A report is a bounded compatibility check, not a guarantee that every vendor-specific or malformed PDF object can be identified.
 
 Folik's Sanitize PDF Shortcuts action receives the file the user supplies through Apple's App Intents system, performs the same image-only operation locally, and returns a new file to the shortcut. Folik does not upload or retain a separate copy through this action.
 

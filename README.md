@@ -22,6 +22,7 @@ The updated library in **Folik 1.0.2**. Browse in a list or grid, resume reading
 - Make existing scanned PDFs searchable with on-device OCR, progress, cancellation, and review before saving a new copy
 - Find literal text, email addresses, phone numbers, and Social Security numbers on-device, review each match, and add selected matches to a redacted copy
 - Inspect PDFs for metadata, filled forms, comments, links, outlines, attachments, scripts/actions, and digital-signature fields, then review and save a sanitized image-only copy
+- Create a separately named, password-protected PDF and verify that the new copy stays locked until the chosen password is entered
 - Run Sanitize PDF from Shortcuts, Siri, Spotlight, or an automation and receive a new local file without changing the original
 - Convert JPEG, PNG, or HEIC images from Photos or Files into a named, ordered, searchable multipage PDF (up to 30 images, 20 MB each and 100 MB total)
 - Convert Word DOCX and LibreOffice ODT documents on-device, review the generated PDF and conversion notes, then save the exact preview to the library
@@ -61,7 +62,7 @@ Folik is at the beginning of its development. Keep an original copy of important
 
 ### Form compatibility
 
-Folik supports the standard AcroForm widgets that PDFKit can edit on iOS. Checkbox and radio state is saved and restored independently from a field's display string, and radio options with the same field name are counted as one logical field. Required fields are identified from standard field flags and prioritized by the next-field navigator. For documents that expose internal field IDs instead of readable labels, Folik derives a concise label from nearby page text. Folik can place a visual handwritten or typed signature over a document, but it does not yet apply certificate-backed cryptographic signatures to digital-signature fields. XFA-only forms cannot be filled by iOS; Folik detects them and explains the limitation instead of showing an empty or misleading editor. JavaScript calculations and other vendor-specific form behavior may vary, so keep an original copy of important forms.
+Folik supports the standard AcroForm widgets that PDFKit can edit on iOS. Checkbox and radio state is saved and restored independently from a field's display string, and radio options with the same field name are counted as one logical field. Required fields are identified from standard field flags and prioritized by the next-field navigator. For documents that expose internal field IDs instead of readable labels, Folik derives a concise label from nearby page text. Folik can place a visual handwritten or typed signature over a document, but it does not yet apply certificate-backed cryptographic signatures to digital-signature fields. Inspect & Sanitize distinguishes unsigned signature fields from fields containing a PDF signature structure, but Folik does not cryptographically verify signer identity, certificate trust, or document integrity. XFA-only forms cannot be filled by iOS; Folik detects them and explains the limitation instead of showing an empty or misleading editor. JavaScript calculations and other vendor-specific form behavior may vary, so keep an original copy of important forms.
 
 ### PDF redaction
 
@@ -76,6 +77,10 @@ Choose **Add (+) → Inspect & Sanitize** to review information and interactive 
 The sanitized copy rebuilds every page as a new image, including visible annotation and form appearances where PDFKit can display them. Source metadata, selectable or hidden text, links, outlines, attachments, scripts/actions, and editable form or annotation objects are not copied. This also removes text selection, search, links, form editing, accessibility text, and the validity of existing digital signatures. Rendering is limited to 200 dpi and 3,500 pixels per side. Review every page before saving or sharing; the original remains unchanged. Protected files are rejected, and input/output is limited to 100 MB and 500 pages.
 
 The same image-only operation is available as **Sanitize PDF** in Apple Shortcuts. It accepts a PDF file and returns a newly named PDF for the next step in a shortcut or automation. Open **Settings → Shortcuts** in Folik to discover the action.
+
+### Password-protected copies
+
+Choose **Add (+) → Protect PDF** to create a new PDF that requires a password to open. Folik requires 6–128 characters, asks for confirmation, verifies that an empty password cannot open the result, and then verifies the chosen password before offering the copy for saving. The password is cleared from the workflow after processing and is never stored for recovery. Existing protected PDFs must first be exported as an unprotected copy before applying a different password. Keep the unchanged original until the protected copy has been reopened and checked.
 
 ### Batch conversion
 
@@ -152,6 +157,7 @@ The app icon uses Folik's folded-page **F** in standard, dark, and tinted appear
 DocumentLibrary    Imports and owns local PDF copies
 LibrarySearchIndex Bounded, disposable on-device cache for cross-library text search
 PDFPrivacy         On-device document inspection and image-only sanitizing
+PDFProtection      Verified password-protected PDF copy generation
 FolikShortcuts     System Sanitize PDF action for Shortcuts, Siri, and Spotlight
 DocumentScanner    Native camera capture and scanned-image PDF generation
 PDFConverter       Local image and paginated TXT/RTF conversion

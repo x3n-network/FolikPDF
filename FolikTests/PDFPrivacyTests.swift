@@ -61,6 +61,8 @@ final class PDFPrivacyTests: XCTestCase {
         let report = try PDFPrivacy.inspect(catalogFixture())
         XCTAssertTrue(report.hasScriptsOrAutomaticActions)
         XCTAssertTrue(report.hasEmbeddedFiles)
+        XCTAssertEqual(report.signatureFieldCount, 2)
+        XCTAssertEqual(report.signedSignatureCount, 1)
     }
 
     func testSanitizedCopyKeepsVisiblePageButRemovesPrivateObjects() async throws {
@@ -109,12 +111,15 @@ final class PDFPrivacyTests: XCTestCase {
 
     private func catalogFixture() -> Data {
         let objects = [
-            "<< /Type /Catalog /Pages 2 0 R /OpenAction 4 0 R /Names << /JavaScript << /Names [(DocJS) 4 0 R] >> /EmbeddedFiles << /Names [(payload.txt) 5 0 R] >> >> >>",
+            "<< /Type /Catalog /Pages 2 0 R /OpenAction 4 0 R /Names << /JavaScript << /Names [(DocJS) 4 0 R] >> /EmbeddedFiles << /Names [(payload.txt) 5 0 R] >> >> /AcroForm << /Fields [7 0 R 8 0 R] >> >>",
             "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
             "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] >>",
             "<< /S /JavaScript /JS (app.alert\\(1\\)) >>",
             "<< /Type /Filespec /F (payload.txt) /EF << /F 6 0 R >> >>",
-            "<< /Length 4 >>\nstream\ntest\nendstream"
+            "<< /Length 4 >>\nstream\ntest\nendstream",
+            "<< /FT /Sig /T (Unsigned) >>",
+            "<< /FT /Sig /T (Signed) /V 9 0 R >>",
+            "<< /Type /Sig /Filter /Adobe.PPKLite /SubFilter /adbe.pkcs7.detached /ByteRange [0 10 20 30] /Contents <0011> >>"
         ]
         var pdf = "%PDF-1.7\n"
         var offsets = [0]

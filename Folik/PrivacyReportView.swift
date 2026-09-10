@@ -125,7 +125,12 @@ struct PrivacyReportView: View {
                 reportRow("Filled form values", detail: "\(report.filledFormFieldCount) field\(report.filledFormFieldCount == 1 ? "" : "s") may contain entered information.", icon: "rectangle.and.pencil.and.ellipsis")
             }
             if report.signatureFieldCount > 0 {
-                reportRow("Digital signature fields", detail: "\(report.signatureFieldCount) signature field\(report.signatureFieldCount == 1 ? "" : "s") found. Sanitizing creates a different PDF and invalidates existing digital signatures.", icon: "signature")
+                let unsigned = max(0, report.signatureFieldCount - report.signedSignatureCount)
+                reportRow(
+                    "Digital signature fields",
+                    detail: "\(report.signedSignatureCount) contain signed data; \(unsigned) appear unsigned. Folik reports structure but does not cryptographically verify signer identity or integrity.",
+                    icon: "signature"
+                )
             }
             countRow("Form fields", count: report.formFieldCount, icon: "list.bullet.rectangle")
             countRow("Annotations and comments", count: report.annotationCount, icon: "note.text")

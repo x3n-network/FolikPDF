@@ -125,6 +125,11 @@ struct ContentView: View {
                     convertedDocument = document
                     pdfToolRequest = nil
                 }
+            } else if request.tool == .protect {
+                ProtectPDFView(initialURL: request.sourceURL) { document in
+                    convertedDocument = document
+                    pdfToolRequest = nil
+                }
             } else {
                 PDFToolView(compress: request.tool == .compress, initialURL: request.sourceURL) { document in
                     convertedDocument = document
@@ -257,6 +262,7 @@ struct ContentView: View {
         case .batch: batchPresented = true
         case .redact: pdfToolRequest = LibraryPDFToolRequest(tool: .redact)
         case .sanitize: pdfToolRequest = LibraryPDFToolRequest(tool: .sanitize)
+        case .protect: pdfToolRequest = LibraryPDFToolRequest(tool: .protect)
         }
     }
 
