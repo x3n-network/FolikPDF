@@ -858,6 +858,7 @@ private struct DocumentRow: View {
 private struct PDFCoverThumbnail: View {
     let url: URL
     var thumbnailSize = CGSize(width: 104, height: 136)
+    @Environment(\.displayScale) private var displayScale
     @State private var image: UIImage?
     @State private var request: QLThumbnailGenerator.Request?
 
@@ -882,6 +883,12 @@ private struct PDFCoverThumbnail: View {
                 .stroke(FolikTheme.separator, lineWidth: 0.5)
         }
         .onAppear(perform: loadThumbnail)
+        .onChange(of: displayScale) { _, _ in
+            if let request { QLThumbnailGenerator.shared.cancel(request) }
+            request = nil
+            image = nil
+            loadThumbnail()
+        }
         .onDisappear {
             if let request { QLThumbnailGenerator.shared.cancel(request) }
             request = nil
@@ -894,7 +901,7 @@ private struct PDFCoverThumbnail: View {
         let request = QLThumbnailGenerator.Request(
             fileAt: url,
             size: thumbnailSize,
-            scale: UIScreen.main.scale,
+            scale: displayScale,
             representationTypes: .thumbnail
         )
         self.request = request

@@ -193,7 +193,6 @@ struct ReaderView: View {
     private var documentCanvas: some View {
         if session.document != nil {
             PDFKitView(session: session)
-                .ignoresSafeArea(.container, edges: .horizontal)
                 .accessibilityLabel("PDF document")
                 .accessibilityValue(selectedAnnotationCanvasDescription)
         } else {

@@ -89,6 +89,7 @@ Your documents and search index remain on your device. No accounts, ads, analyti
 - PDFs awaiting import from the share extension remain in the private Folik App Group container.
 - The search index is stored in the disposable Caches directory with iOS file protection and is never required to open a document.
 - Existing PDFs and library metadata remain compatible; Folik adds missing identifiers to its private library metadata without rewriting documents.
+- Prepares Folik's adaptive layouts for iPhone Duo by using the active display's scale for thumbnails, respecting horizontal safe areas in the reader, and retaining size-class-driven panels and standard system toolbars.
 
 ## Validation
 
@@ -100,3 +101,4 @@ Your documents and search index remain on your device. No accounts, ads, analyti
 - New unit coverage exercises search-index persistence and invalidation, stable document-identity migration and repair, document duplication, App Lock enrollment, startup state, single- and multi-scene relock delays, privacy reporting, catalog-level active/embedded content detection, sanitized-output structure, share-inbox validation and transfer, and file-backed drop staging and cleanup.
 - App Lock authentication passed deterministic automated coverage and a physical-iPhone Face ID smoke test. Touch ID remains a manual release check.
 - A signed generic-device build verifies matching App Group entitlements and provisioning for Folik and its embedded share extension.
+- The current Xcode 26.6 toolchain can verify Folik's forward-compatible adaptive behavior, but final iPhone Duo pose, reserved-region, and vertical-toolbar validation remains pending Apple’s Xcode 27.1 SDK and simulator.
