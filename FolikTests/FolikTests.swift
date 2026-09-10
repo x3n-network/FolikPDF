@@ -509,6 +509,38 @@ final class DocumentSessionTests: XCTestCase {
         XCTAssertEqual(session.formFields.map(\.title), ["Name", "Name"])
     }
 
+    func testFormFieldSuggestionsInferBoxesLabelsAndCheckboxes() {
+        let pageBounds = CGRect(x: 0, y: 0, width: 612, height: 792)
+        let lines = [
+            ScannedPDFWriter.RecognizedLine(
+                text: "Customer name:",
+                normalizedBounds: CGRect(x: 0.1, y: 0.78, width: 0.2, height: 0.035)
+            ),
+            ScannedPDFWriter.RecognizedLine(
+                text: "Subscribe to updates",
+                normalizedBounds: CGRect(x: 0.19, y: 0.50, width: 0.25, height: 0.03)
+            ),
+            ScannedPDFWriter.RecognizedLine(
+                text: "Date:",
+                normalizedBounds: CGRect(x: 0.1, y: 0.35, width: 0.08, height: 0.03)
+            )
+        ]
+        let suggestions = FormFieldSuggestionEngine.inferSuggestions(
+            pageIndex: 0,
+            pageBounds: pageBounds,
+            lines: lines,
+            rectangleBounds: [
+                CGRect(x: 205, y: 612, width: 270, height: 38),
+                CGRect(x: 62, y: 392, width: 24, height: 24)
+            ]
+        )
+
+        XCTAssertTrue(suggestions.contains { $0.label == "Customer name" && $0.kind == .text })
+        XCTAssertTrue(suggestions.contains { $0.label == "Subscribe to updates" && $0.kind == .checkbox })
+        XCTAssertTrue(suggestions.contains { $0.label == "Date" && $0.kind == .date })
+        XCTAssertTrue(suggestions.allSatisfy { pageBounds.contains($0.bounds) })
+    }
+
     func testCompatibilityFormClassifiesStandardWidgetsAndGroupsRadioOptions() throws {
         let url = workspace.appendingPathComponent("Compatibility.pdf")
         try PDFTestFixture.writeCompatibilityForm(to: url)

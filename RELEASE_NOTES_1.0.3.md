@@ -13,7 +13,7 @@ Folik 1.0.3 makes private document libraries faster to search, easier to manage,
 - Run Sanitize PDF directly from Shortcuts, Siri, Spotlight, or an automation.
 - Create a verified password-protected copy without storing its password.
 - Compare two PDFs privately and review added, removed, or changed pages.
-- Turn a scan or PDF into a separate fillable copy with standard fields you can place and arrange.
+- Turn a scan or PDF into a fillable copy with private on-device field suggestions and standard fields you can arrange.
 - Send up to 20 PDFs directly to Folik from the system share sheet.
 - Drag PDFs into the iPad library and open documents in dedicated Split View or Stage Manager windows.
 
@@ -62,8 +62,10 @@ Your documents and search index remain on your device. No accounts, ads, analyti
 ## Make scanned PDFs fillable
 
 - Creates a separately named authoring copy while keeping the source scan or PDF unchanged.
+- Suggests likely text fields, multiline areas, dates, signatures, and checkboxes using on-device text and shape recognition, then lets you review and select results before anything is added.
 - Adds standard text, multiline, checkbox, date, and signature widgets from the reader's Forms panel.
 - Places fields directly on the page, with accessible controls for moving, resizing, and deleting them afterward.
+- Keeps the blue form-layout selection outline aligned with its field while panning or zooming the PDF.
 - Supports readable labels, required-field tracking, and independent internal names when a label is reused.
 - Uses a standard text widget for dates instead of embedding PDF JavaScript; signature widgets can be completed by compatible signing apps, while Folik's existing handwritten or typed signatures remain available as visual annotations.
 
@@ -103,11 +105,11 @@ Your documents and search index remain on your device. No accounts, ads, analyti
 ## Validation
 
 - Debug and Release generic iOS Simulator builds succeed, and Xcode static analysis passes.
-- The complete simulator unit suite passed 123 tests; one optional private-document fixture test was skipped.
-- All 46 executable iPhone 17 UI tests passed; the optional App Store screenshot fixture and iPad-only multi-window test were skipped. The App Group shared-inbox case was verified separately with simulator signing enabled.
+- The complete simulator unit suite passed 124 tests; one optional private-document fixture test was skipped.
+- All 47 executable iPhone 17 UI tests passed; one pre-existing password-entry test encountered a simulator keyboard-focus race in the complete sweep and passed on immediate isolated retry. The optional App Store screenshot fixture and iPad-only multi-window test were skipped.
 - Focused iPad mini UI checks passed for multi-page search results, document duplication, bulk recovery, and the lock-screen cover.
 - Focused iPhone and iPad mini UI checks passed for inspecting, previewing, saving, and preserving the original during sanitizing.
-- New unit coverage exercises search-index persistence and invalidation, stable document-identity migration and repair, document duplication, App Lock enrollment, startup state, single- and multi-scene relock delays, privacy reporting, catalog-level active/embedded content detection, sanitized-output structure, share-inbox validation and transfer, and file-backed drop staging and cleanup.
+- New unit coverage exercises search-index persistence and invalidation, stable document-identity migration and repair, document duplication, App Lock enrollment, startup state, single- and multi-scene relock delays, privacy reporting, catalog-level active/embedded content detection, sanitized-output structure, share-inbox validation and transfer, file-backed drop staging and cleanup, and form-field inference.
 - App Lock authentication passed deterministic automated coverage and a physical-iPhone Face ID smoke test. Touch ID remains a manual release check.
 - A signed generic-device build verifies matching App Group entitlements and provisioning for Folik and its embedded share extension.
 - The current Xcode 26.6 toolchain can verify Folik's forward-compatible adaptive behavior, but final iPhone Duo pose, reserved-region, and vertical-toolbar validation remains pending Apple’s Xcode 27.1 SDK and simulator.

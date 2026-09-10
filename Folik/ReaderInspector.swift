@@ -613,6 +613,11 @@ private struct FormNavigator: View {
     let close: () -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var fieldSetupKind: FormFieldPlacementKind?
+    @State private var suggestions: [FormFieldSuggestion] = []
+    @State private var selectedSuggestionIDs: Set<UUID> = []
+    @State private var isSuggestingFields = false
+    @State private var suggestionMessage: String?
+    @State private var suggestionTask: Task<Void, Never>?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -670,6 +675,25 @@ private struct FormNavigator: View {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 8) { formAuthoringButtons }
                     VStack(spacing: 8) { formAuthoringButtons }
+                }
+
+                if isSuggestingFields {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                        Text("Looking for labels, boxes, and checkboxes…")
+                            .font(.footnote)
+                            .foregroundStyle(FolikTheme.mutedInk)
+                        Spacer(minLength: 4)
+                        Button("Cancel") { suggestionTask?.cancel() }
+                            .frame(minHeight: 44)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Looking for suggested form fields")
+                } else if let suggestionMessage {
+                    Label(suggestionMessage, systemImage: "info.circle")
+                        .font(.footnote)
+                        .foregroundStyle(FolikTheme.mutedInk)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 if session.isModified {
@@ -738,11 +762,32 @@ private struct FormNavigator: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { close() }
             }
         }
+        .sheet(isPresented: Binding(
+            get: { !suggestions.isEmpty },
+            set: { if !$0 { suggestions = []; selectedSuggestionIDs = [] } }
+        )) {
+            FormSuggestionReviewView(
+                suggestions: suggestions,
+                selectedIDs: $selectedSuggestionIDs,
+                apply: applySelectedSuggestions
+            )
+        }
+        .onDisappear { suggestionTask?.cancel() }
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
     }
 
     @ViewBuilder
     private var formAuthoringButtons: some View {
+        Button(action: suggestFields) {
+            Label("Suggest fields", systemImage: "wand.and.stars")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .disabled(isSuggestingFields || session.isLocked || !session.canFillForms)
+        .accessibilityHint("Scans this PDF on device and lets you review likely fields before adding them")
+        .accessibilityIdentifier("reader.form.suggest")
+
         Menu {
             ForEach(FormFieldPlacementKind.allCases) { kind in
                 Button { fieldSetupKind = kind } label: {
@@ -772,6 +817,37 @@ private struct FormNavigator: View {
         .disabled(session.formFields.isEmpty)
         .accessibilityHint(session.formFields.isEmpty ? "Add a field first" : "Move, resize, or delete fields on the page")
         .accessibilityIdentifier("reader.form.editLayout")
+    }
+
+    private func suggestFields() {
+        guard !isSuggestingFields else { return }
+        isSuggestingFields = true
+        suggestionMessage = nil
+        suggestionTask = Task {
+            defer { isSuggestingFields = false }
+            do {
+                let found = try await session.suggestFormFields()
+                try Task.checkCancellation()
+                guard !found.isEmpty else {
+                    suggestionMessage = "No confident fields were found. You can still add fields manually."
+                    return
+                }
+                suggestions = found
+                selectedSuggestionIDs = Set(found.map(\.id))
+            } catch is CancellationError {
+                suggestionMessage = "Field suggestions were canceled."
+            } catch {
+                suggestionMessage = "Folik couldn’t suggest fields. \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func applySelectedSuggestions() {
+        let selected = suggestions.filter { selectedSuggestionIDs.contains($0.id) }
+        suggestions = []
+        selectedSuggestionIDs = []
+        session.addFormFieldSuggestions(selected)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { close() }
     }
 
     private var formSummary: some View {
@@ -815,6 +891,74 @@ private struct FormNavigator: View {
             .buttonStyle(.borderedProminent)
             .tint(FolikTheme.cobalt)
             .disabled(!session.isModified)
+    }
+}
+
+private struct FormSuggestionReviewView: View {
+    let suggestions: [FormFieldSuggestion]
+    @Binding var selectedIDs: Set<UUID>
+    let apply: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    ForEach(suggestions) { suggestion in
+                        Toggle(isOn: selection(for: suggestion.id)) {
+                            Label {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(suggestion.label)
+                                        .font(.body.weight(.medium))
+                                    Text("\(suggestion.kind.title) · Page \(suggestion.pageIndex + 1) · \(suggestion.reason)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            } icon: {
+                                Image(systemName: suggestion.kind.icon)
+                                    .foregroundStyle(FolikTheme.cobalt)
+                            }
+                        }
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("reader.form.suggestion.\(suggestion.id)")
+                    }
+                } header: {
+                    Text("Review before adding")
+                } footer: {
+                    Text("Suggestions are created on device and can be moved, resized, or deleted after you add them.")
+                }
+            }
+            .navigationTitle("Suggested Fields")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Button("Select All") { selectedIDs = Set(suggestions.map(\.id)) }
+                        Button("Select None") { selectedIDs = [] }
+                    } label: {
+                        Label("Selection", systemImage: "checklist")
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add \(selectedIDs.count)", action: apply)
+                        .disabled(selectedIDs.isEmpty)
+                        .accessibilityIdentifier("reader.form.applySuggestions")
+                }
+            }
+        }
+    }
+
+    private func selection(for id: UUID) -> Binding<Bool> {
+        Binding(
+            get: { selectedIDs.contains(id) },
+            set: { isSelected in
+                if isSelected { selectedIDs.insert(id) }
+                else { selectedIDs.remove(id) }
+            }
+        )
     }
 }
 

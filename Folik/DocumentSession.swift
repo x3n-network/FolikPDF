@@ -179,7 +179,7 @@ struct AnnotationPlacement: Equatable {
     var icon: String { stamp?.icon ?? kind.icon }
 }
 
-enum FormFieldPlacementKind: String, CaseIterable, Identifiable {
+nonisolated enum FormFieldPlacementKind: String, CaseIterable, Identifiable, Sendable {
     case text
     case multilineText
     case checkbox
@@ -605,6 +605,47 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
             label: String(normalizedLabel),
             isRequired: isRequired
         )
+    }
+
+    func suggestFormFields() async throws -> [FormFieldSuggestion] {
+        guard let data = document?.dataRepresentation(), !isLocked, canFillForms else {
+            throw PDFProcessingError.protected
+        }
+        return try await FormFieldSuggestionEngine.suggestions(in: data)
+    }
+
+    func addFormFieldSuggestions(_ suggestions: [FormFieldSuggestion]) {
+        guard let document, !suggestions.isEmpty, !isLocked, canFillForms else { return }
+        var reservedNames = Set(formFields.compactMap { $0.annotation.fieldName?.localizedLowercase })
+        var added = false
+
+        for suggestion in suggestions.prefix(FormFieldSuggestionEngine.maximumSuggestions) {
+            guard let page = document.page(at: suggestion.pageIndex) else { continue }
+            let bounds = clampedBounds(suggestion.bounds, on: page, minimumSize: CGSize(width: 18, height: 18))
+            let overlapsWidget = page.annotations.contains {
+                guard $0.type?.lowercased() == "widget" else { return false }
+                let intersection = $0.bounds.intersection(bounds)
+                return !intersection.isNull && bounds.width * bounds.height > 0 &&
+                    intersection.width * intersection.height / (bounds.width * bounds.height) > 0.45
+            }
+            guard !overlapsWidget else { continue }
+            let fieldName = uniqueFormFieldName(for: suggestion.label, reservedNames: &reservedNames)
+            let annotation = formFieldAnnotation(
+                placement: FormFieldPlacement(kind: suggestion.kind, label: suggestion.label, isRequired: false),
+                bounds: bounds,
+                fieldName: fieldName
+            )
+            page.addAnnotation(annotation)
+            recordAnnotationAction(.added(annotation, pageIndex: suggestion.pageIndex))
+            added = true
+        }
+
+        guard added else { return }
+        formFieldPlacement = nil
+        isModified = true
+        refreshFormState(markModified: false)
+        persistChanges()
+        beginFormLayoutEditing()
     }
 
     func beginAnnotationEditing() {
@@ -1148,11 +1189,27 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
 
     private func placeFormField(_ placement: FormFieldPlacement, pageIndex: Int, point: CGPoint) {
         guard let page = document?.page(at: pageIndex) else { return }
-        let annotation = PDFAnnotation(
+        var reservedNames = Set(formFields.compactMap { $0.annotation.fieldName?.localizedLowercase })
+        let fieldName = uniqueFormFieldName(for: placement.label, reservedNames: &reservedNames)
+        let annotation = formFieldAnnotation(
+            placement: placement,
             bounds: clampedBounds(size: placement.kind.defaultSize, centeredAt: point, on: page),
-            forType: .widget,
-            withProperties: nil
+            fieldName: fieldName
         )
+        page.addAnnotation(annotation)
+        formFieldPlacement = nil
+        recordAnnotationAction(.added(annotation, pageIndex: pageIndex))
+        isModified = true
+        refreshFormState(markModified: false)
+        persistChanges()
+    }
+
+    private func formFieldAnnotation(
+        placement: FormFieldPlacement,
+        bounds: CGRect,
+        fieldName: String
+    ) -> PDFAnnotation {
+        let annotation = PDFAnnotation(bounds: bounds, forType: .widget, withProperties: nil)
         switch placement.kind {
         case .text, .multilineText, .date:
             annotation.widgetFieldType = .text
@@ -1168,7 +1225,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
             annotation.widgetFieldType = .signature
         }
 
-        annotation.fieldName = uniqueFormFieldName(for: placement.label)
+        annotation.fieldName = fieldName
         annotation.contents = "Folik form field"
         annotation.setValue(placement.label, forAnnotationKey: .widgetTextLabelUI)
         if placement.isRequired {
@@ -1180,21 +1237,22 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         let border = PDFBorder()
         border.lineWidth = 1.5
         annotation.border = border
-
-        page.addAnnotation(annotation)
-        formFieldPlacement = nil
-        recordAnnotationAction(.added(annotation, pageIndex: pageIndex))
-        isModified = true
-        refreshFormState(markModified: false)
-        persistChanges()
+        return annotation
     }
 
-    private func uniqueFormFieldName(for proposedName: String) -> String {
-        let names = Set(formFields.compactMap { $0.annotation.fieldName?.localizedLowercase })
-        guard names.contains(proposedName.localizedLowercase) else { return proposedName }
+    private func uniqueFormFieldName(
+        for proposedName: String,
+        reservedNames: inout Set<String>
+    ) -> String {
+        guard reservedNames.contains(proposedName.localizedLowercase) else {
+            reservedNames.insert(proposedName.localizedLowercase)
+            return proposedName
+        }
         var suffix = 2
-        while names.contains("\(proposedName) \(suffix)".localizedLowercase) { suffix += 1 }
-        return "\(proposedName) \(suffix)"
+        while reservedNames.contains("\(proposedName) \(suffix)".localizedLowercase) { suffix += 1 }
+        let name = "\(proposedName) \(suffix)"
+        reservedNames.insert(name.localizedLowercase)
+        return name
     }
 
     private func formFieldIcon(_ kind: FormFieldKind) -> String {

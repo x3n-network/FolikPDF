@@ -208,6 +208,39 @@ final class FolikUITests: XCTestCase {
         app.buttons["reader.annotation.doneEditing"].tap()
     }
 
+    func testScannedPDFCanReviewSuggestedFieldsAndKeepOverlaysAlignedWhenZoomed() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--ui-test-fixture",
+            "--ui-test-image-only",
+            "--ui-test-form-suggestions",
+            "--open-document-named",
+            "Scan.pdf"
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.navigationBars["Scan"].waitForExistence(timeout: 5))
+        app.buttons["reader.panel.forms"].tap()
+        XCTAssertTrue(app.buttons["reader.form.suggest"].waitForExistence(timeout: 3))
+        app.buttons["reader.form.suggest"].tap()
+
+        XCTAssertTrue(app.navigationBars["Suggested Fields"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts["Customer name"].exists)
+        XCTAssertTrue(app.staticTexts["Subscribe to updates"].exists)
+        let apply = app.buttons["reader.form.applySuggestions"]
+        XCTAssertTrue(apply.isEnabled)
+        apply.tap()
+
+        XCTAssertTrue(app.staticTexts["Edit form layout"].waitForExistence(timeout: 5))
+        capture("suggested-fields-layout", in: app)
+        app.buttons["reader.annotation.doneEditing"].tap()
+
+        let pdf = app.descendants(matching: .any)["reader.pdf"]
+        XCTAssertTrue(pdf.waitForExistence(timeout: 3))
+        pdf.pinch(withScale: 2, velocity: 1)
+        capture("suggested-fields-zoomed", in: app)
+    }
+
     func testContinueReadingResumesAndDismissalPersists() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-fixture"]

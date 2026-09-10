@@ -524,6 +524,20 @@ final class DocumentLibrary: ObservableObject {
                     UIColor.white.setFill()
                     context.fill(CGRect(x: 0, y: 0, width: 612, height: 792))
                     NSString(string: "Paper invoice 4827").draw(at: CGPoint(x: 72, y: 96), withAttributes: [.font: UIFont.systemFont(ofSize: 28)])
+                    if ProcessInfo.processInfo.arguments.contains("--ui-test-form-suggestions") {
+                        NSString(string: "Customer name:").draw(
+                            at: CGPoint(x: 72, y: 252),
+                            withAttributes: [.font: UIFont.systemFont(ofSize: 20, weight: .medium)]
+                        )
+                        UIColor.black.setStroke()
+                        context.cgContext.setLineWidth(2)
+                        context.cgContext.stroke(CGRect(x: 245, y: 244, width: 270, height: 38))
+                        context.cgContext.stroke(CGRect(x: 72, y: 332, width: 24, height: 24))
+                        NSString(string: "Subscribe to updates").draw(
+                            at: CGPoint(x: 110, y: 330),
+                            withAttributes: [.font: UIFont.systemFont(ofSize: 19)]
+                        )
+                    }
                 }
                 try UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 612, height: 792)).writePDF(to: scanURL) { context in
                     context.beginPage()

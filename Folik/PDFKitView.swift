@@ -24,6 +24,7 @@ struct PDFKitView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> PDFView {
         let pdfView = context.coordinator.pdfView
+        pdfView.accessibilityIdentifier = "reader.pdf"
         pdfView.document = session.document
         context.coordinator.startObserving()
         return pdfView
@@ -135,14 +136,23 @@ struct PDFKitView: UIViewRepresentable {
             isObserving = true
             let center = NotificationCenter.default
             center.addObserver(self, selector: #selector(pageChanged), name: .PDFViewPageChanged, object: pdfView)
+            center.addObserver(self, selector: #selector(viewportChanged), name: .PDFViewScaleChanged, object: pdfView)
             center.addObserver(self, selector: #selector(selectionChanged), name: .PDFViewSelectionChanged, object: pdfView)
             center.addObserver(self, selector: #selector(formAnnotationHit), name: .PDFViewAnnotationHit, object: pdfView)
             center.addObserver(self, selector: #selector(formTextChanged), name: UITextField.textDidChangeNotification, object: nil)
             center.addObserver(self, selector: #selector(formTextChanged), name: UITextField.textDidEndEditingNotification, object: nil)
+            if let scrollView = findScrollView(in: pdfView) {
+                scrollView.panGestureRecognizer.addTarget(self, action: #selector(viewportGestureChanged(_:)))
+                scrollView.pinchGestureRecognizer?.addTarget(self, action: #selector(viewportGestureChanged(_:)))
+            }
         }
 
         func stopObserving() {
             pendingRestore = nil
+            if let scrollView = findScrollView(in: pdfView) {
+                scrollView.panGestureRecognizer.removeTarget(self, action: #selector(viewportGestureChanged(_:)))
+                scrollView.pinchGestureRecognizer?.removeTarget(self, action: #selector(viewportGestureChanged(_:)))
+            }
             NotificationCenter.default.removeObserver(self)
             isObserving = false
         }
@@ -361,12 +371,7 @@ struct PDFKitView: UIViewRepresentable {
         }
 
         private func annotationViewBounds(_ annotation: PDFAnnotation, on page: PDFPage) -> CGRect {
-            let convertedBounds = pdfView.convert(annotation.bounds, from: page)
-            let canvasOriginInWindow = pdfView.convert(pdfView.bounds.origin, to: nil)
-            return convertedBounds.offsetBy(
-                dx: -canvasOriginInWindow.x - pdfView.safeAreaInsets.left,
-                dy: -canvasOriginInWindow.y - pdfView.safeAreaInsets.top
-            ).standardized
+            pdfView.convert(annotation.bounds, from: page).standardized
         }
 
         private func resetAnnotationTransform() {
@@ -399,6 +404,15 @@ struct PDFKitView: UIViewRepresentable {
                 guard self.pendingRestore == nil, self.isObserving else { return }
                 self.session.reportPage(self.pdfView.currentPage)
             }
+        }
+
+        @objc private func viewportChanged() {
+            updateAnnotationSelectionOverlay()
+        }
+
+        @objc private func viewportGestureChanged(_ gesture: UIGestureRecognizer) {
+            guard gesture.state != .possible else { return }
+            updateAnnotationSelectionOverlay()
         }
 
         @objc private func selectionChanged() {
