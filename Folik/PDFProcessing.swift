@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 import PDFKit
 
-nonisolated enum PDFProcessingError: LocalizedError {
+nonisolated enum PDFProcessingError: LocalizedError, Equatable {
     case invalid, protected, tooLarge, nothingToRecognize
     var errorDescription: String? {
         switch self {

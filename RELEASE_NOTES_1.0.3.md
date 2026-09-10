@@ -1,6 +1,6 @@
 # Folik 1.0.3
 
-Folik 1.0.3 makes private document libraries faster to search, easier to manage, and safer from casual access on an unlocked device.
+Folik 1.0.3 makes private document libraries faster to search, easier to manage, safer from casual access on an unlocked device, and safer to share.
 
 ## App Store “What’s New”
 
@@ -9,6 +9,7 @@ Folik 1.0.3 makes private document libraries faster to search, easier to manage,
 - Optionally protect Folik with Face ID, Touch ID, or your device passcode.
 - Duplicate PDFs while keeping their folder, tags, and favorite state.
 - Restore or permanently delete several removed documents together.
+- Inspect what a PDF carries beyond its visible pages and make a sanitized image-only copy.
 
 Your documents and search index remain on your device. No accounts, ads, analytics, or uploads.
 
@@ -36,6 +37,14 @@ Your documents and search index remain on your device. No accounts, ads, analyti
 - Adds selection mode, Restore All, Delete All, restore-selected, and delete-selected controls to Recently Deleted.
 - Retains explicit confirmation before any bulk permanent deletion.
 
+## Inspect & Sanitize
+
+- Reports common metadata, selectable-text pages, filled forms, comments, links, outlines, attachments or embedded files, catalog-level scripts/actions, and digital-signature fields entirely on-device.
+- Creates an image-only copy whose visible pages can be reviewed before saving.
+- Does not copy source metadata, selectable or hidden text, links, outlines, attachments, scripts/actions, or editable form and annotation objects.
+- Clearly warns that sanitizing removes search, text selection, interactive features, accessibility text, and existing digital-signature validity.
+- Keeps the source PDF unchanged and rejects protected or oversized input.
+
 ## Compatibility and privacy
 
 - Documents, extracted search text, authentication state, and processing remain on-device.
@@ -45,8 +54,9 @@ Your documents and search index remain on your device. No accounts, ads, analyti
 ## Validation
 
 - Debug and Release generic iOS Simulator builds succeed, and Xcode static analysis passes.
-- The complete simulator unit suite passed 98 tests; one optional private-document fixture test was skipped.
+- The complete simulator unit suite passed 102 tests; one optional private-document fixture test was skipped.
 - The complete iPhone 17e UI suite passed 39 tests; one optional App Store screenshot fixture test was skipped.
 - Focused iPad mini UI checks passed for multi-page search results, document duplication, bulk recovery, and the lock-screen cover.
-- New unit coverage exercises search-index persistence and invalidation, document duplication, App Lock enrollment, startup state, and relock delays.
+- Focused iPhone and iPad mini UI checks passed for inspecting, previewing, saving, and preserving the original during sanitizing.
+- New unit coverage exercises search-index persistence and invalidation, document duplication, App Lock enrollment, startup state, relock delays, privacy reporting, catalog-level active/embedded content detection, and sanitized-output structure.
 - App Lock authentication passed deterministic automated coverage and a physical-iPhone Face ID smoke test. Touch ID remains a manual release check.

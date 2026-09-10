@@ -16,7 +16,11 @@ Passwords entered for protected PDFs are passed to PDFKit for the active documen
 
 Reusable signatures and initials are stored as files in Folik's local app container using iOS data protection (`completeUnlessOpen`). Folik does not upload them. Removing Folik removes these saved assets unless they are restored as part of an operating-system device backup. A signature already placed in a PDF becomes part of that local document copy and is included when the user exports or shares the PDF.
 
-Folik never overwrites the original when preparing an editable or flattened export. Flattened copies remove interactive form and annotation objects after painting their visible content onto the pages.
+Folik never overwrites the original when preparing an editable, flattened, redacted, or sanitized export. Flattened copies remove interactive form and annotation objects after painting their visible content onto the pages. A sanitized copy rebuilds every page as an image so source metadata, selectable or hidden text, links, outlines, attachments, scripts/actions, and editable objects are not copied. This intentionally removes document accessibility text and invalidates existing digital signatures in the new copy.
+
+## Privacy reports
+
+PDF privacy reports are generated on-device and are not retained as separate records. Folik inspects common metadata and supported PDF structures, including forms, annotations, links, outlines, attachments, embedded files, catalog-level scripts/actions, and digital-signature fields. A report is a bounded compatibility check, not a guarantee that every vendor-specific or malformed PDF object can be identified.
 
 ## Network access
 

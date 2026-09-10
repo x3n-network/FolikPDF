@@ -400,17 +400,25 @@ final class FolikUITests: XCTestCase {
         app.launchArguments = ["--ui-test-fixture"]
         app.launch()
         XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
-        for title in ["Make PDF Searchable", "Compress PDF", "Redact PDF"] {
+        for title in ["Make PDF Searchable", "Compress PDF", "Redact PDF", "Inspect & Sanitize"] {
             app.buttons["Document actions"].tap()
             app.buttons["Tools"].tap()
             app.buttons[title].tap()
             XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5))
-            XCTAssertTrue(app.staticTexts["pdfTool.source"].waitForExistence(timeout: 10))
-            XCTAssertEqual(app.staticTexts["pdfTool.source"].label, "Folik UI Test.pdf")
+            if title == "Inspect & Sanitize" {
+                XCTAssertTrue(app.staticTexts["privacy.source"].waitForExistence(timeout: 10))
+                XCTAssertEqual(app.staticTexts["privacy.source"].label, "Folik UI Test.pdf")
+                XCTAssertTrue(app.buttons["privacy.preview"].waitForExistence(timeout: 10))
+                XCTAssertTrue(app.buttons["privacy.preview"].isEnabled)
+                XCTAssertEqual(app.textFields["Filename"].value as? String, "Folik UI Test Sanitized")
+            } else {
+                XCTAssertTrue(app.staticTexts["pdfTool.source"].waitForExistence(timeout: 10))
+                XCTAssertEqual(app.staticTexts["pdfTool.source"].label, "Folik UI Test.pdf")
+            }
             if title == "Redact PDF" {
                 XCTAssertTrue(app.staticTexts["Page 1 of 2"].waitForExistence(timeout: 10))
                 XCTAssertFalse(app.buttons["redaction.preview"].isEnabled)
-            } else {
+            } else if title != "Inspect & Sanitize" {
                 XCTAssertTrue(app.buttons["pdfTool.preview"].isEnabled)
                 XCTAssertEqual(app.textFields["Filename"].value as? String,
                                title == "Compress PDF" ? "Folik UI Test Compressed" : "Folik UI Test Searchable")
@@ -447,6 +455,26 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(app.buttons["library.document.Folik UI Test.pdf"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["library.document.Folik UI Test Compressed.pdf"].exists)
         capture("library-two-documents", in: app)
+    }
+
+    func testPrivacyReportSanitizesCopyAndKeepsOriginal() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture"]
+        app.launch()
+        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
+        app.buttons["Document actions"].tap()
+        app.buttons["Tools"].tap()
+        app.buttons["Inspect & Sanitize"].tap()
+        XCTAssertTrue(app.navigationBars["Inspect & Sanitize"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Form fields"].waitForExistence(timeout: 10))
+        app.buttons["privacy.preview"].tap()
+        XCTAssertTrue(app.navigationBars["Conversion Preview"].waitForExistence(timeout: 30))
+        XCTAssertTrue(app.staticTexts["Sanitized image-only copy. Your original is unchanged and still contains its original information."].exists)
+        app.buttons["office.save"].tap()
+        XCTAssertTrue(app.navigationBars["Folik UI Test Sanitized"].waitForExistence(timeout: 10))
+        app.navigationBars.buttons["Library"].tap()
+        XCTAssertTrue(app.buttons["library.document.Folik UI Test.pdf"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["library.document.Folik UI Test Sanitized.pdf"].exists)
     }
 
     func testConversionScreensCanBeCancelledWithoutCreatingDocuments() {

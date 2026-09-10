@@ -21,6 +21,7 @@ The updated library in **Folik 1.0.2**. Browse in a list or grid, resume reading
 - Import one or more PDFs from Files
 - Make existing scanned PDFs searchable with on-device OCR, progress, cancellation, and review before saving a new copy
 - Find literal text, email addresses, phone numbers, and Social Security numbers on-device, review each match, and add selected matches to a redacted copy
+- Inspect PDFs for metadata, filled forms, comments, links, outlines, attachments, scripts/actions, and digital-signature fields, then review and save a sanitized image-only copy
 - Convert JPEG, PNG, or HEIC images from Photos or Files into a named, ordered, searchable multipage PDF (up to 30 images, 20 MB each and 100 MB total)
 - Convert Word DOCX and LibreOffice ODT documents on-device, review the generated PDF and conversion notes, then save the exact preview to the library
 - Convert TXT (UTF-8/UTF-16) or basic RTF documents up to 5 MB into searchable PDFs with Letter-size pages; complex layouts and attachments are not supported
@@ -66,6 +67,12 @@ Folik supports the standard AcroForm widgets that PDFKit can edit on iOS. Checkb
 Choose **Add (+) → Redact PDF**, then mark rectangles manually or search selectable text for a literal phrase, email addresses, phone numbers, and US Social Security numbers. Pattern matches are suggestions, not guarantees: review and deselect false positives before adding the areas. Scanned pages need **Make PDF Searchable** first. All discovery runs on-device, and nothing is uploaded.
 
 Marked regions are painted into rendered pixels before a fresh image-only PDF is created. Source text, metadata, links, outlines, attachments, and editable form/annotation objects are not copied. Visible annotation appearances are flattened where supported. All output pages lose text selection and interactive features; rendering is limited to 200 dpi and 3,500 pixels on the longest side. Review every page before sharing. The original retains its original information. Protected files are rejected; input/output is limited to 100 MB, 500 pages, and 500 marked regions.
+
+### PDF privacy report and sanitizing
+
+Choose **Add (+) → Inspect & Sanitize** to review information and interactive objects a PDF may carry beyond its visible pages. Folik reports common document metadata, pages with selectable text, filled form values, comments and annotations, links, outlines, attachments or embedded files, catalog-level JavaScript or automatic actions, and digital-signature fields. Inspection happens on-device and does not modify the source PDF.
+
+The sanitized copy rebuilds every page as a new image, including visible annotation and form appearances where PDFKit can display them. Source metadata, selectable or hidden text, links, outlines, attachments, scripts/actions, and editable form or annotation objects are not copied. This also removes text selection, search, links, form editing, accessibility text, and the validity of existing digital signatures. Rendering is limited to 200 dpi and 3,500 pixels per side. Review every page before saving or sharing; the original remains unchanged. Protected files are rejected, and input/output is limited to 100 MB and 500 pages.
 
 ### Batch conversion
 
@@ -141,6 +148,7 @@ The app icon uses Folik's folded-page **F** in standard, dark, and tinted appear
 ```text
 DocumentLibrary    Imports and owns local PDF copies
 LibrarySearchIndex Bounded, disposable on-device cache for cross-library text search
+PDFPrivacy         On-device document inspection and image-only sanitizing
 DocumentScanner    Native camera capture and scanned-image PDF generation
 PDFConverter       Local image and paginated TXT/RTF conversion
 PDFConversionView  Image/text selection, image ordering, and conversion review

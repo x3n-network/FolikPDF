@@ -120,6 +120,11 @@ struct ContentView: View {
                     convertedDocument = document
                     pdfToolRequest = nil
                 }
+            } else if request.tool == .sanitize {
+                PrivacyReportView(initialURL: request.sourceURL) { document in
+                    convertedDocument = document
+                    pdfToolRequest = nil
+                }
             } else {
                 PDFToolView(compress: request.tool == .compress, initialURL: request.sourceURL) { document in
                     convertedDocument = document
@@ -251,6 +256,7 @@ struct ContentView: View {
         case .compress: pdfToolRequest = LibraryPDFToolRequest(tool: .compress)
         case .batch: batchPresented = true
         case .redact: pdfToolRequest = LibraryPDFToolRequest(tool: .redact)
+        case .sanitize: pdfToolRequest = LibraryPDFToolRequest(tool: .sanitize)
         }
     }
 
