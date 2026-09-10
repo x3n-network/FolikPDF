@@ -239,3 +239,5 @@ Choose **Add & Tools → Form Templates** (or **Browse Form Templates** in an em
 Rebuild the three PDF masters with `python3 Tools/create_form_templates.py` using ReportLab in the development environment. The app has no additional runtime dependency.
 
 In a document’s **Forms** panel, choose **Save as My Template** to keep a personal master. Clear field answers or keep them as defaults; page content, notes, and drawn signatures remain and should be reviewed. Personal templates support page-by-page previews and create independent copies through **Start Form**. Delete a master from the gallery without removing existing library copies. Digitally signed PDFs require an unsigned original for template creation.
+
+Suggested fields can be reviewed over a zoomable PDF preview before adding them. Tap a proposed box to include or skip it, or use its list toggle; edit labels and field types before applying. Multipage suggestions have page navigation. Review marks exist only in the disposable preview.

@@ -5,8 +5,8 @@ import Vision
 nonisolated struct FormFieldSuggestion: Identifiable, Sendable {
     let id: UUID
     let pageIndex: Int
-    let kind: FormFieldPlacementKind
-    let label: String
+    var kind: FormFieldPlacementKind
+    var label: String
     let bounds: CGRect
     let reason: String
 

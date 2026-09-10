@@ -121,3 +121,9 @@ Results: `/tmp/folik-forms-regression.xcresult` (the sample structure failure be
 Forms now offers Save as My Template with cleared answers or retained defaults. Personal masters live separately from working documents, support multipage previews, and can be deleted without removing library copies. Source page content and drawn annotations remain; digitally signed inputs require an unsigned original. Template names use collision-safe suffixes.
 
 Validation: save UI and bundled-template regression passed in `/tmp/folik-personal-tests2.xcresult`; after correcting widget subtype matching, canonical blank/default text and checkbox values, restart discovery, source preservation, and independent copies passed in `/tmp/folik-personal-final.xcresult`.
+
+## On-page field suggestion review
+
+Review proposed fields on a zoomable, disposable PDF copy, toggle inclusion by tapping a box or its list control, and edit labels/types before applying. Page navigation covers multipage suggestions. Preview annotations never enter the working document.
+
+Validation: the scan → suggest → preview/zoom → edit → add UI flow passed on iPhone and iPad (`/tmp/folik-suggestions-tests.xcresult`, `/tmp/folik-suggestions-final.xcresult`). Field inference and standard-widget/source-preservation unit tests passed in the latter. Inspected iPhone preview rendering and moved selection controls out of the crowded navigation bar.

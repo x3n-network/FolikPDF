@@ -664,6 +664,7 @@ private struct FormNavigator: View {
     @State private var signatureCaptureKind: SignatureKind?
     @State private var signaturePlaced = false
     @State private var suggestions: [FormFieldSuggestion] = []
+    @State private var suggestionData: Data?
     @State private var selectedSuggestionIDs: Set<UUID> = []
     @State private var isSuggestingFields = false
     @State private var suggestionMessage: String?
@@ -869,7 +870,8 @@ private struct FormNavigator: View {
             set: { if !$0 { suggestions = []; selectedSuggestionIDs = [] } }
         )) {
             FormSuggestionReviewView(
-                suggestions: suggestions,
+                suggestions: $suggestions,
+                data: suggestionData,
                 selectedIDs: $selectedSuggestionIDs,
                 apply: applySelectedSuggestions
             )
@@ -952,6 +954,7 @@ private struct FormNavigator: View {
                     suggestionMessage = "No confident fields were found. You can still add fields manually."
                     return
                 }
+                suggestionData = session.document?.dataRepresentation()
                 suggestions = found
                 selectedSuggestionIDs = Set(found.map(\.id))
             } catch is CancellationError {
@@ -1015,74 +1018,6 @@ private struct FormNavigator: View {
             .buttonStyle(.borderedProminent)
             .tint(FolikTheme.cobalt)
             .disabled(!session.isModified)
-    }
-}
-
-private struct FormSuggestionReviewView: View {
-    let suggestions: [FormFieldSuggestion]
-    @Binding var selectedIDs: Set<UUID>
-    let apply: () -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    ForEach(suggestions) { suggestion in
-                        Toggle(isOn: selection(for: suggestion.id)) {
-                            Label {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(suggestion.label)
-                                        .font(.body.weight(.medium))
-                                    Text("\(suggestion.kind.title) · Page \(suggestion.pageIndex + 1) · \(suggestion.reason)")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            } icon: {
-                                Image(systemName: suggestion.kind.icon)
-                                    .foregroundStyle(FolikTheme.cobalt)
-                            }
-                        }
-                        .frame(minHeight: 44)
-                        .accessibilityIdentifier("reader.form.suggestion.\(suggestion.id)")
-                    }
-                } header: {
-                    Text("Review before adding")
-                } footer: {
-                    Text("Suggestions are created on device and can be moved, resized, or deleted after you add them.")
-                }
-            }
-            .navigationTitle("Suggested Fields")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        Button("Select All") { selectedIDs = Set(suggestions.map(\.id)) }
-                        Button("Select None") { selectedIDs = [] }
-                    } label: {
-                        Label("Selection", systemImage: "checklist")
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Add \(selectedIDs.count)", action: apply)
-                        .disabled(selectedIDs.isEmpty)
-                        .accessibilityIdentifier("reader.form.applySuggestions")
-                }
-            }
-        }
-    }
-
-    private func selection(for id: UUID) -> Binding<Bool> {
-        Binding(
-            get: { selectedIDs.contains(id) },
-            set: { isSelected in
-                if isSelected { selectedIDs.insert(id) }
-                else { selectedIDs.remove(id) }
-            }
-        )
     }
 }
 

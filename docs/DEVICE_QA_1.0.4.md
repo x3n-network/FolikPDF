@@ -37,3 +37,7 @@ The direct builder, Build/Fill modes, repeated placement, properties, duplicatio
 ### Personal templates
 
 Save a multipage form both with cleared answers and retained defaults. Restart the app, preview every page, start two copies, and confirm their values are independent. Check saved choices/radio groups in another PDF viewer, template deletion, long names, and VoiceOver access to save options. Page artwork and drawn signatures are retained by design; inspect the save explanation.
+
+### On-page suggestion review
+
+On a rotated, cropped, multipage scan, pinch and pan the preview and toggle boxes by touch. Confirm list selection matches each box, edit a label/type, cancel without changes, then repeat and add only selected fields. Verify VoiceOver can perform the same review through the list controls.

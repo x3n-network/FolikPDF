@@ -342,8 +342,21 @@ final class FolikUITests: XCTestCase {
         app.buttons["reader.form.suggest"].tap()
 
         XCTAssertTrue(app.navigationBars["Suggested Fields"].waitForExistence(timeout: 20))
-        XCTAssertTrue(app.staticTexts["Customer name"].exists)
-        XCTAssertTrue(app.staticTexts["Subscribe to updates"].exists)
+        let preview = app.descendants(matching: .any)["reader.form.suggestionPreview"]
+        XCTAssertTrue(preview.waitForExistence(timeout: 5))
+        capture("suggestions-on-page", in: app)
+        preview.pinch(withScale: 1.5, velocity: 1)
+        capture("suggestions-preview-zoom", in: app)
+        app.swipeUp()
+        let edit = app.buttons["reader.form.editSuggestion"].firstMatch
+        XCTAssertTrue(edit.waitForExistence(timeout: 5))
+        if !edit.isHittable { app.swipeUp() }
+        edit.tap()
+        let label = app.textFields["suggestion.label"]
+        XCTAssertTrue(label.waitForExistence(timeout: 5))
+        label.tap()
+        label.typeText(" updated")
+        app.navigationBars["Edit Suggested Field"].buttons["Save"].tap()
         let apply = app.buttons["reader.form.applySuggestions"]
         XCTAssertTrue(apply.isEnabled)
         apply.tap()
