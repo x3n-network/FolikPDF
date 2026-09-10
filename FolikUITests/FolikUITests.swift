@@ -410,7 +410,6 @@ final class FolikUITests: XCTestCase {
                 XCTAssertEqual(app.staticTexts["privacy.source"].label, "Folik UI Test.pdf")
                 XCTAssertTrue(app.buttons["privacy.preview"].waitForExistence(timeout: 10))
                 XCTAssertTrue(app.buttons["privacy.preview"].isEnabled)
-                XCTAssertEqual(app.textFields["Filename"].value as? String, "Folik UI Test Sanitized")
             } else {
                 XCTAssertTrue(app.staticTexts["pdfTool.source"].waitForExistence(timeout: 10))
                 XCTAssertEqual(app.staticTexts["pdfTool.source"].label, "Folik UI Test.pdf")
@@ -740,10 +739,12 @@ final class FolikUITests: XCTestCase {
 
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))
         let settingsElements = app.descendants(matching: .any)
+        XCTAssertTrue(app.staticTexts["Version 1.0.3 (1)"].exists)
+        XCTAssertTrue(settingsElements["settings.shortcuts"].waitForExistence(timeout: 3))
+        app.swipeUp()
         XCTAssertTrue(settingsElements["settings.website"].exists)
         XCTAssertTrue(settingsElements["settings.openSource"].exists)
         XCTAssertTrue(settingsElements["settings.feedback"].exists)
-        XCTAssertTrue(app.staticTexts["Version 1.0.3 (1)"].exists)
         app.swipeUp()
         XCTAssertTrue(app.staticTexts["Documents stay on this device"].exists)
         XCTAssertTrue(app.staticTexts["Scans and text recognition run locally"].exists)

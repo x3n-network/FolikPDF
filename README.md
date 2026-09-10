@@ -22,6 +22,7 @@ The updated library in **Folik 1.0.2**. Browse in a list or grid, resume reading
 - Make existing scanned PDFs searchable with on-device OCR, progress, cancellation, and review before saving a new copy
 - Find literal text, email addresses, phone numbers, and Social Security numbers on-device, review each match, and add selected matches to a redacted copy
 - Inspect PDFs for metadata, filled forms, comments, links, outlines, attachments, scripts/actions, and digital-signature fields, then review and save a sanitized image-only copy
+- Run Sanitize PDF from Shortcuts, Siri, Spotlight, or an automation and receive a new local file without changing the original
 - Convert JPEG, PNG, or HEIC images from Photos or Files into a named, ordered, searchable multipage PDF (up to 30 images, 20 MB each and 100 MB total)
 - Convert Word DOCX and LibreOffice ODT documents on-device, review the generated PDF and conversion notes, then save the exact preview to the library
 - Convert TXT (UTF-8/UTF-16) or basic RTF documents up to 5 MB into searchable PDFs with Letter-size pages; complex layouts and attachments are not supported
@@ -73,6 +74,8 @@ Marked regions are painted into rendered pixels before a fresh image-only PDF is
 Choose **Add (+) → Inspect & Sanitize** to review information and interactive objects a PDF may carry beyond its visible pages. Folik reports common document metadata, pages with selectable text, filled form values, comments and annotations, links, outlines, attachments or embedded files, catalog-level JavaScript or automatic actions, and digital-signature fields. Inspection happens on-device and does not modify the source PDF.
 
 The sanitized copy rebuilds every page as a new image, including visible annotation and form appearances where PDFKit can display them. Source metadata, selectable or hidden text, links, outlines, attachments, scripts/actions, and editable form or annotation objects are not copied. This also removes text selection, search, links, form editing, accessibility text, and the validity of existing digital signatures. Rendering is limited to 200 dpi and 3,500 pixels per side. Review every page before saving or sharing; the original remains unchanged. Protected files are rejected, and input/output is limited to 100 MB and 500 pages.
+
+The same image-only operation is available as **Sanitize PDF** in Apple Shortcuts. It accepts a PDF file and returns a newly named PDF for the next step in a shortcut or automation. Open **Settings → Shortcuts** in Folik to discover the action.
 
 ### Batch conversion
 
@@ -149,6 +152,7 @@ The app icon uses Folik's folded-page **F** in standard, dark, and tinted appear
 DocumentLibrary    Imports and owns local PDF copies
 LibrarySearchIndex Bounded, disposable on-device cache for cross-library text search
 PDFPrivacy         On-device document inspection and image-only sanitizing
+FolikShortcuts     System Sanitize PDF action for Shortcuts, Siri, and Spotlight
 DocumentScanner    Native camera capture and scanned-image PDF generation
 PDFConverter       Local image and paginated TXT/RTF conversion
 PDFConversionView  Image/text selection, image ordering, and conversion review

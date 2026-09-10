@@ -1,3 +1,4 @@
+import AppIntents
 import SwiftUI
 
 struct SettingsView: View {
@@ -42,6 +43,14 @@ struct SettingsView: View {
                         Label("Recently Deleted", systemImage: "trash")
                     }
                     .accessibilityIdentifier("settings.recentlyDeleted")
+                }
+
+                Section("Automation") {
+                    ShortcutsLink()
+                        .accessibilityIdentifier("settings.shortcuts")
+                    Text("Use Sanitize PDF in Shortcuts, Siri, Spotlight, or an automation. Processing stays on-device and returns a new file without changing the original.")
+                        .font(.footnote)
+                        .foregroundStyle(FolikTheme.mutedInk)
                 }
 
                 Section("X3N") {

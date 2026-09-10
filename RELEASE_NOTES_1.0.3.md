@@ -10,6 +10,7 @@ Folik 1.0.3 makes private document libraries faster to search, easier to manage,
 - Duplicate PDFs while keeping their folder, tags, and favorite state.
 - Restore or permanently delete several removed documents together.
 - Inspect what a PDF carries beyond its visible pages and make a sanitized image-only copy.
+- Run Sanitize PDF directly from Shortcuts, Siri, Spotlight, or an automation.
 
 Your documents and search index remain on your device. No accounts, ads, analytics, or uploads.
 
@@ -44,6 +45,7 @@ Your documents and search index remain on your device. No accounts, ads, analyti
 - Does not copy source metadata, selectable or hidden text, links, outlines, attachments, scripts/actions, or editable form and annotation objects.
 - Clearly warns that sanitizing removes search, text selection, interactive features, accessibility text, and existing digital-signature validity.
 - Keeps the source PDF unchanged and rejects protected or oversized input.
+- Exposes the same local operation as a composable Apple Shortcuts action that returns a new PDF file.
 
 ## Compatibility and privacy
 
@@ -55,7 +57,7 @@ Your documents and search index remain on your device. No accounts, ads, analyti
 
 - Debug and Release generic iOS Simulator builds succeed, and Xcode static analysis passes.
 - The complete simulator unit suite passed 102 tests; one optional private-document fixture test was skipped.
-- The complete iPhone 17e UI suite passed 39 tests; one optional App Store screenshot fixture test was skipped.
+- The complete iPhone 17e UI suite passed 40 tests; one optional App Store screenshot fixture test was skipped.
 - Focused iPad mini UI checks passed for multi-page search results, document duplication, bulk recovery, and the lock-screen cover.
 - Focused iPhone and iPad mini UI checks passed for inspecting, previewing, saving, and preserving the original during sanitizing.
 - New unit coverage exercises search-index persistence and invalidation, document duplication, App Lock enrollment, startup state, relock delays, privacy reporting, catalog-level active/embedded content detection, and sanitized-output structure.

@@ -22,6 +22,8 @@ Folik never overwrites the original when preparing an editable, flattened, redac
 
 PDF privacy reports are generated on-device and are not retained as separate records. Folik inspects common metadata and supported PDF structures, including forms, annotations, links, outlines, attachments, embedded files, catalog-level scripts/actions, and digital-signature fields. A report is a bounded compatibility check, not a guarantee that every vendor-specific or malformed PDF object can be identified.
 
+Folik's Sanitize PDF Shortcuts action receives the file the user supplies through Apple's App Intents system, performs the same image-only operation locally, and returns a new file to the shortcut. Folik does not upload or retain a separate copy through this action.
+
 ## Network access
 
 The current app does not require network access for its functionality.
