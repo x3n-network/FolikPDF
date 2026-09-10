@@ -65,6 +65,7 @@ struct FillablePDFView: View {
                 }
             }
         }
+        .tint(FolikTheme.cobalt)
         .interactiveDismissDisabled(busy || workingCopy != nil)
         .fileImporter(isPresented: $showingFiles, allowedContentTypes: [.pdf]) { result in
             switch result {

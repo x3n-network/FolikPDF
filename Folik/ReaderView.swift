@@ -198,7 +198,7 @@ struct ReaderView: View {
             await session.prepareForReading()
             guard !Task.isCancelled else { return }
             passwordPromptPresented = session.isLocked
-            if startInFormBuilder { session.setFormMode(.build); presentedPanel = .forms }
+            if startInFormBuilder { session.setFormMode(.build); session.beginFormLayoutEditing() }
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--clear-saved-signatures") {
                 session.deleteSavedSignature(for: .signature)
@@ -520,6 +520,25 @@ private struct ReaderBottomChrome: View {
                 .accessibilityIdentifier("reader.previousPage")
                 .accessibilityLabel("Previous page")
 
+                if session.formMode == .build {
+                    HStack(spacing: 8) {
+                        Text(session.pageLabel).font(.subheadline.monospacedDigit().weight(.semibold))
+                            .lineLimit(1)
+                            .accessibilityIdentifier("reader.pageStatus")
+                            .accessibilityLabel("Page \(session.pageLabel)")
+                        Spacer(minLength: 0)
+                        if session.hasSavedChanges || session.isModified || session.isSaving || session.saveFailed {
+                            Button(session.saveFailed ? "Retry" : session.isSaving ? "Saving" : session.isModified ? "Save" : "Saved", action: session.requestSave)
+                                .font(.caption).lineLimit(1)
+                                .frame(minHeight: 44)
+                                .disabled(session.isSaving || (!session.isModified && !session.saveFailed))
+                                .accessibilityLabel(session.saveStatus)
+                                .accessibilityIdentifier("reader.saveStatus")
+                        }
+                    }
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                } else {
                 VStack(spacing: 2) {
                     Text(session.pageLabel)
                         .font(.subheadline.monospacedDigit().weight(.semibold))
@@ -539,6 +558,8 @@ private struct ReaderBottomChrome: View {
                     }
                 }
                 .frame(maxWidth: .infinity, minHeight: 44)
+
+                }
 
                 Button(action: session.toggleCurrentPageBookmark) {
                     Image(systemName: session.isCurrentPageBookmarked ? "bookmark.fill" : "bookmark")
@@ -564,10 +585,23 @@ private struct ReaderBottomChrome: View {
                 .accessibilityLabel("Next page")
             }
             .padding(.horizontal, 12)
+            .dynamicTypeSize(...(session.formMode == .build ? DynamicTypeSize.accessibility2 : .accessibility5))
 
             Divider()
 
-            if session.isDrawingEnabled {
+            if session.formMode == .build && !session.isDrawingEnabled && session.annotationPlacement == nil {
+                VStack(spacing: 4) {
+                    FormBuilderToolbar(session: session, showFields: { presentedPanel = .forms }, fill: {
+                        session.setFormMode(.fill)
+                        presentedPanel = .forms
+                    })
+                    if session.isAnnotationEditingEnabled {
+                        AnnotationEditingToolbar(session: session)
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+            } else if session.isDrawingEnabled {
                 DrawingToolbar(session: session)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
@@ -682,16 +716,14 @@ private struct AnnotationEditingToolbar: View {
     }
 
     private var modeLabel: some View {
-        Label(
-            session.selectedAnnotation?.title ?? (session.isFormLayoutEditingEnabled ? "Edit form layout" : "Edit annotations"),
-            systemImage: "square.dashed"
-        )
-        .font(.subheadline.weight(.semibold))
-        .foregroundStyle(FolikTheme.ink)
+        Text(session.selectedAnnotation?.title ?? (session.isFormLayoutEditingEnabled ? "Edit form layout" : "Edit annotations"))
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(FolikTheme.ink)
+            .lineLimit(2)
     }
 
     private var selectionHint: some View {
-        Text("Tap or drag an annotation")
+        Text(session.isFormLayoutEditingEnabled ? "Tap a field to arrange" : "Tap or drag an annotation")
             .font(.caption)
             .foregroundStyle(FolikTheme.mutedInk)
             .frame(minHeight: 44)

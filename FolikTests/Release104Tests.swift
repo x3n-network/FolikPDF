@@ -73,6 +73,67 @@ final class Release104Tests: XCTestCase {
         XCTAssertEqual(session.formFields.count, 1)
     }
 
+    func testQuickFieldsSupportRepeatPropertiesUndoSizesAndIndependentDuplicates() async throws {
+        let url = try pdf("Quick fields", pages: ["Form"])
+        let session = DocumentSession(item: try item(url))
+        session.setFormMode(.build)
+        session.beginQuickFormFieldPlacement(.text)
+        session.placeAnnotation(pageIndex: 0, point: CGPoint(x: 150, y: 300))
+        session.placeAnnotation(pageIndex: 0, point: CGPoint(x: 150, y: 200))
+        XCTAssertTrue(session.isPlacementActive)
+        XCTAssertEqual(session.formFields.map(\.title), ["Text field 1", "Text field 2"])
+        session.arrangeFormFields()
+        XCTAssertFalse(session.isPlacementActive)
+        let selected = try XCTUnwrap(session.selectedAuthoredFormField)
+        let internalName = selected.annotation.fieldName
+        session.updateSelectedFormField(label: "Customer name", isRequired: true)
+        XCTAssertEqual(session.selectedAuthoredFormField?.title, "Customer name")
+        XCTAssertEqual(selected.annotation.fieldName, internalName)
+        XCTAssertEqual(session.remainingRequiredFormFieldCount, 1)
+        session.undoAnnotationAction()
+        XCTAssertEqual(session.selectedAuthoredFormField?.title, "Text field 2")
+        XCTAssertEqual(session.remainingRequiredFormFieldCount, 0)
+        session.redoAnnotationAction()
+        XCTAssertEqual(session.selectedAuthoredFormField?.title, "Customer name")
+        selected.annotation.widgetStringValue = "Ada"
+        session.noteFormEditing()
+        session.resizeSelectedAnnotation(by: -5)
+        let size = selected.annotation.bounds.size
+        session.duplicateSelectedFormField()
+        let duplicate = try XCTUnwrap(session.selectedAuthoredFormField)
+        XCTAssertNotEqual(duplicate.annotation.fieldName, internalName)
+        XCTAssertEqual(duplicate.annotation.bounds.size, size)
+        XCTAssertTrue(duplicate.isRequired)
+        XCTAssertEqual(duplicate.annotation.widgetStringValue, "")
+        session.beginQuickFormFieldPlacement(.text)
+        session.placeAnnotationAtCurrentPageCenter()
+        XCTAssertEqual(session.formFields.last?.annotation.bounds.size, size)
+        session.setFormMode(.fill)
+        XCTAssertFalse(session.isPlacementActive)
+        let saved = await session.saveForSharing()
+        XCTAssertTrue(saved)
+        let reopened = DocumentSession(item: try item(url))
+        XCTAssertEqual(reopened.formFields.count, 4)
+        XCTAssertEqual(Set(reopened.formFields.compactMap { $0.annotation.fieldName }).count, 4)
+        XCTAssertEqual(reopened.formFields.first { $0.annotation.fieldName == internalName }?.annotation.widgetStringValue, "Ada")
+    }
+
+    func testFormAlignmentSnapsNearbyMatchingEdgesOnly() throws {
+        let session = DocumentSession(item: try item(pdf("Alignment", pages: ["Form"])))
+        session.beginQuickFormFieldPlacement(.checkbox)
+        session.placeAnnotation(pageIndex: 0, point: CGPoint(x: 60, y: 300))
+        session.placeAnnotation(pageIndex: 0, point: CGPoint(x: 62, y: 200))
+        session.arrangeFormFields()
+        let selected = try XCTUnwrap(session.selectedAuthoredFormField)
+        let page = try XCTUnwrap(session.document?.page(at: 0))
+        let original = selected.annotation.bounds
+        let aligned = session.alignedFormBounds(original, excluding: selected.annotation, on: page)
+        XCTAssertEqual(aligned.minX, session.formFields[0].annotation.bounds.minX)
+        XCTAssertEqual(aligned.minY, original.minY)
+        let distant = original.offsetBy(dx: 40, dy: 0)
+        XCTAssertEqual(session.alignedFormBounds(distant, excluding: selected.annotation, on: page), distant)
+    }
+
     func testFailedReplacementPreservesOriginalAndRetrySavesLatestEdits() async throws {
         let url = try pdf("Recovery", pages: ["Original"])
         let original = try Data(contentsOf: url)

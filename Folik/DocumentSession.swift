@@ -237,7 +237,13 @@ private struct AnnotationStyle {
     let lineWidth: CGFloat?
 }
 
+private struct FormFieldProperties {
+    let label: String
+    let flags: Int
+}
+
 private enum AnnotationHistoryAction {
+    case formProperties(PDFAnnotation, from: FormFieldProperties, to: FormFieldProperties)
     case added(PDFAnnotation, pageIndex: Int)
     case removed(PDFAnnotation, pageIndex: Int)
     case transformed(PDFAnnotation, pageIndex: Int, from: AnnotationGeometry, to: AnnotationGeometry)
@@ -372,6 +378,9 @@ enum FormWorkspaceMode: String, CaseIterable, Identifiable {
 @MainActor
 final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
     let item: LibraryDocument
+    private var repeatsFormPlacement = false
+    private var rememberedFieldSizes: [FormFieldPlacementKind: CGSize] = [:]
+    private var lastPlacedFormAnnotation: PDFAnnotation?
     @Published private(set) var formMode: FormWorkspaceMode = .fill
     @Published private(set) var document: PDFDocument?
     @Published private(set) var pageIndex = 0
@@ -623,6 +632,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
     }
 
     func cancelAnnotationPlacement() {
+        repeatsFormPlacement = false
         annotationPlacement = nil
         formFieldPlacement = nil
     }
@@ -636,6 +646,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
     }
 
     func beginFormFieldPlacement(_ kind: FormFieldPlacementKind, label: String, isRequired: Bool) {
+        repeatsFormPlacement = false
         let normalizedLabel = label
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .prefix(80)
@@ -648,6 +659,96 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
             label: String(normalizedLabel),
             isRequired: isRequired
         )
+    }
+
+    func beginQuickFormFieldPlacement(_ kind: FormFieldPlacementKind) {
+        beginFormFieldPlacement(kind, label: nextQuickFieldLabel(kind), isRequired: false)
+        repeatsFormPlacement = formFieldPlacement != nil
+    }
+
+    private func nextQuickFieldLabel(_ kind: FormFieldPlacementKind) -> String {
+        let used = Set(formFields.map { $0.title.localizedLowercase })
+        var number = 1
+        while used.contains("\(kind.title) \(number)".localizedLowercase) { number += 1 }
+        return "\(kind.title) \(number)"
+    }
+
+    var selectedAuthoredFormField: FormField? {
+        guard let selectedAnnotation else { return nil }
+        return formFields.first { $0.annotation === selectedAnnotation.annotation && $0.isAuthoredByFolik }
+    }
+
+    func arrangeFormFields() {
+        beginFormLayoutEditing()
+        if let annotation = lastPlacedFormAnnotation,
+           let field = formFields.first(where: { $0.annotation === annotation }) {
+            selectAnnotation(annotation, pageIndex: field.pageIndex, navigate: false)
+        }
+    }
+
+    private func placementKind(for field: FormField) -> FormFieldPlacementKind? {
+        if let raw = field.annotation.value(forAnnotationKey: PDFAnnotationKey(rawValue: "FolikFieldKind")) as? String,
+           let kind = FormFieldPlacementKind(rawValue: raw) { return kind }
+        switch field.kind {
+        case .text: return .text
+        case .multilineText: return .multilineText
+        case .checkbox: return .checkbox
+        case .signature: return .signature
+        default: return nil
+        }
+    }
+
+    func duplicateSelectedFormField() {
+        guard let field = selectedAuthoredFormField, let kind = placementKind(for: field),
+              let page = document?.page(at: field.pageIndex) else { return }
+        var reserved = Set(formFields.compactMap { $0.annotation.fieldName?.localizedLowercase })
+        let annotation = formFieldAnnotation(
+            placement: FormFieldPlacement(kind: kind, label: field.title, isRequired: field.isRequired),
+            bounds: clampedBounds(field.annotation.bounds.offsetBy(dx: 0, dy: -field.annotation.bounds.height - 12), on: page),
+            fieldName: uniqueFormFieldName(for: field.title, reservedNames: &reserved)
+        )
+        page.addAnnotation(annotation)
+        recordAnnotationAction(.added(annotation, pageIndex: field.pageIndex))
+        isModified = true
+        refreshFormState(markModified: false)
+        lastPlacedFormAnnotation = annotation
+        selectAnnotation(annotation, pageIndex: field.pageIndex)
+        scheduleAnnotationSave()
+    }
+
+    func updateSelectedFormField(label: String, isRequired: Bool) {
+        guard let field = selectedAuthoredFormField else { return }
+        let label = String(label.trimmingCharacters(in: .whitespacesAndNewlines).prefix(80))
+        guard !label.isEmpty else { return }
+        let oldFlags = (field.annotation.value(forAnnotationKey: .widgetFieldFlags) as? NSNumber)?.intValue ?? 0
+        let newFlags = isRequired ? oldFlags | 2 : oldFlags & ~2
+        guard label != field.title || newFlags != oldFlags else { return }
+        let before = FormFieldProperties(label: field.title, flags: oldFlags)
+        let after = FormFieldProperties(label: label, flags: newFlags)
+        applyFormProperties(after, to: field.annotation)
+        recordAnnotationAction(.formProperties(field.annotation, from: before, to: after))
+        isModified = true
+        refreshAnnotations()
+        scheduleAnnotationSave()
+    }
+
+    private func applyFormProperties(_ properties: FormFieldProperties, to annotation: PDFAnnotation) {
+        annotation.setValue(properties.label, forAnnotationKey: .widgetTextLabelUI)
+        annotation.setValue(NSNumber(value: properties.flags), forAnnotationKey: .widgetFieldFlags)
+        refreshFormState(markModified: false)
+    }
+
+    /// Snap matching edges within six PDF points. Used only for form dragging.
+    func alignedFormBounds(_ proposed: CGRect, excluding annotation: PDFAnnotation, on page: PDFPage) -> CGRect {
+        guard isFormLayoutEditingEnabled else { return proposed }
+        let others = page.annotations.filter { $0 !== annotation && $0.type?.lowercased() == "widget" }
+        var dx: CGFloat = 7
+        var dy: CGFloat = 7
+        for other in others {
+            for delta in [other.bounds.minX - proposed.minX, other.bounds.maxX - proposed.maxX] where abs(delta) < abs(dx) { dx = delta }
+            for delta in [other.bounds.minY - proposed.minY, other.bounds.maxY - proposed.maxY] where abs(delta) < abs(dy) { dy = delta }
+        }
+        return proposed.offsetBy(dx: abs(dx) <= 6 ? dx : 0, dy: abs(dy) <= 6 ? dy : 0)
     }
 
     func suggestFormFields() async throws -> [FormFieldSuggestion] {
@@ -702,7 +803,8 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
     }
 
     func beginFormLayoutEditing() {
-        guard !formFields.isEmpty else { return }
+        guard document != nil, !isLocked, canFillForms else { return }
+        repeatsFormPlacement = false
         isDrawingEnabled = false
         annotationPlacement = nil
         formFieldPlacement = nil
@@ -861,6 +963,9 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
             from: originalGeometry,
             to: updatedGeometry
         ))
+        if let field = selectedAuthoredFormField, let kind = placementKind(for: field) {
+            rememberedFieldSizes[kind] = field.annotation.bounds.size
+        }
         finishAnnotationGeometryChange()
     }
 
@@ -1327,14 +1432,18 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         let fieldName = uniqueFormFieldName(for: placement.label, reservedNames: &reservedNames)
         let annotation = formFieldAnnotation(
             placement: placement,
-            bounds: clampedBounds(size: placement.kind.defaultSize, centeredAt: point, on: page),
+            bounds: clampedBounds(size: rememberedFieldSizes[placement.kind] ?? placement.kind.defaultSize, centeredAt: point, on: page),
             fieldName: fieldName
         )
         page.addAnnotation(annotation)
+        lastPlacedFormAnnotation = annotation
         formFieldPlacement = nil
         recordAnnotationAction(.added(annotation, pageIndex: pageIndex))
         isModified = true
         refreshFormState(markModified: false)
+        if repeatsFormPlacement {
+            formFieldPlacement = FormFieldPlacement(kind: placement.kind, label: nextQuickFieldLabel(placement.kind), isRequired: false)
+        }
         scheduleAnnotationSave()
     }
 
@@ -1361,6 +1470,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
 
         annotation.fieldName = fieldName
         annotation.contents = "Folik form field"
+        annotation.setValue(placement.kind.rawValue, forAnnotationKey: PDFAnnotationKey(rawValue: "FolikFieldKind"))
         annotation.setValue(placement.label, forAnnotationKey: .widgetTextLabelUI)
         if placement.isRequired {
             let flags = (annotation.value(forAnnotationKey: .widgetFieldFlags) as? NSNumber)?.intValue ?? 0
@@ -1422,6 +1532,8 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
 
     private func apply(_ action: AnnotationHistoryAction) {
         switch action {
+        case .formProperties(let annotation, _, let to):
+            applyFormProperties(to, to: annotation)
         case .added(let annotation, let pageIndex):
             document?.page(at: pageIndex)?.addAnnotation(annotation)
             if annotation.type == "Widget" { refreshFormState(markModified: false) }
@@ -1437,6 +1549,8 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
 
     private func applyInverse(of action: AnnotationHistoryAction) {
         switch action {
+        case .formProperties(let annotation, let from, _):
+            applyFormProperties(from, to: annotation)
         case .added(let annotation, let pageIndex):
             document?.page(at: pageIndex)?.removeAnnotation(annotation)
             if annotation.type == "Widget" { refreshFormState(markModified: false) }

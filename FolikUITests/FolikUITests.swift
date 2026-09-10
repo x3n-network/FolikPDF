@@ -4,6 +4,7 @@ import XCTest
 final class FolikUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
+        XCUIDevice.shared.orientation = .portrait
     }
 
     func testDroppedPDFImportsCopyAndPreservesOriginal() {
@@ -173,9 +174,8 @@ final class FolikUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-fixture", "--ui-test-make-fillable"]
         app.launch()
-        XCTAssertTrue(app.buttons["reader.form.add"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["builder.add.text"].waitForExistence(timeout: 15))
         XCTAssertFalse(app.buttons["fillable.preview"].exists)
-        app.navigationBars["Forms"].buttons["Done"].tap()
         app.buttons["fillable.finish"].tap()
         let name = app.textFields["fillable.filename"]
         XCTAssertTrue(name.waitForExistence(timeout: 5))
@@ -205,6 +205,48 @@ final class FolikUITests: XCTestCase {
         capture("form-fill-mode", in: app)
         app.buttons["reader.form.nextIncomplete"].tap()
         XCTAssertTrue(app.buttons["reader.panel.forms"].waitForExistence(timeout: 3))
+    }
+
+    func testQuickFormPlacementAndProperties() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-make-fillable"]
+        app.launch()
+        XCTAssertTrue(app.buttons["builder.add.text"].waitForExistence(timeout: 15))
+        app.buttons["builder.add.text"].tap()
+        app.buttons["reader.annotation.placeCenter"].tap()
+        XCTAssertTrue(app.buttons["reader.annotation.placeCenter"].exists)
+        app.buttons["builder.arrange"].tap()
+        app.buttons["builder.properties"].tap()
+        let label = app.textFields["Field label"]
+        XCTAssertTrue(label.waitForExistence(timeout: 3))
+        label.tap()
+        label.typeText(" customer")
+        app.switches["Required"].tap()
+        app.buttons["builder.saveProperties"].tap()
+        XCTAssertTrue(app.buttons["builder.duplicate"].waitForExistence(timeout: 3))
+        app.buttons["builder.duplicate"].tap()
+        capture("quick-form-placement", in: app)
+        app.buttons["builder.undo"].tap()
+        app.buttons["builder.fill"].tap()
+        XCTAssertTrue(app.buttons["reader.sign"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["reader.form.add"].exists)
+    }
+
+    func testFormBuilderSupportsLargeTextAndRotation() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-make-fillable", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        XCTAssertTrue(app.buttons["builder.add.text"].waitForExistence(timeout: 15))
+        app.buttons["builder.add.text"].tap()
+        XCTAssertTrue(app.buttons["reader.annotation.placeCenter"].isHittable)
+        app.buttons["reader.annotation.placeCenter"].tap()
+        capture("form-builder-large-text", in: app)
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        XCTAssertTrue(app.buttons["builder.arrange"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["builder.arrange"].isHittable)
+        capture("form-builder-landscape", in: app)
+        XCUIDevice.shared.orientation = .portrait
     }
 
     func testScannedPDFCanAuthorFillableFields() {

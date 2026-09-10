@@ -66,6 +66,7 @@ struct PDFKitView: UIViewRepresentable {
         private let authoredFormFieldLayer = CAShapeLayer()
         private let annotationSelectionLayer = CAShapeLayer()
         private let resizeHandleLayer = CAShapeLayer()
+        private let formAlignmentLayer = CAShapeLayer()
         private var transformStartPoint: CGPoint?
         private var transformStartBounds: CGRect?
         private var isResizingAnnotation = false
@@ -129,6 +130,11 @@ struct PDFKitView: UIViewRepresentable {
             resizeHandleLayer.lineWidth = 2
             resizeHandleLayer.isHidden = true
             pdfView.layer.addSublayer(resizeHandleLayer)
+            formAlignmentLayer.strokeColor = UIColor.systemOrange.cgColor
+            formAlignmentLayer.fillColor = UIColor.clear.cgColor
+            formAlignmentLayer.lineWidth = 1
+            formAlignmentLayer.lineDashPattern = [4, 4]
+            pdfView.layer.addSublayer(formAlignmentLayer)
         }
 
         func startObserving() {
@@ -166,8 +172,9 @@ struct PDFKitView: UIViewRepresentable {
             placementTap.isEnabled = session.isPlacementActive
             annotationSelectionTap.isEnabled = session.isAnnotationEditingEnabled
             annotationTransformPan.isEnabled = session.isAnnotationEditingEnabled
-            let allowsDocumentGestures = !session.isDrawingEnabled && !session.isAnnotationEditingEnabled
+            let allowsDocumentGestures = !session.isDrawingEnabled && (!session.isAnnotationEditingEnabled || session.isFormLayoutEditingEnabled)
             if let scrollView = findScrollView(in: pdfView) {
+                scrollView.panGestureRecognizer.require(toFail: annotationTransformPan)
                 scrollView.isScrollEnabled = allowsDocumentGestures
                 scrollView.pinchGestureRecognizer?.isEnabled = allowsDocumentGestures
             }
@@ -185,7 +192,7 @@ struct PDFKitView: UIViewRepresentable {
                 path.append(UIBezierPath(roundedRect: viewBounds, cornerRadius: 3))
             }
             authoredFormFieldLayer.path = path.cgPath
-            authoredFormFieldLayer.isHidden = path.isEmpty
+            authoredFormFieldLayer.isHidden = path.isEmpty || session.formMode == .fill
         }
 
         func gestureRecognizer(
@@ -318,20 +325,23 @@ struct PDFKitView: UIViewRepresentable {
                     proposedBounds = startBounds.offsetBy(dx: delta.x, dy: delta.y)
                 }
                 selected.annotation.bounds = session.clampedBounds(
-                    proposedBounds,
+                    isResizingAnnotation ? proposedBounds : session.alignedFormBounds(proposedBounds, excluding: selected.annotation, on: page),
                     on: page,
                     minimumSize: isResizingAnnotation
                         ? CGSize(width: 32, height: 32)
                         : CGSize(width: 1, height: 1)
                 )
                 updateAnnotationSelectionOverlay()
+                updateFormAlignmentGuides(on: page, selected: selected.annotation)
             case .ended:
+                formAlignmentLayer.path = nil
                 if let startBounds = transformStartBounds {
                     session.commitSelectedAnnotationTransform(from: startBounds)
                 }
                 resetAnnotationTransform()
                 updateAnnotationSelectionOverlay()
             case .cancelled, .failed:
+                formAlignmentLayer.path = nil
                 if let startBounds = transformStartBounds {
                     selected.annotation.bounds = startBounds
                 }
@@ -340,6 +350,24 @@ struct PDFKitView: UIViewRepresentable {
             default:
                 break
             }
+        }
+
+        private func updateFormAlignmentGuides(on page: PDFPage, selected: PDFAnnotation) {
+            guard session.isFormLayoutEditingEnabled else { formAlignmentLayer.path = nil; return }
+            formAlignmentLayer.frame = CGRect(origin: .zero, size: pdfView.bounds.size)
+            let path = UIBezierPath()
+            let bounds = selected.bounds
+            for other in page.annotations where other !== selected && other.type?.lowercased() == "widget" {
+                for (x, otherX) in [(bounds.minX, other.bounds.minX), (bounds.maxX, other.bounds.maxX)] where abs(x - otherX) < 0.5 {
+                    path.move(to: pdfView.convert(CGPoint(x: x, y: min(bounds.minY, other.bounds.minY)), from: page))
+                    path.addLine(to: pdfView.convert(CGPoint(x: x, y: max(bounds.maxY, other.bounds.maxY)), from: page))
+                }
+                for (y, otherY) in [(bounds.minY, other.bounds.minY), (bounds.maxY, other.bounds.maxY)] where abs(y - otherY) < 0.5 {
+                    path.move(to: pdfView.convert(CGPoint(x: min(bounds.minX, other.bounds.minX), y: y), from: page))
+                    path.addLine(to: pdfView.convert(CGPoint(x: max(bounds.maxX, other.bounds.maxX), y: y), from: page))
+                }
+            }
+            formAlignmentLayer.path = path.cgPath
         }
 
         private func updateAnnotationSelectionOverlay() {

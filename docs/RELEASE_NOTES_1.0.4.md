@@ -92,3 +92,9 @@ Validation: the source-preservation/save/rename regression and direct-entry/Fini
 Forms now separates field authoring and arrangement from signing, completion tracking, and next-field navigation. New fillable copies enter Build. Fill uses the actual PDF values, and its instructions explain that test entries are saved. Switching modes ends placement and layout selection without clearing data.
 
 Validation: mode-switch value preservation, Build/Fill UI separation, and scanned form authoring/deletion passed on iPhone 17e Simulator. Both mode screenshots were reviewed. Result: `/tmp/folik-form-modes.xcresult`.
+
+## Faster form placement
+
+Build keeps field tools beside the page. Choose a type once and tap repeatedly, or use Place center. Arrange supports editing labels and required flags after placement, independent blank duplicates, and undo/redo. Field sizes are reused within the editing session. Dragged fields snap nearby matching edges and show alignment guides. Form layout supports page scrolling and pinch zoom; Fill hides the authoring outlines.
+
+Validation: repeat placement, independent duplicates, required/label undo and redo, remembered sizes, save/reopen, and edge snapping passed unit checks. iPhone UI checks passed after fixing a largest-text landscape overflow. iPad placement, large-text rotation, and suggested-field zoom checks passed; screenshots reviewed. Results: `/tmp/folik-form-quick.xcresult`, `/tmp/folik-form-quick-fixed.xcresult`, `/tmp/folik-form-quick-ipad.xcresult`.
