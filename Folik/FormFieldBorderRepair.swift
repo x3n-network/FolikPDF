@@ -42,7 +42,10 @@ enum FormFieldBorderRepair {
             if replacedField {
                 // Keep annotation order, including external widgets and non-field annotations.
                 for annotation in originals { page.removeAnnotation(annotation) }
-                for annotation in replacements { page.addAnnotation(annotation) }
+                for annotation in replacements {
+                    page.addAnnotation(annotation)
+                    PDFFormFieldRegistration.register(annotation)
+                }
             }
         }
         return true

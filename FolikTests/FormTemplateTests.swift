@@ -35,7 +35,7 @@ final class FormTemplateTests: XCTestCase {
             XCTAssertEqual(reopened.formFields.first { $0.title == text.title }?.annotation.widgetStringValue, "Pat Example")
             XCTAssertEqual(reopened.completedFormFieldCount, checkbox == nil ? 2 : 3)
             let document = try XCTUnwrap(PDFDocument(url: first.url))
-            let canonicalFields = try canonicalValues(document)
+            let canonicalFields = try Self.canonicalValues(document)
             XCTAssertEqual(Set(canonicalFields.keys), Set(reopened.formFields.map(\.title)))
             XCTAssertEqual(canonicalFields[text.title], "Pat Example")
             XCTAssertEqual(canonicalFields[notes.title], "First line\nFollow-up next week")
@@ -76,11 +76,11 @@ final class FormTemplateTests: XCTestCase {
             let attachment = XCTAttachment(data: try Data(contentsOf: template.url), uniformTypeIdentifier: "com.adobe.pdf")
             attachment.name = template.title; attachment.lifetime = .keepAlways; add(attachment)
         }
-        XCTAssertEqual(try canonicalValues(blank)["Customer or team"], "")
-        XCTAssertEqual(try canonicalValues(blank)["Work completed"], "Off")
-        XCTAssertEqual(try canonicalValues(kept)["Customer or team"], "My Company")
-        XCTAssertEqual(try canonicalValues(kept)["Work completed"], "Yes")
-        XCTAssertEqual(try canonicalValues(blank).count, 10)
+        XCTAssertEqual(try Self.canonicalValues(blank)["Customer or team"], "")
+        XCTAssertEqual(try Self.canonicalValues(blank)["Work completed"], "Off")
+        XCTAssertEqual(try Self.canonicalValues(kept)["Customer or team"], "My Company")
+        XCTAssertEqual(try Self.canonicalValues(kept)["Work completed"], "Yes")
+        XCTAssertEqual(try Self.canonicalValues(blank).count, 10)
         XCTAssertEqual(blank.page(at: 0)?.annotations.first { $0.fieldName == "Customer or team" }?.widgetDefaultStringValue, "")
         let restored = DocumentLibrary(documentsDirectory: root)
         try await restored.refreshTemplates()
@@ -94,7 +94,49 @@ final class FormTemplateTests: XCTestCase {
         XCTAssertEqual(text.widgetStringValue, "My Company")
     }
 
-    private func canonicalValues(_ document: PDFDocument) throws -> [String: String] {
+    func testAddedFieldsRemainDiscoverableInEditableExports() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("Compatibility.pdf")
+        try SampleForm.data().write(to: url)
+        let session = DocumentSession(item: LibraryDocument(url: url, pageCount: 1, fileSize: 0, modifiedAt: Date()))
+        for (index, kind) in FormFieldPlacementKind.allCases.enumerated() {
+            session.beginFormFieldPlacement(kind, label: "Added \(kind.rawValue)", isRequired: false)
+            session.placeAnnotation(pageIndex: 0, point: CGPoint(x: 306, y: 250 - index * 55))
+        }
+        let blankValues = try Self.canonicalValues(XCTUnwrap(PDFDocument(url: url)))
+        XCTAssertEqual(Set(blankValues.keys), Set(session.formFields.compactMap { $0.annotation.fieldName }))
+        XCTAssertEqual(try PDFPrivacy.inspect(Data(contentsOf: url)).signedSignatureCount, 0)
+        for field in session.formFields {
+            if field.kind == .text || field.kind == .multilineText {
+                field.annotation.widgetStringValue = "Saved answer"
+            } else if field.kind == .checkbox {
+                field.annotation.buttonWidgetState = .onState
+            }
+        }
+        session.noteFormEditing()
+        let saved = await session.saveForSharing()
+        XCTAssertTrue(saved)
+        let editable = try DocumentExporter.export(sourceURL: url, mode: .editable, root: root)
+        let reopened = try XCTUnwrap(PDFDocument(url: editable))
+        let values = try Self.canonicalValues(reopened)
+        XCTAssertEqual(Set(values.keys), Set(session.formFields.compactMap { $0.annotation.fieldName }))
+        for field in session.formFields {
+            if field.kind == .text || field.kind == .multilineText {
+                XCTAssertEqual(values[field.title], "Saved answer", field.title)
+            } else if field.kind == .checkbox {
+                XCTAssertEqual(values[field.title], "Yes", field.title)
+            }
+        }
+        let flattened = try DocumentExporter.export(sourceURL: url, mode: .flattened, root: root)
+        for (name, file) in [("compatibility-editable", editable), ("compatibility-flattened", flattened)] {
+            let attachment = XCTAttachment(data: try Data(contentsOf: file), uniformTypeIdentifier: "com.adobe.pdf")
+            attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
+        }
+    }
+
+    static func canonicalValues(_ document: PDFDocument) throws -> [String: String] {
         let catalog = try XCTUnwrap(document.documentRef?.catalog)
         var acroForm: CGPDFDictionaryRef?
         XCTAssertTrue(CGPDFDictionaryGetDictionary(catalog, "AcroForm", &acroForm))

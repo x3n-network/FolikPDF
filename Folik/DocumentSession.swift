@@ -710,6 +710,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
             fieldName: uniqueFormFieldName(for: field.title, reservedNames: &reserved)
         )
         page.addAnnotation(annotation)
+        PDFFormFieldRegistration.register(annotation)
         recordAnnotationAction(.added(annotation, pageIndex: field.pageIndex))
         isModified = true
         refreshFormState(markModified: false)
@@ -837,6 +838,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
                 fieldName: fieldName
             )
             page.addAnnotation(annotation)
+            PDFFormFieldRegistration.register(annotation)
             recordAnnotationAction(.added(annotation, pageIndex: suggestion.pageIndex))
             added = true
         }
@@ -1493,6 +1495,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
             fieldName: fieldName
         )
         page.addAnnotation(annotation)
+        PDFFormFieldRegistration.register(annotation)
         lastPlacedFormAnnotation = annotation
         formFieldPlacement = nil
         recordAnnotationAction(.added(annotation, pageIndex: pageIndex))
@@ -1604,6 +1607,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
             applyFormProperties(to, to: annotation)
         case .added(let annotation, let pageIndex):
             document?.page(at: pageIndex)?.addAnnotation(annotation)
+            PDFFormFieldRegistration.register(annotation)
             if annotation.type == "Widget" { refreshFormState(markModified: false) }
         case .removed(let annotation, let pageIndex):
             document?.page(at: pageIndex)?.removeAnnotation(annotation)
@@ -1626,6 +1630,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
             if annotation.type == "Widget" { refreshFormState(markModified: false) }
         case .removed(let annotation, let pageIndex):
             document?.page(at: pageIndex)?.addAnnotation(annotation)
+            PDFFormFieldRegistration.register(annotation)
             if annotation.type == "Widget" { refreshFormState(markModified: false) }
         case .transformed(let annotation, _, let fromGeometry, _):
             applyGeometry(fromGeometry, to: annotation)

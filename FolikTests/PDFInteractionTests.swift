@@ -50,7 +50,7 @@ final class PDFInteractionTests: XCTestCase {
             let url = directory.appendingPathComponent("Border-\(kind.rawValue).pdf")
             try SampleForm.data().write(to: url)
             let session = DocumentSession(item: LibraryDocument(url: url, pageCount: 1, fileSize: 0, modifiedAt: Date()))
-            let originalNames = Set(session.formFields.map(\.title))
+            let originalNames = Set(session.formFields.compactMap { $0.annotation.fieldName })
             session.beginFormFieldPlacement(kind, label: "Added field", isRequired: false)
             session.placeAnnotation(pageIndex: 0, point: CGPoint(x: 306, y: 200))
             let reopened = try XCTUnwrap(PDFDocument(url: url))
@@ -123,6 +123,13 @@ final class PDFInteractionTests: XCTestCase {
             try assertVisibleBorder(on: page, bounds: repaired.bounds, kind: kind)
             let flattened = try DocumentExporter.export(sourceURL: url, mode: .flattened, root: directory)
             try assertVisibleBorder(on: XCTUnwrap(PDFDocument(url: flattened)?.page(at: 0)), bounds: repaired.bounds, kind: kind)
+            let catalog = try FormTemplateTests.canonicalValues(XCTUnwrap(PDFDocument(url: url)))
+            XCTAssertEqual(Set(catalog.keys), Set(session.formFields.compactMap { $0.annotation.fieldName }))
+            XCTAssertEqual(catalog["Name"], "Existing customer")
+            if kind == .checkbox { XCTAssertEqual(catalog["Legacy field"], "Yes") }
+            else if kind != .signature { XCTAssertEqual(catalog["Legacy field"], "Saved answer") }
+            let attachment = XCTAttachment(data: try Data(contentsOf: url), uniformTypeIdentifier: "com.adobe.pdf")
+            attachment.name = "repaired-\(kind.rawValue)"; attachment.lifetime = .keepAlways; add(attachment)
             let data = try Data(contentsOf: url)
             let reopened = DocumentSession(item: item)
             XCTAssertEqual(reopened.successfulSaveCount, 0)
