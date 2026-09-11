@@ -1378,6 +1378,44 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Compressed Copy"].waitForExistence(timeout: 10))
     }
 
+    func testActiveFormEditAndSignatureSurviveBackgroundAndRelaunch() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--open-first-document", "--place-test-signature"]
+        app.launch()
+        XCTAssertTrue(app.buttons["reader.panel.forms"].waitForExistence(timeout: 10))
+        let pdf = app.descendants(matching: .any)["reader.pdf"]
+        let pageFrame = pdf.textViews.firstMatch.children(matching: .other).firstMatch.frame
+        // Tap the known fixture widget while leaving its native editor active.
+        let fieldCenter = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
+            dx: pageFrame.minX + pageFrame.width * 232 / 612,
+            dy: pageFrame.maxY - pageFrame.height * 610 / 792))
+        fieldCenter.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        // PDFKit's native editor does not expose keyboard focus to XCTest's typeText API.
+        for letter in ["a", "b", "c"] {
+            let key = app.keys[letter].exists ? app.keys[letter] : app.keys[letter.uppercased()]
+            key.tap()
+        }
+        XCUIDevice.shared.press(.home)
+        XCTAssertTrue(app.wait(for: .runningBackground, timeout: 5) || app.state == .runningBackgroundSuspended)
+        Thread.sleep(forTimeInterval: 1)
+        app.terminate()
+        app.launchArguments = []
+        app.launch()
+        let document = app.buttons["library.document.Folik UI Test.pdf"]
+        XCTAssertTrue(document.waitForExistence(timeout: 10))
+        document.tap()
+        XCTAssertTrue(app.buttons["reader.panel.forms"].waitForExistence(timeout: 10))
+        app.buttons["reader.panel.forms"].tap()
+        let field = app.buttons["reader.form.field.0:0:Full name"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertTrue((field.value as? String ?? "").localizedCaseInsensitiveContains("abc"))
+        capture("form-value-after-background-relaunch", in: app)
+        app.navigationBars["Forms"].buttons["Done"].tap()
+        app.buttons["reader.panel.annotations"].tap()
+        XCTAssertTrue(app.staticTexts["Signature"].waitForExistence(timeout: 5))
+    }
+
     func testSaveFailureRetainsReaderAndBackRetriesSuccessfully() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-fixture", "--open-first-document", "--place-test-signature", "--ui-test-save-failure"]

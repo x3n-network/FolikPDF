@@ -186,3 +186,10 @@ Validation: direct sharing, editable/flattened output preservation, and export c
 - Flattened copies draw each visible annotation once. This avoids darker translucent annotations and prevents the extra drawing pass from rendering hidden annotations.
 - Each output page uses its visible crop, including crop offsets and page rotation, with the correct per-page dimensions. The source and editable copy stay byte-for-byte unchanged.
 - Rendered comparisons reproduce the old failures and pass after the fix across full pages, cropped pages, and all four rotations. The focused export/interaction/document-session suite passed on iPhone 17e (`/tmp/folik-export-after.xcresult`).
+
+## Background save and reopen verification
+
+- A native UI regression enters a field value through the on-screen keyboard, backgrounds the app with the editor active, terminates after the background-save interval, and reopens the document from the library. Both the field answer and existing signature survive. This passed on iPhone 17e and iPad mini simulators; no save-path code change was needed.
+- Failed-save/back-navigation recovery and flattened-preview-to-share UI tests passed on iPhone. The rendered export comparison also passed on iPad. This verifies these workflows, not force-quitting in the middle of a write.
+- Validation artifacts: 48 focused native tests passed in `/tmp/folik-export-after.xcresult`; recovery and sharing checks are in `/tmp/folik-save-export-ui.xcresult`; the completed background test passed in `/tmp/folik-background-verified.xcresult`; iPad export and background checks passed in `/tmp/folik-save-export-ipad.xcresult`. Initial background-test failures were automation issues (PDFKit keyboard-focus exposure and the debug auto-open shortcut); the final test uses actual keyboard taps and library navigation. The reopened field/signature screenshot was visually verified.
+- Physical-device and cross-viewer checks in Preview, Files, and Acrobat remain outstanding.
