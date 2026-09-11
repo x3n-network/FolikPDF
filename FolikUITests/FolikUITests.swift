@@ -234,6 +234,23 @@ final class FolikUITests: XCTestCase {
         XCTAssertFalse(app.buttons["reader.form.add"].exists)
     }
 
+    func testAddedFieldIsVisibleInFillModeWithoutSelection() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-make-fillable"]
+        app.launch()
+        XCTAssertTrue(app.buttons["builder.add.text"].waitForExistence(timeout: 15))
+        app.buttons["builder.add.text"].tap()
+        let pdf = app.descendants(matching: .any)["reader.pdf"]
+        pdf.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)).tap()
+        app.buttons["builder.fill"].tap()
+        XCTAssertTrue(app.buttons["reader.sign"].waitForExistence(timeout: 5))
+        app.navigationBars["Forms"].buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["reader.panel.forms"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["builder.add.text"].exists)
+        XCTAssertEqual(pdf.value as? String ?? "", "")
+        capture("added-field-visible-in-fill-mode", in: app)
+    }
+
     func testFormBuilderAcceptsOnPagePlacementAndDragging() throws {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-fixture", "--ui-test-make-fillable"]

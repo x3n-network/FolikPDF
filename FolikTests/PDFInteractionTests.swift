@@ -45,6 +45,49 @@ final class PDFInteractionTests: XCTestCase {
         return (session, coordinator, page)
     }
 
+    func testAddedFieldsHaveVisibleBordersAfterReopeningAndFlattening() throws {
+        for kind in FormFieldPlacementKind.allCases {
+            let url = directory.appendingPathComponent("Border-\(kind.rawValue).pdf")
+            try SampleForm.data().write(to: url)
+            let session = DocumentSession(item: LibraryDocument(url: url, pageCount: 1, fileSize: 0, modifiedAt: Date()))
+            let originalNames = Set(session.formFields.map(\.title))
+            session.beginFormFieldPlacement(kind, label: "Added field", isRequired: false)
+            session.placeAnnotation(pageIndex: 0, point: CGPoint(x: 306, y: 200))
+            let reopened = try XCTUnwrap(PDFDocument(url: url))
+            let page = try XCTUnwrap(reopened.page(at: 0))
+            let field = try XCTUnwrap(page.annotations.first { $0.fieldName == "Added field" })
+            XCTAssertTrue(originalNames.isSubset(of: Set(page.annotations.compactMap(\.fieldName))))
+            let flattenedURL = try DocumentExporter.export(sourceURL: url, mode: .flattened, root: directory)
+            let flattenedPage = try XCTUnwrap(PDFDocument(url: flattenedURL)?.page(at: 0))
+            for renderedPage in [page, flattenedPage] {
+                let bounds = field.bounds
+                let width = Int(bounds.width.rounded(.up)) + 8
+                let height = Int(bounds.height.rounded(.up)) + 8
+                let context = try XCTUnwrap(CGContext(data: nil, width: width, height: height,
+                    bitsPerComponent: 8, bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+                context.setFillColor(UIColor.white.cgColor)
+                context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+                context.translateBy(x: 4 - bounds.minX, y: 4 - bounds.minY)
+                renderedPage.draw(with: .mediaBox, to: context)
+                let pixels = try XCTUnwrap(context.data).assumingMemoryBound(to: UInt8.self)
+                // Each side must draw a visible blue border, without a selection overlay or focus.
+                var sides = [0, 0, 0, 0]
+                for y in 2..<(height - 2) {
+                    for x in 2..<(width - 2) {
+                        let offset = (y * width + x) * 4
+                        guard Int(pixels[offset + 2]) > Int(pixels[offset]) + 30 else { continue }
+                        if x < 7 { sides[0] += 1 }
+                        if x >= width - 7 { sides[1] += 1 }
+                        if y < 7 { sides[2] += 1 }
+                        if y >= height - 7 { sides[3] += 1 }
+                    }
+                }
+                for count in sides { XCTAssertGreaterThan(count, 10, "Missing border for \(kind.rawValue)") }
+            }
+        }
+    }
+
     func testAnnotationTapMoveAndCancelledDragAcrossPageRotations() throws {
         for rotation in [0, 90, 180, 270] {
             for kind in [AnnotationPlacementKind.textBox, .stamp, .signature] {

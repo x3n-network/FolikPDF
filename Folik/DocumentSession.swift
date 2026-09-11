@@ -1509,7 +1509,9 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         bounds: CGRect,
         fieldName: String
     ) -> PDFAnnotation {
-        let annotation = PDFAnnotation(bounds: bounds, forType: .widget, withProperties: nil)
+        let annotation: PDFAnnotation = placement.kind == .signature
+            ? VisibleSignatureField(bounds: bounds, forType: .widget, withProperties: nil)
+            : PDFAnnotation(bounds: bounds, forType: .widget, withProperties: nil)
         switch placement.kind {
         case .text, .multilineText, .date:
             annotation.widgetFieldType = .text
@@ -1535,6 +1537,12 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         }
         annotation.backgroundColor = UIColor.white.withAlphaComponent(0.94)
         annotation.color = FolikTheme.annotationBlue
+        // Widgets use /MK border colors; the general annotation color alone is not rendered.
+        let appearance = PDFAppearanceCharacteristics()
+        appearance.backgroundColor = .white
+        appearance.borderColor = FolikTheme.annotationBlue
+        if placement.kind == .checkbox { appearance.controlType = .checkBoxControl }
+        annotation.setValue(appearance, forAnnotationKey: .widgetAppearanceDictionary)
         let border = PDFBorder()
         border.lineWidth = 1.5
         annotation.border = border
@@ -2078,4 +2086,15 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
 
 private extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
+}
+
+private final class VisibleSignatureField: PDFAnnotation {
+    override func draw(with box: PDFDisplayBox, in context: CGContext) {
+        super.draw(with: box, in: context)
+        context.saveGState()
+        context.setStrokeColor(FolikTheme.annotationBlue.cgColor)
+        context.setLineWidth(1.5)
+        context.stroke(bounds.insetBy(dx: 0.75, dy: 0.75))
+        context.restoreGState()
+    }
 }
