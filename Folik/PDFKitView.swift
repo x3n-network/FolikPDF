@@ -1,7 +1,7 @@
 import PDFKit
 import SwiftUI
 
-private final class LayoutAwarePDFView: PDFView {
+final class LayoutAwarePDFView: PDFView {
     var didLayout: (() -> Void)?
 
     override func layoutSubviews() {
@@ -50,7 +50,7 @@ struct PDFKitView: UIViewRepresentable {
 
     @MainActor
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
-        fileprivate let pdfView = LayoutAwarePDFView()
+        let pdfView = LayoutAwarePDFView()
         private var pendingRestore: (pageIndex: Int, layout: ReaderLayout)?
         private var isRestoreScheduled = false
         var lastCommandID: UUID?
@@ -309,18 +309,22 @@ struct PDFKitView: UIViewRepresentable {
                 transformStartPoint = pagePoint
                 transformStartBounds = selected.annotation.bounds
                 isResizingAnnotation = session.selectedAnnotationCanResize && resizeHandleHitArea().contains(viewPoint)
-            case .changed:
+            case .changed, .ended:
                 guard let startPoint = transformStartPoint, let startBounds = transformStartBounds else { return }
                 let delta = CGPoint(x: pagePoint.x - startPoint.x, y: pagePoint.y - startPoint.y)
                 let proposedBounds: CGRect
                 if isResizingAnnotation {
-                    let maximumY = startBounds.maxY
-                    proposedBounds = CGRect(
-                        x: startBounds.minX,
-                        y: min(maximumY - 32, startBounds.minY + delta.y),
-                        width: max(32, startBounds.width + delta.x),
-                        height: max(32, startBounds.height - delta.y)
+                    // The visible handle is always bottom-right, even when the page is rotated.
+                    let viewBounds = pdfView.convert(startBounds, from: page).standardized
+                    let startViewPoint = pdfView.convert(startPoint, from: page)
+                    let minimumSide = 32 * pdfView.scaleFactor
+                    let resizedViewBounds = CGRect(
+                        x: viewBounds.minX,
+                        y: viewBounds.minY,
+                        width: max(minimumSide, viewBounds.width + viewPoint.x - startViewPoint.x),
+                        height: max(minimumSide, viewBounds.height + viewPoint.y - startViewPoint.y)
                     )
+                    proposedBounds = pdfView.convert(resizedViewBounds, to: page).standardized
                 } else {
                     proposedBounds = startBounds.offsetBy(dx: delta.x, dy: delta.y)
                 }
@@ -333,13 +337,12 @@ struct PDFKitView: UIViewRepresentable {
                 )
                 updateAnnotationSelectionOverlay()
                 updateFormAlignmentGuides(on: page, selected: selected.annotation)
-            case .ended:
-                formAlignmentLayer.path = nil
-                if let startBounds = transformStartBounds {
+                if gesture.state == .ended {
+                    formAlignmentLayer.path = nil
                     session.commitSelectedAnnotationTransform(from: startBounds)
+                    resetAnnotationTransform()
+                    updateAnnotationSelectionOverlay()
                 }
-                resetAnnotationTransform()
-                updateAnnotationSelectionOverlay()
             case .cancelled, .failed:
                 formAlignmentLayer.path = nil
                 if let startBounds = transformStartBounds {

@@ -156,3 +156,9 @@ Validation: direct sharing, editable/flattened output preservation, and export c
 - Moving and resizing ink annotations now preserve local stroke coordinates, including undo and redo. Existing saved signature assets can be reused; already misplaced annotations should be deleted and placed again.
 - The regression test compares rendered pixels after saving and reopening a plain PDF and the bundled sample form, covering placement, movement, resizing, undo, and redo for both signatures and initials. The initial test reproduced the bug before the fix.
 - Validation: all 38 DocumentSessionTests passed on the iPhone 17e simulator; artifact `/tmp/folik-signature-verified.xcresult`. Physical-device retesting remains pending.
+
+## Placement and form editing interaction pass
+
+- The resize handle follows the visible bottom-right corner on rotated PDFs, keeping the opposite corner anchored. Dragging now uses the final finger position when ending the gesture.
+- Native gesture-handler regression coverage uses real PDFView coordinate conversion on page two, with nonzero crop origins, 0/90/180/270-degree rotations, and two zoom levels. It covers field placement, resizing, and undo. The test failed before the correction.
+- All 39 interaction and document-session tests passed on iPhone 17e simulator (`/tmp/folik-interaction-resize.xcresult`).
