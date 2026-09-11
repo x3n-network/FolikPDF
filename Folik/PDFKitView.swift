@@ -80,7 +80,7 @@ struct PDFKitView: UIViewRepresentable {
             super.init()
             pdfView.didLayout = { [weak self] in
                 self?.restoreAfterLayout()
-                self?.updateAuthoredFormFieldOverlay()
+                self?.updateAnnotationSelectionOverlay()
             }
             pdfView.backgroundColor = FolikTheme.readerCanvasUIColor
             pdfView.clipsToBounds = true
@@ -289,7 +289,7 @@ struct PDFKitView: UIViewRepresentable {
                 session.canMoveAnnotation($0) && $0.bounds.insetBy(dx: -8, dy: -8).contains(pagePoint)
             }
             if let annotation {
-                session.selectAnnotation(annotation, pageIndex: document.index(for: page))
+                session.selectAnnotation(annotation, pageIndex: document.index(for: page), navigate: false)
             } else {
                 session.clearSelectedAnnotation()
             }

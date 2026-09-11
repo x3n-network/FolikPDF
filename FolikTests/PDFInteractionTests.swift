@@ -45,6 +45,91 @@ final class PDFInteractionTests: XCTestCase {
         return (session, coordinator, page)
     }
 
+    func testAnnotationTapMoveAndCancelledDragAcrossPageRotations() throws {
+        for rotation in [0, 90, 180, 270] {
+            for kind in [AnnotationPlacementKind.textBox, .stamp, .signature] {
+                let (session, coordinator, page) = try fixture(rotation: rotation, scale: 1.1)
+                let view = coordinator.pdfView
+                let crop = page.bounds(for: .cropBox)
+                let center = CGPoint(x: crop.midX, y: crop.midY)
+                switch kind {
+                case .signature:
+                    session.beginSignaturePlacement(SignatureAsset(kind: .signature,
+                        strokes: [SignatureStroke(points: [SignaturePoint(x: 0.1, y: 0.8),
+                            SignaturePoint(x: 0.9, y: 0.2)])], typedText: nil))
+                case .stamp: session.beginStampPlacement(.approved)
+                default: session.beginAnnotationPlacement(kind, text: "Tapped text")
+                }
+                let tap = InteractionTap()
+                tap.point = view.convert(center, from: page)
+                coordinator.updateDrawingState()
+                coordinator.perform(NSSelectorFromString("handlePlacementTap:"), with: tap)
+                let annotation = try XCTUnwrap(session.annotations.first?.annotation)
+                XCTAssertEqual(annotation.bounds.midX, center.x, accuracy: 0.1)
+                XCTAssertEqual(annotation.bounds.midY, center.y, accuracy: 0.1)
+                session.beginAnnotationEditing()
+                session.selectAnnotation(annotation, pageIndex: 1, navigate: false)
+                coordinator.updateDrawingState()
+                let before = view.convert(annotation.bounds, from: page).standardized
+                let pan = InteractionPan()
+                pan.point = CGPoint(x: before.midX, y: before.midY)
+                pan.state = .began
+                coordinator.perform(NSSelectorFromString("handleAnnotationTransformPan:"), with: pan)
+                pan.point.x += 25
+                pan.point.y += 30
+                pan.state = .ended
+                coordinator.perform(NSSelectorFromString("handleAnnotationTransformPan:"), with: pan)
+                let moved = view.convert(annotation.bounds, from: page).standardized
+                XCTAssertEqual(moved.midX, before.midX + 25, accuracy: 0.1)
+                XCTAssertEqual(moved.midY, before.midY + 30, accuracy: 0.1)
+                let savedBounds = annotation.bounds
+                pan.point = CGPoint(x: moved.midX, y: moved.midY)
+                pan.state = .began
+                coordinator.perform(NSSelectorFromString("handleAnnotationTransformPan:"), with: pan)
+                pan.point.x += 20
+                pan.state = .changed
+                coordinator.perform(NSSelectorFromString("handleAnnotationTransformPan:"), with: pan)
+                pan.state = .cancelled
+                coordinator.perform(NSSelectorFromString("handleAnnotationTransformPan:"), with: pan)
+                XCTAssertEqual(annotation.bounds, savedBounds)
+                session.undoAnnotationAction()
+                XCTAssertEqual(view.convert(annotation.bounds, from: page).midX, before.midX, accuracy: 0.1)
+            }
+        }
+    }
+
+    func testOnPageSelectionKeepsViewportAndOutlineTracksLayout() throws {
+        let (session, coordinator, page) = try fixture(rotation: 90, scale: 1.2)
+        let view = coordinator.pdfView
+        let crop = page.bounds(for: .cropBox)
+        let center = CGPoint(x: crop.midX, y: crop.midY)
+        session.beginFormFieldPlacement(.text, label: "Select here", isRequired: false)
+        session.placeAnnotation(pageIndex: 1, point: center)
+        let field = try XCTUnwrap(session.formFields.first)
+        session.beginFormLayoutEditing()
+        coordinator.updateDrawingState()
+        let previousCommand = session.command?.id
+        let tap = InteractionTap()
+        tap.point = view.convert(center, from: page)
+        coordinator.perform(NSSelectorFromString("handleAnnotationSelectionTap:"), with: tap)
+        XCTAssertTrue(session.selectedAnnotation?.annotation === field.annotation)
+        XCTAssertEqual(session.command?.id, previousCommand, "Selecting a visible field must not navigate")
+        coordinator.updateDrawingState()
+        let outline = try XCTUnwrap(view.layer.sublayers?.compactMap { $0 as? CAShapeLayer }
+            .first { $0.lineDashPattern == [6, 4] })
+        view.frame.size = CGSize(width: 600, height: 800)
+        view.scaleFactor = 0.8
+        view.layoutDocumentView()
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
+        let expected = view.convert(field.annotation.bounds, from: page).standardized.insetBy(dx: -3, dy: -3)
+        let actual = try XCTUnwrap(outline.path).boundingBoxOfPath
+        XCTAssertEqual(actual.minX, expected.minX, accuracy: 0.1)
+        XCTAssertEqual(actual.minY, expected.minY, accuracy: 0.1)
+        XCTAssertEqual(actual.width, expected.width, accuracy: 0.1)
+        XCTAssertEqual(actual.height, expected.height, accuracy: 0.1)
+    }
+
     func testTapAndResizeFollowVisibleCornerOnRotatedCroppedPages() throws {
         for rotation in [0, 90, 180, 270] {
             for scale: CGFloat in [0.7, 1.5] {

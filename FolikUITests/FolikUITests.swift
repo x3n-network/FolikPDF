@@ -234,6 +234,45 @@ final class FolikUITests: XCTestCase {
         XCTAssertFalse(app.buttons["reader.form.add"].exists)
     }
 
+    func testFormBuilderAcceptsOnPagePlacementAndDragging() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-make-fillable"]
+        app.launch()
+        XCTAssertTrue(app.buttons["builder.add.text"].waitForExistence(timeout: 15))
+        app.buttons["builder.add.text"].tap()
+        let pdf = app.descendants(matching: .any)["reader.pdf"]
+        XCTAssertTrue(pdf.waitForExistence(timeout: 5))
+        pdf.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)).tap()
+        app.buttons["builder.arrange"].tap()
+        XCTAssertTrue(app.buttons["builder.properties"].waitForExistence(timeout: 5))
+        capture("on-page-field-before-drag", in: app)
+        func selectedPosition() throws -> (across: Double, up: Double) {
+            let value = try XCTUnwrap(pdf.value as? String)
+            let numbers = value.split(whereSeparator: { !$0.isNumber }).compactMap { Double($0) }
+            XCTAssertGreaterThanOrEqual(numbers.count, 2)
+            return (numbers[numbers.count - 2], numbers[numbers.count - 1])
+        }
+        let before = try selectedPosition()
+        let originalDescription = pdf.value as? String
+        let pageFrame = pdf.textViews.firstMatch.children(matching: .other).firstMatch.frame
+        XCTAssertGreaterThan(pageFrame.width, 200)
+        XCTAssertGreaterThan(pageFrame.height, 200)
+        let start = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
+            dx: pageFrame.minX + pageFrame.width * before.across / 100,
+            dy: pageFrame.maxY - pageFrame.height * before.up / 100))
+        start.press(forDuration: 0.15, thenDragTo: start.withOffset(CGVector(dx: 35, dy: 40)))
+        capture("on-page-field-after-drag", in: app)
+        let after = try selectedPosition()
+        XCTAssertGreaterThan(after.across, before.across)
+        XCTAssertLessThan(after.up, before.up)
+        app.buttons["builder.undo"].tap()
+        XCTAssertEqual(pdf.value as? String, originalDescription)
+        pdf.pinch(withScale: 1.5, velocity: 1)
+        capture("on-page-field-zoomed", in: app)
+        app.buttons["builder.properties"].tap()
+        XCTAssertTrue(app.textFields["Field label"].waitForExistence(timeout: 3))
+    }
+
     func testFormBuilderSupportsLargeTextAndRotation() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-fixture", "--ui-test-make-fillable", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
