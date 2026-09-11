@@ -180,3 +180,9 @@ Validation: direct sharing, editable/flattened output preservation, and export c
 - Only visible, printable, editable fields carrying Folik’s authoring marker and missing a border color qualify. External fields, custom border styling, restricted documents, and signed documents are preserved. The signature check reads the original PDF bytes before any rewrite.
 - Repairs use the existing atomic save and retry path. A failed save leaves the original file intact and keeps the repaired document available for retry. Subsequent openings do not rewrite already repaired files.
 - Validation: full iPhone 17e unit suite passed, 161 tests with one optional private-fixture test skipped (`/tmp/folik-repair-verified.xcresult`). All nine repair and interaction tests passed on iPad mini (`/tmp/folik-repair-ipad.xcresult`). Coverage includes rendered border sides after reopen/flatten, preserved existing answers and metadata, older authoring markers, custom styling/read-only exclusions, a structurally signed fixture, deferred preparation, and failed-save retry. Physical-device retesting remains pending.
+
+## Flattened export appearance
+
+- Flattened copies draw each visible annotation once. This avoids darker translucent annotations and prevents the extra drawing pass from rendering hidden annotations.
+- Each output page uses its visible crop, including crop offsets and page rotation, with the correct per-page dimensions. The source and editable copy stay byte-for-byte unchanged.
+- Rendered comparisons reproduce the old failures and pass after the fix across full pages, cropped pages, and all four rotations. The focused export/interaction/document-session suite passed on iPhone 17e (`/tmp/folik-export-after.xcresult`).

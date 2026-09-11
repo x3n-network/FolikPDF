@@ -73,26 +73,24 @@ enum DocumentExporter {
         guard let consumer = CGDataConsumer(url: destinationURL as CFURL) else {
             throw CocoaError(.fileWriteUnknown)
         }
-        var firstPageBounds = document.page(at: 0)?.bounds(for: .mediaBox) ?? CGRect(x: 0, y: 0, width: 612, height: 792)
-        guard let context = CGContext(consumer: consumer, mediaBox: &firstPageBounds, nil) else {
+        guard let context = CGContext(consumer: consumer, mediaBox: nil, nil) else {
             throw CocoaError(.fileWriteUnknown)
         }
+        defer { context.closePDF() }
 
         for pageIndex in 0..<document.pageCount {
             try Task.checkCancellation()
             guard let page = document.page(at: pageIndex) else { continue }
-            let pageBounds = page.bounds(for: .mediaBox)
-            context.beginPDFPage([kCGPDFContextMediaBox as String: pageBounds] as CFDictionary)
-            context.saveGState()
-            context.translateBy(x: -pageBounds.minX, y: -pageBounds.minY)
-            page.draw(with: .mediaBox, to: context)
-            for annotation in page.annotations {
-                annotation.draw(with: .mediaBox, in: context)
-            }
-            context.restoreGState()
+            let crop = page.bounds(for: .cropBox)
+            let rotated = page.rotation % 180 != 0
+            var outputBounds = CGRect(origin: .zero, size: rotated
+                ? CGSize(width: crop.height, height: crop.width) : crop.size)
+            let boundsData = NSData(bytes: &outputBounds, length: MemoryLayout<CGRect>.size)
+            context.beginPDFPage([kCGPDFContextMediaBox as String: boundsData] as CFDictionary)
+            // PDFPage applies crop offsets and rotation, and draws visible annotations once.
+            page.draw(with: .cropBox, to: context)
             context.endPDFPage()
         }
-        context.closePDF()
     }
 
 }
