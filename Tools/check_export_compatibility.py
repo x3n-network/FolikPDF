@@ -19,7 +19,7 @@ images = {}
 for test in json.loads((root/'manifest.json').read_text()):
     for entry in test['attachments']:
         file = root/entry['exportedFileName']; name = entry['suggestedHumanReadableName'].split('_0_')[0]
-        if file.suffix != '.pdf' or not name.startswith(('compatibility-', 'repaired-', 'Weekly Work')): continue
+        if file.suffix != '.pdf' or not name.startswith(('compatibility-', 'repaired-', 'Weekly Work', 'roundtrip-')): continue
         checked += 1
         reader = PdfReader(file)
         form = reader.trailer['/Root'].get('/AcroForm', {})
@@ -36,6 +36,10 @@ for test in json.loads((root/'manifest.json').read_text()):
         widgets = 0
         separate_objects = 0
         canonical = reader.get_fields() or {}
+        if name == 'roundtrip-editable':
+            assert canonical['Name']['/V'] == 'Edited again in Folik'
+            assert canonical['Added text']['/V'] == 'Updated added field'
+            assert canonical['I have tried a PDF checkbox']['/V'] == '/Off'
         for page in reader.pages:
             for ref in page.get('/Annots', []):
                 obj = ref.get_object()

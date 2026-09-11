@@ -136,6 +136,44 @@ final class FormTemplateTests: XCTestCase {
         }
     }
 
+    func testPDFiumEditsSurviveOpeningEditingAndExporting() async throws {
+        let fixture = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "PDFiumRoundTrip", withExtension: "pdf", subdirectory: "Fixtures")
+            ?? Bundle(for: Self.self).url(forResource: "PDFiumRoundTrip", withExtension: "pdf"))
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("Round trip.pdf")
+        let original = try Data(contentsOf: fixture)
+        try original.write(to: url)
+        let session = DocumentSession(item: LibraryDocument(url: url, pageCount: 1, fileSize: 0, modifiedAt: Date()))
+        XCTAssertEqual(session.formFields.count, 9)
+        let name = try XCTUnwrap(session.formFields.first { $0.annotation.fieldName == "Name" })
+        let added = try XCTUnwrap(session.formFields.first { $0.annotation.fieldName == "Added text" })
+        let checkbox = try XCTUnwrap(session.formFields.first { $0.annotation.fieldName == "I have tried a PDF checkbox" })
+        XCTAssertEqual(name.annotation.widgetStringValue, "Edited in PDFium")
+        XCTAssertEqual(added.annotation.widgetStringValue, "Updated added field")
+        XCTAssertEqual(checkbox.annotation.buttonWidgetState, .offState)
+        XCTAssertEqual(try Data(contentsOf: url), original)
+        let page = try XCTUnwrap(session.document?.page(at: 0))
+        let preview = XCTAttachment(image: page.thumbnail(of: CGSize(width: 918, height: 1188), for: .cropBox))
+        preview.name = "pdfium-reopened-in-folik"; preview.lifetime = .keepAlways; add(preview)
+        name.annotation.widgetStringValue = "Edited again in Folik"
+        session.noteFormEditing()
+        let saved = await session.saveForSharing()
+        XCTAssertTrue(saved)
+        let reopened = try XCTUnwrap(PDFDocument(url: url))
+        let values = try Self.canonicalValues(reopened)
+        XCTAssertEqual(values.count, 9)
+        XCTAssertEqual(values["Name"], "Edited again in Folik")
+        XCTAssertEqual(values["Added text"], "Updated added field")
+        XCTAssertEqual(values["I have tried a PDF checkbox"], "Off")
+        for mode in [DocumentExportMode.editable, .flattened] {
+            let export = try DocumentExporter.export(sourceURL: url, mode: mode, root: root)
+            let attachment = XCTAttachment(data: try Data(contentsOf: export), uniformTypeIdentifier: "com.adobe.pdf")
+            attachment.name = "roundtrip-\(mode.rawValue)"; attachment.lifetime = .keepAlways; add(attachment)
+        }
+    }
+
     static func canonicalValues(_ document: PDFDocument) throws -> [String: String] {
         let catalog = try XCTUnwrap(document.documentRef?.catalog)
         var acroForm: CGPDFDictionaryRef?
