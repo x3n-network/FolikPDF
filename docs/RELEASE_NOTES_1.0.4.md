@@ -149,3 +149,10 @@ Validation: direct sharing, editable/flattened output preservation, and export c
 ## Final five-feature regression
 
 `/tmp/folik-five-features-final.xcresult`: 156 passed (151 unit tests and five iPad UI tests), zero failures, one optional private-document fixture test skipped. The iPad checks cover personal-template saving, layout/fill order, suggested-field preview/editing, export preview sharing, and first-use/share accessibility semantics. Inspected iPhone and iPad screenshots. Release simulator build passed in `/tmp/folik-five-features-release.log`; bundle version remains 1.0.4. Physical VoiceOver, keyboard, interruption, rotated-page, and cross-viewer checks remain in the device QA checklist and are not marked complete by simulator results.
+
+## Signature placement correction
+
+- Handwritten signatures and initials now render inside the annotation centered on the tapped page point. Previously, stroke coordinates included the page offset twice, which could displace or hide the signature.
+- Moving and resizing ink annotations now preserve local stroke coordinates, including undo and redo. Existing saved signature assets can be reused; already misplaced annotations should be deleted and placed again.
+- The regression test compares rendered pixels after saving and reopening a plain PDF and the bundled sample form, covering placement, movement, resizing, undo, and redo for both signatures and initials. The initial test reproduced the bug before the fix.
+- Validation: all 38 DocumentSessionTests passed on the iPhone 17e simulator; artifact `/tmp/folik-signature-verified.xcresult`. Physical-device retesting remains pending.

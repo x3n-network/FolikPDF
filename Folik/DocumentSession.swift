@@ -1570,9 +1570,10 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
     }
 
     private func signaturePoint(_ point: SignaturePoint, in bounds: CGRect) -> CGPoint {
+        // PDFKit ink paths are local to the annotation; its bounds supply the page offset.
         CGPoint(
-            x: bounds.minX + CGFloat(point.x) * bounds.width,
-            y: bounds.maxY - CGFloat(point.y) * bounds.height
+            x: CGFloat(point.x) * bounds.width,
+            y: (1 - CGFloat(point.y)) * bounds.height
         )
     }
 
@@ -1637,12 +1638,11 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         guard originalBounds.width > 0, originalBounds.height > 0 else { return paths }
         return paths.compactMap { source in
             guard let path = source.copy() as? UIBezierPath else { return nil }
-            path.apply(CGAffineTransform(translationX: -originalBounds.minX, y: -originalBounds.minY))
+            // Moving changes only annotation.bounds; local ink points need only resizing.
             path.apply(CGAffineTransform(
                 scaleX: updatedBounds.width / originalBounds.width,
                 y: updatedBounds.height / originalBounds.height
             ))
-            path.apply(CGAffineTransform(translationX: updatedBounds.minX, y: updatedBounds.minY))
             return path
         }
     }

@@ -921,6 +921,77 @@ final class DocumentSessionTests: XCTestCase {
 #endif
     }
 
+    func testDrawnSignaturesRenderInsideTappedBoundsAfterReopening() throws {
+        for kind in [SignatureKind.signature, .initials] {
+            for useSample in [false, true] {
+                let url = workspace.appendingPathComponent("Tapped-\(kind).pdf")
+                let renderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 612, height: 792))
+                if useSample {
+                    try SampleForm.data().write(to: url)
+                } else {
+                    try renderer.writePDF(to: url) { $0.beginPage() }
+                }
+                let originalPage = try XCTUnwrap(PDFDocument(url: url)?.page(at: 0))
+                let session = DocumentSession(item: PDFTestFixture.item(for: url))
+                let asset = SignatureAsset(kind: kind, strokes: [SignatureStroke(points: [
+                    SignaturePoint(x: 0.1, y: 0.8), SignaturePoint(x: 0.5, y: 0.2),
+                    SignaturePoint(x: 0.9, y: 0.8)
+                ])], typedText: nil)
+                // Deliberately off center: a duplicated page offset must not pass unnoticed.
+                let tap = CGPoint(x: 360, y: 240)
+                session.beginSignaturePlacement(asset)
+                session.placeAnnotation(pageIndex: 0, point: tap)
+                let placed = try XCTUnwrap(session.annotations.first { $0.annotation.type == "Ink" })
+                session.beginAnnotationEditing()
+                session.selectAnnotation(placed.annotation, pageIndex: 0)
+                for stage in 0..<5 {
+                    switch stage {
+                    case 1: session.moveSelectedAnnotation(horizontal: -80, vertical: 100)
+                    case 2: session.resizeSelectedAnnotation(by: 12)
+                    case 3: session.undoAnnotationAction()
+                    case 4: session.redoAnnotationAction()
+                    default: break
+                    }
+                    let expectedCenter = stage == 0 ? tap : CGPoint(x: tap.x - 80, y: tap.y + 100)
+                    let page = try XCTUnwrap(PDFDocument(url: url)?.page(at: 0))
+                    let annotation = try XCTUnwrap(page.annotations.first { $0.type == "Ink" })
+                    XCTAssertEqual(annotation.bounds.midX, expectedCenter.x, accuracy: 0.01)
+                    XCTAssertEqual(annotation.bounds.midY, expectedCenter.y, accuracy: 0.01)
+                    let pathBounds = try XCTUnwrap(annotation.paths?.first?.bounds)
+                    XCTAssertTrue(CGRect(origin: .zero, size: annotation.bounds.size).contains(pathBounds))
+
+                    func bitmap() throws -> CGContext {
+                        try XCTUnwrap(CGContext(data: nil, width: 612, height: 792, bitsPerComponent: 8,
+                            bytesPerRow: 612 * 4, space: CGColorSpaceCreateDeviceRGB(),
+                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+                    }
+                    let rendered = try bitmap()
+                    rendered.setFillColor(UIColor.white.cgColor)
+                    rendered.fill(CGRect(x: 0, y: 0, width: 612, height: 792))
+                    page.draw(with: .mediaBox, to: rendered)
+                    let baseline = try bitmap()
+                    baseline.setFillColor(UIColor.white.cgColor)
+                    baseline.fill(CGRect(x: 0, y: 0, width: 612, height: 792))
+                    originalPage.draw(with: .mediaBox, to: baseline)
+                    let originalPixels = try XCTUnwrap(baseline.data).assumingMemoryBound(to: UInt8.self)
+                    let expected = try bitmap()
+                    expected.setFillColor(UIColor.white.cgColor)
+                    expected.fill(annotation.bounds.insetBy(dx: -3, dy: -3))
+                    let pixels = try XCTUnwrap(rendered.data).assumingMemoryBound(to: UInt8.self)
+                    let mask = try XCTUnwrap(expected.data).assumingMemoryBound(to: UInt8.self)
+                    var inkPixels = 0
+                    var misplacedPixels = 0
+                    for offset in stride(from: 0, to: 612 * 792 * 4, by: 4) where pixels[offset] < 128 && originalPixels[offset] >= 128 {
+                        inkPixels += 1
+                        if mask[offset + 3] == 0 { misplacedPixels += 1 }
+                    }
+                    XCTAssertGreaterThan(inkPixels, 20, "The saved signature must be visible")
+                    XCTAssertEqual(misplacedPixels, 0, "All visible strokes must stay inside the tapped signature bounds")
+                }
+            }
+        }
+    }
+
     func testTypedInitialsAreSavedAsEditableFreeText() throws {
         let store = SignatureStore(directoryURL: workspace.appendingPathComponent("Initials", isDirectory: true))
         let asset = SignatureAsset(kind: .initials, strokes: [], typedText: "JS")
