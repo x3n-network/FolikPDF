@@ -60,32 +60,179 @@ final class PDFInteractionTests: XCTestCase {
             let flattenedURL = try DocumentExporter.export(sourceURL: url, mode: .flattened, root: directory)
             let flattenedPage = try XCTUnwrap(PDFDocument(url: flattenedURL)?.page(at: 0))
             for renderedPage in [page, flattenedPage] {
-                let bounds = field.bounds
-                let width = Int(bounds.width.rounded(.up)) + 8
-                let height = Int(bounds.height.rounded(.up)) + 8
-                let context = try XCTUnwrap(CGContext(data: nil, width: width, height: height,
-                    bitsPerComponent: 8, bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
-                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
-                context.setFillColor(UIColor.white.cgColor)
-                context.fill(CGRect(x: 0, y: 0, width: width, height: height))
-                context.translateBy(x: 4 - bounds.minX, y: 4 - bounds.minY)
-                renderedPage.draw(with: .mediaBox, to: context)
-                let pixels = try XCTUnwrap(context.data).assumingMemoryBound(to: UInt8.self)
-                // Each side must draw a visible blue border, without a selection overlay or focus.
-                var sides = [0, 0, 0, 0]
-                for y in 2..<(height - 2) {
-                    for x in 2..<(width - 2) {
-                        let offset = (y * width + x) * 4
-                        guard Int(pixels[offset + 2]) > Int(pixels[offset]) + 30 else { continue }
-                        if x < 7 { sides[0] += 1 }
-                        if x >= width - 7 { sides[1] += 1 }
-                        if y < 7 { sides[2] += 1 }
-                        if y >= height - 7 { sides[3] += 1 }
-                    }
-                }
-                for count in sides { XCTAssertGreaterThan(count, 10, "Missing border for \(kind.rawValue)") }
+                try assertVisibleBorder(on: renderedPage, bounds: field.bounds, kind: kind)
             }
         }
+    }
+
+    private func legacyForm(kind: FormFieldPlacementKind, marked: Bool = true, readOnly: Bool = false) throws -> URL {
+        let url = directory.appendingPathComponent(UUID().uuidString + ".pdf")
+        let pdf = try XCTUnwrap(PDFDocument(data: SampleForm.data()))
+        let field = PDFAnnotation(bounds: CGRect(x: 190, y: 180, width: 230, height: 60), forType: .widget, withProperties: nil)
+        switch kind {
+        case .signature: field.widgetFieldType = .signature
+        case .checkbox:
+            field.widgetFieldType = .button
+            field.widgetControlType = .checkBoxControl
+            field.buttonWidgetStateString = "Yes"
+            field.buttonWidgetState = .onState
+        default:
+            field.widgetFieldType = .text
+            field.widgetStringValue = "Saved answer"
+            field.widgetDefaultStringValue = "Default answer"
+            field.font = .systemFont(ofSize: 16)
+            field.isMultiline = kind == .multilineText
+        }
+        field.fieldName = "Legacy field"
+        field.setValue("Original label", forAnnotationKey: .widgetTextLabelUI)
+        field.setValue(NSNumber(value: 2 | (readOnly ? 1 : 0)), forAnnotationKey: .widgetFieldFlags)
+        if marked {
+            field.contents = "Folik form field"
+            field.setValue(kind.rawValue, forAnnotationKey: PDFAnnotationKey(rawValue: "FolikFieldKind"))
+            field.setValue(17, forAnnotationKey: PDFAnnotationKey(rawValue: "FolikFieldOrder"))
+        }
+        field.backgroundColor = .white
+        field.color = FolikTheme.annotationBlue
+        let border = PDFBorder(); border.lineWidth = 1.5; field.border = border
+        pdf.page(at: 0)?.annotations.first { $0.fieldName == "Name" }?.widgetStringValue = "Existing customer"
+        pdf.page(at: 0)?.addAnnotation(field)
+        XCTAssertTrue(pdf.write(to: url))
+        return url
+    }
+
+    func testOlderFolikFieldsAreRepairedOnceWithoutLosingData() throws {
+        for kind in FormFieldPlacementKind.allCases {
+            let url = try legacyForm(kind: kind)
+            let original = try XCTUnwrap(PDFDocument(url: url)?.page(at: 0)?.annotations.last)
+            let item = LibraryDocument(url: url, pageCount: 1, fileSize: 0, modifiedAt: Date())
+            let session = DocumentSession(item: item)
+            XCTAssertEqual(session.successfulSaveCount, 1)
+            let page = try XCTUnwrap(PDFDocument(url: url)?.page(at: 0))
+            let repaired = try XCTUnwrap(page.annotations.last)
+            XCTAssertEqual(page.annotations.count, 5)
+            XCTAssertEqual(page.annotations.first { $0.fieldName == "Name" }?.widgetStringValue, "Existing customer")
+            XCTAssertEqual(repaired.fieldName, original.fieldName)
+            XCTAssertEqual(repaired.bounds, original.bounds)
+            XCTAssertEqual(repaired.widgetStringValue, original.widgetStringValue)
+            XCTAssertEqual(repaired.widgetDefaultStringValue, original.widgetDefaultStringValue)
+            XCTAssertEqual(repaired.buttonWidgetState, original.buttonWidgetState)
+            XCTAssertEqual(repaired.value(forAnnotationKey: .widgetFieldFlags) as? NSNumber,
+                           original.value(forAnnotationKey: .widgetFieldFlags) as? NSNumber)
+            XCTAssertEqual(repaired.value(forAnnotationKey: .widgetTextLabelUI) as? String, "Original label")
+            XCTAssertEqual(repaired.value(forAnnotationKey: PDFAnnotationKey(rawValue: "FolikFieldOrder")) as? NSNumber, 17)
+            try assertVisibleBorder(on: page, bounds: repaired.bounds, kind: kind)
+            let flattened = try DocumentExporter.export(sourceURL: url, mode: .flattened, root: directory)
+            try assertVisibleBorder(on: XCTUnwrap(PDFDocument(url: flattened)?.page(at: 0)), bounds: repaired.bounds, kind: kind)
+            let data = try Data(contentsOf: url)
+            let reopened = DocumentSession(item: item)
+            XCTAssertEqual(reopened.successfulSaveCount, 0)
+            XCTAssertEqual(try Data(contentsOf: url), data)
+        }
+    }
+
+    func testBorderRepairPreservesExternalAndReadOnlyFields() throws {
+        for (marked, readOnly) in [(false, false), (true, true)] {
+            let url = try legacyForm(kind: .text, marked: marked, readOnly: readOnly)
+            let original = try Data(contentsOf: url)
+            let session = DocumentSession(item: LibraryDocument(url: url, pageCount: 1, fileSize: 0, modifiedAt: Date()))
+            XCTAssertEqual(session.successfulSaveCount, 0)
+            XCTAssertFalse(session.isModified)
+            XCTAssertEqual(try Data(contentsOf: url), original)
+        }
+    }
+
+    func testBorderRepairLeavesStyledAndSignedDocumentsUntouched() throws {
+        let styled = try legacyForm(kind: .text)
+        let pdf = try XCTUnwrap(PDFDocument(url: styled))
+        let appearance = PDFAppearanceCharacteristics()
+        appearance.borderColor = .red
+        pdf.page(at: 0)?.annotations.last?.setValue(appearance, forAnnotationKey: .widgetAppearanceDictionary)
+        XCTAssertTrue(pdf.write(to: styled))
+        let signed = directory.appendingPathComponent("Signed.pdf")
+        // Structurally signed fixture; it does not claim cryptographic validity.
+        let objects = [
+            "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R 5 0 R] >> >>",
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R 5 0 R] >>",
+            "<< /Type /Annot /Subtype /Widget /FT /Tx /T (Legacy) /Rect [190 180 420 240] /Contents (Folik form field) /V (Saved answer) >>",
+            "<< /Type /Annot /Subtype /Widget /FT /Sig /T (Signed) /Rect [40 40 140 70] /V 6 0 R >>",
+            "<< /Type /Sig /ByteRange [0 10 20 30] /Contents <0011> >>"
+        ]
+        var data = Data("%PDF-1.7\n".utf8)
+        var offsets = [0]
+        for (index, object) in objects.enumerated() {
+            offsets.append(data.count)
+            data.append(Data("\(index + 1) 0 obj\n\(object)\nendobj\n".utf8))
+        }
+        let xref = data.count
+        data.append(Data("xref\n0 \(offsets.count)\n0000000000 65535 f \n".utf8))
+        for offset in offsets.dropFirst() { data.append(Data(String(format: "%010d 00000 n \n", offset).utf8)) }
+        data.append(Data("trailer\n<< /Size \(offsets.count) /Root 1 0 R >>\nstartxref\n\(xref)\n%%EOF\n".utf8))
+        try data.write(to: signed)
+        XCTAssertEqual(try PDFPrivacy.inspect(data).signedSignatureCount, 1)
+        for url in [styled, signed] {
+            let original = try Data(contentsOf: url)
+            let session = DocumentSession(item: LibraryDocument(url: url, pageCount: 1, fileSize: 0, modifiedAt: Date()))
+            XCTAssertEqual(session.successfulSaveCount, 0, url.lastPathComponent)
+            XCTAssertEqual(try Data(contentsOf: url), original)
+        }
+    }
+
+    func testBorderRepairRecognizesFieldsFromBeforeKindMetadata() throws {
+        let url = try legacyForm(kind: .text)
+        let pdf = try XCTUnwrap(PDFDocument(url: url))
+        pdf.page(at: 0)?.annotations.last?.removeValue(forAnnotationKey: PDFAnnotationKey(rawValue: "FolikFieldKind"))
+        XCTAssertTrue(pdf.write(to: url))
+        let session = DocumentSession(item: LibraryDocument(url: url, pageCount: 1, fileSize: 0, modifiedAt: Date()))
+        XCTAssertEqual(session.successfulSaveCount, 1)
+        let page = try XCTUnwrap(PDFDocument(url: url)?.page(at: 0))
+        try assertVisibleBorder(on: page, bounds: XCTUnwrap(page.annotations.last).bounds, kind: .text)
+    }
+
+    func testBorderRepairFailedSavePreservesOriginalAndCanRetry() async throws {
+        let url = try legacyForm(kind: .text)
+        let original = try Data(contentsOf: url)
+        var fail = true
+        let session = DocumentSession(item: LibraryDocument(url: url, pageCount: 1, fileSize: 0, modifiedAt: Date()),
+            deferredPreparation: true, saveDocument: { document, destination in
+                if fail { throw CocoaError(.fileWriteOutOfSpace) }
+                try PDFDocumentPersistence.save(document, to: destination)
+            })
+        await session.prepareForReading()
+        XCTAssertTrue(session.isModified)
+        XCTAssertTrue(session.saveFailed)
+        XCTAssertEqual(try Data(contentsOf: url), original)
+        fail = false
+        XCTAssertTrue(session.persistChanges())
+        XCTAssertFalse(session.saveFailed)
+        XCTAssertFalse(session.isModified)
+        XCTAssertEqual(session.formFields.last?.annotation.widgetStringValue, "Saved answer")
+    }
+
+    private func assertVisibleBorder(on renderedPage: PDFPage, bounds: CGRect, kind: FormFieldPlacementKind) throws {
+        let width = Int(bounds.width.rounded(.up)) + 8
+        let height = Int(bounds.height.rounded(.up)) + 8
+        let context = try XCTUnwrap(CGContext(data: nil, width: width, height: height,
+            bitsPerComponent: 8, bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.setFillColor(UIColor.white.cgColor)
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        context.translateBy(x: 4 - bounds.minX, y: 4 - bounds.minY)
+        renderedPage.draw(with: .mediaBox, to: context)
+        let pixels = try XCTUnwrap(context.data).assumingMemoryBound(to: UInt8.self)
+        // Each side must draw a visible blue border, without a selection overlay or focus.
+        var sides = [0, 0, 0, 0]
+        for y in 2..<(height - 2) {
+            for x in 2..<(width - 2) {
+                let offset = (y * width + x) * 4
+                guard Int(pixels[offset + 2]) > Int(pixels[offset]) + 30 else { continue }
+                if x < 7 { sides[0] += 1 }
+                if x >= width - 7 { sides[1] += 1 }
+                if y < 7 { sides[2] += 1 }
+                if y >= height - 7 { sides[3] += 1 }
+            }
+        }
+        for count in sides { XCTAssertGreaterThan(count, 10, "Missing border for \(kind.rawValue)") }
     }
 
     func testAnnotationTapMoveAndCancelledDragAcrossPageRotations() throws {

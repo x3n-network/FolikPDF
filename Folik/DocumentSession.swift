@@ -1861,7 +1861,9 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
 
     private func configureForms(in document: PDFDocument, preparedFields: [FormField]? = nil) {
         canFillForms = document.allowsFormFieldEntry
-        formFields = Self.orderedFormFields(preparedFields ?? Self.formFields(in: document))
+        let loadedFields = preparedFields ?? Self.formFields(in: document)
+        let repairedBorders = FormFieldBorderRepair.repair(in: document, fields: loadedFields.map(\.annotation), sourceURL: item.url)
+        formFields = Self.orderedFormFields(repairedBorders ? Self.formFields(in: document) : loadedFields)
         if Self.containsXFA(in: document) {
             formCompatibilityNotice = formFields.isEmpty
                 ? "This PDF uses an XFA form, which iOS cannot fill."
@@ -1870,6 +1872,10 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
             formCompatibilityNotice = nil
         }
         savedFormValues = currentFormValues()
+        if repairedBorders {
+            isModified = true
+            scheduleAnnotationSave()
+        }
     }
 
     private func currentFormValues() -> [String: FormFieldSnapshot] {
@@ -2088,7 +2094,7 @@ private extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
 }
 
-private final class VisibleSignatureField: PDFAnnotation {
+final class VisibleSignatureField: PDFAnnotation {
     override func draw(with box: PDFDisplayBox, in context: CGContext) {
         super.draw(with: box, in: context)
         context.saveGState()
