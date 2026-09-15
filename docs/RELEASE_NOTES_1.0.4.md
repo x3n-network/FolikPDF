@@ -136,12 +136,13 @@ Results: `/tmp/folik-forms-regression.xcresult` (the sample structure failure be
 
 ## Offline form templates
 
-- Added bundled Work Order, Inspection Checklist, and Meeting Notes forms. Open Form Templates from Add & Tools or the empty library, preview a form, and choose Start Form to open a fresh fillable copy.
+- Added bundled Work Order, Inspection Checklist, Meeting Notes, Expense Report, Weekly Timesheet, Project Brief, and Inventory Count forms. Open Form Templates from Add & Tools or the empty library, preview a form, and choose Start Form to open a fresh fillable copy.
 - Blank masters remain in the app bundle; each use imports an independent PDF through the existing collision-safe library importer. No network or account is required. Build mode can customize the new copy.
-- Added a reproducible ReportLab generator under `Tools/create_form_templates.py`; the three assets total about 36 KB and add no app runtime dependency.
-- Validation: iPhone preview/start UI and initial template persistence passed in `/tmp/folik-templates-tests.xcresult`. iPad preview/start passed in `/tmp/folik-templates-ipad.xcresult`; corrected a test selector that tapped a background control, then gallery navigation and expanded single-line, multiline, and checkbox persistence passed in `/tmp/folik-templates-ipad-final.xcresult`. Tests verify canonical AcroForm values after saving, fresh blank copies, unique destinations, and unchanged masters. Inspected blank and filled page renders for all three templates.
-- Release simulator build passed (`/tmp/folik-templates-release.log`), and all three bundled assets match the source PDFs. Physical-device airplane-mode and VoiceOver checks remain in the device QA checklist.
+- Added a reproducible ReportLab generator under `Tools/create_form_templates.py`; the seven assets total about 95 KiB and add no app runtime dependency.
+- Validation: iPhone preview/start UI and initial template persistence passed in `/tmp/folik-templates-tests.xcresult`. iPad preview/start passed in `/tmp/folik-templates-ipad.xcresult`; corrected a test selector that tapped a background control, then gallery navigation and expanded single-line, multiline, and checkbox persistence passed in `/tmp/folik-templates-ipad-final.xcresult`. Tests verify canonical AcroForm values after saving, fresh blank copies, unique destinations, and unchanged masters. Inspected blank and filled page renders for the original templates.
+- Release simulator build passed (`/tmp/folik-templates-release.log`), and the original bundled assets match the source PDFs. Physical-device airplane-mode and VoiceOver checks remain in the device QA checklist.
 - Final iPhone regression checks passed for the populated-library template gallery and the existing sample signing/sharing flow (`/tmp/folik-templates-regression.xcresult`).
+- Expansion validation covers all seven bundled templates. An independent pypdf audit found matching canonical fields and page widgets, nonempty normal appearances, and blank starting values in every file. The four new pages were rendered with Poppler and visually inspected; the populated-library gallery test passed on iOS 27 iPhone 17e and iPad mini simulators, and all five template unit tests passed.
 
 ## My Templates
 

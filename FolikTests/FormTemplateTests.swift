@@ -14,7 +14,12 @@ final class FormTemplateTests: XCTestCase {
             let original = try template.data()
             let first = try await library.importConvertedPDF(.preparedPDF(original), named: template.title)
             let session = DocumentSession(item: first)
-            let expectedCount = template == .meetingNotes ? 7 : 10
+            let expectedCount: Int = switch template {
+            case .workOrder, .inspectionChecklist, .expenseReport, .projectBrief: 10
+            case .meetingNotes: 7
+            case .timesheet: 13
+            case .inventoryCount: 9
+            }
             XCTAssertEqual(session.pageCount, 1)
             XCTAssertEqual(session.formFields.count, expectedCount)
             XCTAssertEqual(session.completedFormFieldCount, 0)

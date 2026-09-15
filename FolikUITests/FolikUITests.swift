@@ -1790,6 +1790,16 @@ final class FolikUITests: XCTestCase {
             app.navigationBars[title].buttons.element(boundBy: 0).tap()
             XCTAssertTrue(app.navigationBars["Form Templates"].waitForExistence(timeout: 5))
         }
+        let inventory = app.buttons["template.inventoryCount"]
+        for _ in 0..<4 {
+            if inventory.exists && inventory.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(inventory.waitForExistence(timeout: 5))
+        inventory.tap()
+        XCTAssertTrue(app.buttons["template.start"].waitForExistence(timeout: 5))
+        capture("template-inventory-count-preview", in: app)
+        app.navigationBars["Inventory Count"].buttons.element(boundBy: 0).tap()
         app.buttons["Done"].tap()
         XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
     }

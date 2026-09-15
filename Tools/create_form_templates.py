@@ -53,3 +53,35 @@ create('MeetingNotesTemplate', 'Meeting Notes', 'Capture the discussion, decisio
     ('Attendees',40,291,532,44), ('Discussion notes',40,371,532,96),
     ('Decisions',40,503,532,60), ('Action items / owners / due dates',40,599,532,90),
 ])
+create('ExpenseReportTemplate', 'Expense Report', 'Summarize business expenses, receipts, and reimbursement details.', [
+    ('Employee or submitter',40,155,250,32), ('Department or team',314,155,258,32),
+    ('Reporting period',40,223,250,32), ('Submitted date',314,223,258,32),
+    ('Business purpose',40,291,532,60),
+    ('Expenses - date / description / category / amount',40,387,532,100),
+    ('Total requested',40,523,250,32), ('Project or client',314,523,258,32),
+    ('Notes',40,591,532,70),
+], [('Receipts attached',697)])
+create('TimesheetTemplate', 'Weekly Timesheet', 'Record daily hours, the week total, and any notes.', [
+    ('Employee',40,155,250,32), ('Week ending',314,155,258,32),
+    ('Project or client',40,223,532,32),
+    ('Monday hours',40,291,250,32), ('Tuesday hours',314,291,258,32),
+    ('Wednesday hours',40,359,250,32), ('Thursday hours',314,359,258,32),
+    ('Friday hours',40,427,250,32), ('Saturday hours',314,427,258,32),
+    ('Sunday hours',40,495,250,32), ('Total hours',314,495,258,32),
+    ('Notes',40,563,532,64),
+], [('Hours verified',665)])
+create('ProjectBriefTemplate', 'Project Brief', 'Define the goal, scope, deliverables, and ownership.', [
+    ('Project name',40,155,532,32),
+    ('Owner',40,223,250,32), ('Target date',314,223,258,32),
+    ('Goal and success measure',40,291,532,60),
+    ('Audience or stakeholders',40,387,532,44),
+    ('In scope',40,467,250,70), ('Out of scope',314,467,258,70),
+    ('Deliverables',40,573,250,70), ('Risks or dependencies',314,573,258,70),
+], [('Brief reviewed',681)])
+create('InventoryCountTemplate', 'Inventory Count', 'Record stock levels, discrepancies, and follow-up actions.', [
+    ('Location',40,155,250,32), ('Count date',314,155,258,32),
+    ('Counted by',40,223,250,32), ('Reference or area',314,223,258,32),
+    ('Items - name / identifier / expected / counted',40,291,532,120),
+    ('Discrepancies',40,447,532,78),
+    ('Restock or follow-up actions',40,561,532,70),
+], [('Recount completed',667), ('Inventory finalized',709)])

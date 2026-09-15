@@ -42,7 +42,7 @@ The direct builder, Build/Fill modes, repeated placement, properties, duplicatio
 
 ### Offline template library — physical-device follow-up
 
-- In airplane mode, open Form Templates from both an empty library and Add & Tools. Preview all three templates and start each one.
+- In airplane mode, open Form Templates from both an empty library and Add & Tools. Preview all seven templates and start each one.
 - Fill single-line and multiline text, check a box, close and reopen, and export. Confirm values remain editable in the exported PDF.
 - Start the same template again; confirm it is blank and the previously filled copy is unchanged.
 - With VoiceOver and larger text, confirm template descriptions, Back, and Start Form remain accessible. Check iPad split view and landscape.
