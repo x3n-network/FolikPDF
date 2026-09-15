@@ -1,4 +1,73 @@
 import SwiftUI
+import UIKit
+
+struct LibraryActionNotice: Identifiable {
+    let id = UUID()
+    let message: String
+    var actionTitle: String?
+    var action: (() -> Void)?
+}
+
+struct LibraryActionNoticeView: View {
+    let notice: LibraryActionNotice
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(FolikTheme.cobalt)
+                .accessibilityHidden(true)
+            Text(notice.message)
+                .font(.subheadline.weight(.semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let actionTitle = notice.actionTitle, let action = notice.action {
+                Button(actionTitle, action: action)
+                    .font(.subheadline.weight(.bold))
+                    .frame(minHeight: 44)
+            }
+        }
+        .padding(.leading, 16)
+        .padding(.trailing, notice.action == nil ? 16 : 8)
+        .frame(maxWidth: 520, minHeight: 52)
+        .background(.regularMaterial, in: Capsule())
+        .overlay { Capsule().stroke(FolikTheme.separator, lineWidth: 0.5) }
+        .shadow(color: .black.opacity(0.12), radius: 14, y: 6)
+        .accessibilityIdentifier("library.actionNotice")
+    }
+}
+
+struct LibraryActionNoticeHost: View {
+    @Binding var notice: LibraryActionNotice?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Group {
+            if let notice {
+                LibraryActionNoticeView(notice: LibraryActionNotice(
+                    message: notice.message,
+                    actionTitle: notice.actionTitle,
+                    action: {
+                        notice.action?()
+                        dismissNotice()
+                    }
+                ))
+                .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+                .task(id: notice.id) {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    UIAccessibility.post(notification: .announcement, argument: notice.message)
+                    try? await Task.sleep(for: .seconds(4))
+                    guard !Task.isCancelled, self.notice?.id == notice.id else { return }
+                    dismissNotice()
+                }
+            }
+        }
+    }
+
+    private func dismissNotice() {
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
+            notice = nil
+        }
+    }
+}
 
 nonisolated enum LibrarySortOrder: String, CaseIterable, Identifiable {
     case newest, oldest, name, size
@@ -36,6 +105,7 @@ struct LibraryView: View {
     @State private var favoritesOnly = false
     @State private var choosingOCRSource = false
     @State private var pendingOCRSource: LibraryDocument?
+    @State private var actionNotice: LibraryActionNotice?
     var searchStatus: String? = nil
     var searchHits: [URL: [LibrarySearchHit]] = [:]
     var searchMatchCounts: [URL: Int] = [:]
@@ -68,11 +138,54 @@ struct LibraryView: View {
     let openSettings: () -> Void
     var openRecentlyDeleted: () -> Void = {}
     let openDocument: (LibraryDocument) -> Void
+    var openSearchHit: (LibraryDocument, LibrarySearchHit) -> Void = { _, _ in }
     var openDocumentWindow: ((LibraryDocument) -> Void)? = nil
-    let deleteDocument: (LibraryDocument) -> Void
     let openDocumentTool: (LibraryPDFTool, LibraryDocument) -> Void
 
     var body: some View {
+        mainLibraryContent
+        .sheet(isPresented: $choosingOCRSource, onDismiss: finishChoosingOCRSource) {
+            ocrSourcePicker
+        }
+        .sheet(item: $organizing) { selection in
+            organizationEditor(for: selection)
+        }
+        .sheet(item: $renaming) { document in
+            renameEditor(for: document)
+        }
+        .sheet(item: $merging) { selection in
+            BatchConversionView(libraryDocuments: selection.documents) {
+                self.selection.removeAll()
+                isSelecting = false
+            }
+        }
+        .confirmationDialog(
+            bulkDeleteTitle,
+            isPresented: $confirmBulkDelete,
+            titleVisibility: .visible
+        ) {
+            Button("Move to Recently Deleted", role: .destructive) {
+                moveToRecentlyDeleted(selectedDocuments)
+                selection.removeAll()
+                isSelecting = false
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You can restore these PDFs from Recently Deleted.")
+        }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { availableWidth = $0 }
+        .background(FolikTheme.surface)
+        .navigationTitle(isSelecting ? "\(selection.count) Selected" : "Library")
+        .navigationBarTitleDisplayMode(.large)
+        .safeAreaInset(edge: .bottom) {
+            bottomStatusArea
+        }
+        .toolbar {
+            libraryToolbar
+        }
+    }
+
+    private var mainLibraryContent: some View {
         Group {
             if library.documents.isEmpty {
                 emptyLibrary
@@ -100,54 +213,38 @@ struct LibraryView: View {
                     .accessibilityIdentifier("library.loading")
             }
         }
-        .sheet(isPresented: $choosingOCRSource, onDismiss: {
-            if let document = pendingOCRSource {
-                pendingOCRSource = nil
-                openDocumentTool(.searchable, document)
-            }
-        }) {
-            NavigationStack {
-                List(matchingOCRDocuments) { document in
-                    Button {
-                        pendingOCRSource = document
-                        choosingOCRSource = false
-                    } label: {
-                        Label(document.displayName, systemImage: "doc")
-                            .frame(minHeight: 44)
-                    }
+    }
+
+    private var bulkDeleteTitle: String {
+        let count = selectedDocuments.count
+        return "Remove \(count) document\(count == 1 ? "" : "s") from Folik?"
+    }
+
+    private var ocrSourcePicker: some View {
+        NavigationStack {
+            List(matchingOCRDocuments) { document in
+                Button {
+                    pendingOCRSource = document
+                    choosingOCRSource = false
+                } label: {
+                    Label(document.displayName, systemImage: "doc")
+                        .frame(minHeight: 44)
                 }
-                .navigationTitle("Choose a PDF")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { choosingOCRSource = false } } }
+            }
+            .navigationTitle("Choose a PDF")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { choosingOCRSource = false }
+                }
             }
         }
-        .sheet(item: $organizing) { DocumentOrganizationView(documents: $0.documents) }
-        .sheet(item: $renaming) { RenameDocumentView(document: $0) }
-        .sheet(item: $merging) { selection in
-            BatchConversionView(libraryDocuments: selection.documents) {
-                self.selection.removeAll()
-                isSelecting = false
-            }
-        }
-        .confirmationDialog(
-            "Remove \(selectedDocuments.count) document\(selectedDocuments.count == 1 ? "" : "s") from Folik?",
-            isPresented: $confirmBulkDelete,
-            titleVisibility: .visible
-        ) {
-            Button("Move to Recently Deleted", role: .destructive) {
-                library.delete(selectedDocuments)
-                selection.removeAll()
-                isSelecting = false
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("You can restore these PDFs from Recently Deleted.")
-        }
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { availableWidth = $0 }
-        .background(FolikTheme.surface)
-        .navigationTitle(isSelecting ? "\(selection.count) Selected" : "Library")
-        .navigationBarTitleDisplayMode(.large)
-        .safeAreaInset(edge: .bottom) {
+    }
+
+    private var bottomStatusArea: some View {
+        VStack(spacing: 8) {
+            LibraryActionNoticeHost(notice: $actionNotice)
+                .padding(.horizontal, 20)
             if isImporting, let importStatus {
                 HStack(spacing: 12) {
                     ProgressView()
@@ -159,39 +256,47 @@ struct LibraryView: View {
                 .background(.regularMaterial, in: Capsule())
                 .shadow(color: .black.opacity(0.1), radius: 14, y: 6)
                 .padding(.horizontal, 20)
-                .padding(.bottom, 8)
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("library.importStatus")
             }
         }
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                if !library.documents.isEmpty {
-                    Button(isSelecting ? "Done" : "Select") {
-                        isSelecting.toggle()
-                        if !isSelecting { selection.removeAll() }
-                    }
-                    .accessibilityIdentifier("library.select")
-                }
-            }
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button(action: openSettings) {
-                    Label("Settings", systemImage: "gearshape")
-                }
-                .accessibilityIdentifier("library.settings")
+        .padding(.bottom, 8)
+    }
 
-                Button(action: openTools) {
-                    if isImporting {
-                        ProgressView()
-                    } else {
-                        Label("Add Document", systemImage: "plus")
-                    }
+    @ToolbarContentBuilder
+    private var libraryToolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            if !library.documents.isEmpty {
+                Button(isSelecting ? "Done" : "Select") {
+                    isSelecting.toggle()
+                    if !isSelecting { selection.removeAll() }
                 }
-                .disabled(isImporting)
-                .accessibilityIdentifier("library.addDocument")
-                .accessibilityHint("Scan paper, choose PDFs, or convert images and text to PDF")
+                .accessibilityIdentifier("library.select")
             }
         }
+        ToolbarItemGroup(placement: .primaryAction) {
+            Button(action: openSettings) {
+                Label("Settings", systemImage: "gearshape")
+            }
+            .accessibilityIdentifier("library.settings")
+
+            Button(action: openTools) {
+                if isImporting {
+                    ProgressView()
+                } else {
+                    Label("Add Document", systemImage: "plus")
+                }
+            }
+            .disabled(isImporting)
+            .accessibilityIdentifier("library.addDocument")
+            .accessibilityHint("Scan paper, choose PDFs, or convert images and text to PDF")
+        }
+    }
+
+    private func finishChoosingOCRSource() {
+        guard let document = pendingOCRSource else { return }
+        pendingOCRSource = nil
+        openDocumentTool(.searchable, document)
     }
 
     private var matchingOCRDocuments: [LibraryDocument] {
@@ -200,6 +305,20 @@ struct LibraryView: View {
             return (selectedFolder == "\u{0}" || metadata.folder == selectedFolder)
                 && (selectedTag == "\u{0}" || metadata.tags.contains(selectedTag))
                 && (!favoritesOnly || metadata.isFavorite)
+        }
+    }
+
+    private func organizationEditor(for selection: LibraryDocumentSelection) -> some View {
+        let count = selection.documents.count
+        return DocumentOrganizationView(documents: selection.documents) {
+            showNotice(count == 1 ? "Organization saved" : "Organized \(count) documents")
+        }
+    }
+
+    private func renameEditor(for document: LibraryDocument) -> some View {
+        RenameDocumentView(document: document) { renamed in
+            let message = "Renamed to " + renamed.displayName
+            showNotice(message)
         }
     }
 
@@ -491,15 +610,22 @@ struct LibraryView: View {
                 organize: { organizing = LibraryDocumentSelection(documents: [document]) },
                 rename: { renaming = document },
                 duplicate: {
-                    do { try library.duplicate(document) }
+                    do {
+                        let copy = try library.duplicate(document)
+                        showNotice("Created \(copy.displayName)", actionTitle: "Undo") {
+                            do { try library.discardNewDocument(copy) }
+                            catch { library.errorMessage = "Folik couldn’t undo creating that copy. \(error.localizedDescription)" }
+                        }
+                    }
                     catch { library.errorMessage = "Folik couldn’t duplicate \(document.displayName). \(error.localizedDescription)" }
                 },
                 toggleFavorite: { updateFavorites(!library.metadata(for: document).isFavorite, for: [document]) },
                 open: { openDocument(document) },
+                openSearchHit: { openSearchHit(document, $0) },
                 openInNewWindow: openDocumentWindow.map { action in
                     { action(document) }
                 },
-                delete: { deleteDocument(document) },
+                delete: { moveToRecentlyDeleted([document]) },
                 openTool: { openDocumentTool($0, document) }
             )
     }
@@ -680,14 +806,43 @@ struct LibraryView: View {
     private func updateFavorites(_ isFavorite: Bool, for documents: [LibraryDocument]) {
         do {
             try library.setFavorite(isFavorite, for: documents)
+            let subject = documents.count == 1 ? documents[0].displayName : "\(documents.count) documents"
+            showNotice(isFavorite ? "Added \(subject) to Favorites" : "Removed \(subject) from Favorites", actionTitle: "Undo") {
+                do { try library.setFavorite(!isFavorite, for: documents) }
+                catch { library.errorMessage = "Folik couldn’t undo that favorite change. \(error.localizedDescription)" }
+            }
         } catch {
             library.errorMessage = "Folik couldn’t update those favorites. \(error.localizedDescription)"
         }
+    }
+
+    private func moveToRecentlyDeleted(_ documents: [LibraryDocument]) {
+        guard !documents.isEmpty else { return }
+        let existingIDs = Set(library.recentlyDeleted.map(\.id))
+        library.errorMessage = nil
+        library.delete(documents)
+        guard library.errorMessage == nil else { return }
+        let archived = library.recentlyDeleted.filter { !existingIDs.contains($0.id) }
+        let subject = documents.count == 1 ? documents[0].displayName : "\(documents.count) documents"
+        showNotice("Moved \(subject) to Recently Deleted", actionTitle: archived.isEmpty ? nil : "Undo") {
+            do {
+                try library.performBatch {
+                    for item in archived { _ = try library.restoreDeleted(item) }
+                }
+            } catch {
+                library.errorMessage = "Folik couldn’t restore those documents. \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func showNotice(_ message: String, actionTitle: String? = nil, action: (() -> Void)? = nil) {
+        actionNotice = LibraryActionNotice(message: message, actionTitle: actionTitle, action: action)
     }
 }
 
 private struct DocumentRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var showsAllSearchHits = false
     var isGrid = false
     let document: LibraryDocument
     let metadata: LibraryMetadata
@@ -703,6 +858,7 @@ private struct DocumentRow: View {
     let duplicate: () -> Void
     let toggleFavorite: () -> Void
     let open: () -> Void
+    let openSearchHit: (LibrarySearchHit) -> Void
     let openInNewWindow: (() -> Void)?
     let delete: () -> Void
     let openTool: (LibraryPDFTool) -> Void
@@ -735,6 +891,7 @@ private struct DocumentRow: View {
                     if !isSelecting { actionsMenu }
                 }
                 documentButton
+                if !isSelecting { searchResults }
             }
             .padding(12)
             .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
@@ -744,9 +901,12 @@ private struct DocumentRow: View {
                 }
             }
         } else {
-            HStack(alignment: .top, spacing: 8) {
-                documentButton
-                if !isSelecting { actionsMenu }
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .top, spacing: 8) {
+                    documentButton
+                    if !isSelecting { actionsMenu }
+                }
+                if !isSelecting { searchResults }
             }
             .padding(.vertical, 8)
         }
@@ -854,20 +1014,64 @@ private struct DocumentRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 }
-                if !hits.isEmpty {
-                    Text("\(matchingPageCount) matching page\(matchingPageCount == 1 ? "" : "s")")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(FolikTheme.cobalt)
-                    ForEach(Array(hits.prefix(dynamicTypeSize.isAccessibilitySize ? 3 : 2).enumerated()), id: \.offset) { _, hit in
-                        highlightedExcerpt(hit)
-                            .font(.caption)
-                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    @ViewBuilder
+    private var searchResults: some View {
+        if !hits.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(matchingPageCount) matching page\(matchingPageCount == 1 ? "" : "s")")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(FolikTheme.cobalt)
+                ForEach(Array(displayedSearchHits.enumerated()), id: \.offset) { _, hit in
+                    Button { openSearchHit(hit) } label: {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            highlightedExcerpt(hit)
+                                .font(.caption)
+                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Image(systemName: "arrow.up.forward")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(FolikTheme.cobalt)
+                                .accessibilityHidden(true)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open page \(hit.page): \(hit.excerpt)")
+                    .accessibilityHint("Opens this result in Find")
+                    .accessibilityIdentifier("library.searchHit.\(document.url.lastPathComponent).\(hit.page)")
+                }
+                if hits.count > collapsedSearchHitCount {
+                    Button(showsAllSearchHits ? "Show fewer matching pages" : "Show more matching pages") {
+                        showsAllSearchHits.toggle()
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(FolikTheme.cobalt)
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("library.searchHits.toggle.\(document.url.lastPathComponent)")
+                }
+                if showsAllSearchHits, matchingPageCount > hits.count {
+                    Text("Showing the first \(hits.count) of \(matchingPageCount) matching pages. Open one and use Find to browse every match.")
+                        .font(.caption)
+                        .foregroundStyle(FolikTheme.mutedInk)
+                }
+            }
+            .onChange(of: searchQuery) { _, _ in showsAllSearchHits = false }
+        }
+    }
+
+    private var collapsedSearchHitCount: Int {
+        dynamicTypeSize.isAccessibilitySize ? 3 : 2
+    }
+
+    private var displayedSearchHits: ArraySlice<LibrarySearchHit> {
+        hits.prefix(showsAllSearchHits ? hits.count : collapsedSearchHitCount)
     }
 
     private func highlightedExcerpt(_ hit: LibrarySearchHit) -> Text {

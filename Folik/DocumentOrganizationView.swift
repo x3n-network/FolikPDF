@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DocumentOrganizationView: View {
     let documents: [LibraryDocument]
+    var onSave: () -> Void = {}
     @EnvironmentObject private var library: DocumentLibrary
     @Environment(\.dismiss) private var dismiss
     @State private var folder = ""
@@ -41,6 +42,7 @@ struct DocumentOrganizationView: View {
                         do {
                             try library.organize(documents, folder: folder, tags: tags.components(separatedBy: ","))
                             dismiss()
+                            onSave()
                         } catch { self.error = error.localizedDescription }
                     }.accessibilityIdentifier("organization.save")
                 }

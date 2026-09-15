@@ -25,13 +25,16 @@ nonisolated enum FormTemplate: String, CaseIterable, Identifiable {
         case .meetingNotes: "person.2"
         }
     }
-    func data() throws -> Data {
+    var url: URL? {
         let filename: String = switch self {
         case .workOrder: "WorkOrderTemplate"
         case .inspectionChecklist: "InspectionChecklistTemplate"
         case .meetingNotes: "MeetingNotesTemplate"
         }
-        guard let url = Bundle.main.url(forResource: filename, withExtension: "pdf") else {
+        return Bundle.main.url(forResource: filename, withExtension: "pdf")
+    }
+    func data() throws -> Data {
+        guard let url else {
             throw CocoaError(.fileNoSuchFile)
         }
         return try Data(contentsOf: url)

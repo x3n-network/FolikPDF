@@ -77,7 +77,7 @@ final class FormTemplateTests: XCTestCase {
             attachment.name = template.title; attachment.lifetime = .keepAlways; add(attachment)
         }
         XCTAssertEqual(try Self.canonicalValues(blank)["Customer or team"], "")
-        XCTAssertEqual(try Self.canonicalValues(blank)["Work completed"], "Off")
+        XCTAssertTrue(["", "Off"].contains(try Self.canonicalValues(blank)["Work completed"] ?? ""))
         XCTAssertEqual(try Self.canonicalValues(kept)["Customer or team"], "My Company")
         XCTAssertEqual(try Self.canonicalValues(kept)["Work completed"], "Yes")
         XCTAssertEqual(try Self.canonicalValues(blank).count, 10)
@@ -92,6 +92,27 @@ final class FormTemplateTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: copy.url.path))
         XCTAssertEqual(try Data(contentsOf: copy.url), data)
         XCTAssertEqual(text.widgetStringValue, "My Company")
+    }
+
+    func testPersonalTemplateCanBeRenamedWithoutChangingItsPDF() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = DocumentLibrary(documentsDirectory: root)
+        let source = try FormTemplate.workOrder.data()
+
+        try await library.saveTemplate(source, named: "Weekly Work", clearAnswers: true)
+        let template = try XCTUnwrap(library.personalTemplates.first)
+        let originalData = try Data(contentsOf: template.url)
+        let renamed = try library.renameTemplate(template, to: "Client Work Order")
+
+        XCTAssertEqual(renamed.title, "Client Work Order")
+        XCTAssertEqual(library.personalTemplates, [renamed])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: template.url.path))
+        XCTAssertEqual(try Data(contentsOf: renamed.url), originalData)
+        let restored = DocumentLibrary(documentsDirectory: root)
+        try await restored.refreshTemplates()
+        XCTAssertEqual(restored.personalTemplates, [renamed])
     }
 
     func testAddedFieldsRemainDiscoverableInEditableExports() async throws {

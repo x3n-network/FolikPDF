@@ -13,6 +13,9 @@ enum PDFDocumentPersistence {
         let temporary = url.deletingLastPathComponent().appendingPathComponent(".folik-save-\(UUID().uuidString).pdf")
         defer { try? manager.removeItem(at: temporary) }
         guard document.write(to: temporary) else { throw CocoaError(.fileWriteUnknown) }
+        let serialized = try Data(contentsOf: temporary)
+        let repaired = PDFAcroFormRepair.repair(serialized)
+        if repaired != serialized { try repaired.write(to: temporary) }
         if manager.fileExists(atPath: url.path) {
             if let protection = try manager.attributesOfItem(atPath: url.path)[.protectionKey] {
                 try manager.setAttributes([.protectionKey: protection], ofItemAtPath: temporary.path)

@@ -34,6 +34,8 @@ struct ReaderView: View {
     @StateObject private var session: DocumentSession
     @EnvironmentObject private var library: DocumentLibrary
     private let initialPanel: ReaderPanel?
+    private let initialPageIndex: Int?
+    private let initialSearchQuery: String?
     private let showScanActions: Bool
     private let scanAction: ((LibraryPDFTool) -> Void)?
     @State private var scanActionsDismissed = false
@@ -62,8 +64,10 @@ struct ReaderView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    init(item: LibraryDocument, startInFormBuilder: Bool = false, finishForm: ((LibraryDocument) -> Void)? = nil, initialPanel: ReaderPanel? = nil, showScanActions: Bool = false, scanAction: ((LibraryPDFTool) -> Void)? = nil) {
+    init(item: LibraryDocument, startInFormBuilder: Bool = false, finishForm: ((LibraryDocument) -> Void)? = nil, initialPanel: ReaderPanel? = nil, initialPageIndex: Int? = nil, initialSearchQuery: String? = nil, showScanActions: Bool = false, scanAction: ((LibraryPDFTool) -> Void)? = nil) {
         self.initialPanel = initialPanel
+        self.initialPageIndex = initialPageIndex
+        self.initialSearchQuery = initialSearchQuery
         self.showScanActions = showScanActions
         self.scanAction = scanAction
         self.startInFormBuilder = startInFormBuilder
@@ -241,7 +245,11 @@ struct ReaderView: View {
             guard !Task.isCancelled else { return }
             passwordPromptPresented = session.isLocked
             if startInFormBuilder { session.setFormMode(.build); session.beginFormLayoutEditing() }
-            else if let initialPanel { presentedPanel = initialPanel }
+            else if let initialSearchQuery {
+                presentedPanel = .search
+                if let initialPageIndex { session.goToPage(initialPageIndex) }
+                session.search(for: initialSearchQuery, openingPageIndex: initialPageIndex)
+            } else if let initialPanel { presentedPanel = initialPanel }
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--clear-saved-signatures") {
                 session.deleteSavedSignature(for: .signature)
@@ -635,7 +643,7 @@ private struct ReaderBottomChrome: View {
                                 .accessibilityIdentifier("reader.saveStatus")
                         }
                     }
-                    .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility5)
                     .frame(maxWidth: .infinity, minHeight: 44)
                 } else {
                 VStack(spacing: 2) {
@@ -684,7 +692,7 @@ private struct ReaderBottomChrome: View {
                 .accessibilityLabel("Next page")
             }
             .padding(.horizontal, 12)
-            .dynamicTypeSize(...(session.formMode == .build ? DynamicTypeSize.accessibility2 : .accessibility5))
+            .dynamicTypeSize(...DynamicTypeSize.accessibility5)
 
             Divider()
 
@@ -811,7 +819,7 @@ private struct AnnotationEditingToolbar: View {
                 }
             }
         }
-        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility5)
     }
 
     private var modeLabel: some View {
@@ -957,7 +965,7 @@ private struct PlacementToolbar: View {
                 }
             }
         }
-        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility5)
     }
 
     private var modeLabel: some View {
@@ -1012,7 +1020,7 @@ private struct DrawingToolbar: View {
                 }
             }
         }
-        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility5)
     }
 
     private var modeLabel: some View {
@@ -1112,7 +1120,7 @@ private struct ReaderToolLabel: View {
                     iconView
                     Text(title)
                         .font(.headline.weight(.semibold))
-                        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+                        .dynamicTypeSize(...DynamicTypeSize.accessibility5)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
                 }

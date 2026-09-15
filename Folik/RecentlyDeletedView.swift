@@ -8,6 +8,7 @@ struct RecentlyDeletedView: View {
     @State private var isSelecting = false
     @State private var deletionTargets: [DeletedDocument] = []
     @State private var confirmingBulkDeletion = false
+    @State private var actionNotice: LibraryActionNotice?
 
     var body: some View {
         List {
@@ -58,32 +59,36 @@ struct RecentlyDeletedView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if isSelecting {
-                HStack(spacing: 12) {
-                    Text("\(selection.count) selected")
-                        .font(.subheadline.weight(.semibold))
-                        .accessibilityIdentifier("trash.selectionCount")
-                    Spacer()
-                    Button {
-                        restore(selectedDocuments)
-                    } label: {
-                        Label("Restore", systemImage: "arrow.uturn.backward")
-                            .frame(minHeight: 44)
+            VStack(spacing: 8) {
+                LibraryActionNoticeHost(notice: $actionNotice)
+                    .padding(.horizontal, 16)
+                if isSelecting {
+                    HStack(spacing: 12) {
+                        Text("\(selection.count) selected")
+                            .font(.subheadline.weight(.semibold))
+                            .accessibilityIdentifier("trash.selectionCount")
+                        Spacer()
+                        Button {
+                            restore(selectedDocuments)
+                        } label: {
+                            Label("Restore", systemImage: "arrow.uturn.backward")
+                                .frame(minHeight: 44)
+                        }
+                        .disabled(selection.isEmpty)
+                        Button(role: .destructive) {
+                            deletionTargets = selectedDocuments
+                            confirmingBulkDeletion = true
+                        } label: {
+                            Image(systemName: "trash").frame(width: 44, height: 44)
+                        }
+                        .accessibilityLabel("Delete selected documents permanently")
+                        .disabled(selection.isEmpty)
                     }
-                    .disabled(selection.isEmpty)
-                    Button(role: .destructive) {
-                        deletionTargets = selectedDocuments
-                        confirmingBulkDeletion = true
-                    } label: {
-                        Image(systemName: "trash").frame(width: 44, height: 44)
-                    }
-                    .accessibilityLabel("Delete selected documents permanently")
-                    .disabled(selection.isEmpty)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(.bar)
+                    .overlay(alignment: .top) { Divider() }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(.bar)
-                .overlay(alignment: .top) { Divider() }
             }
         }
         .alert("Delete this PDF permanently?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
@@ -168,9 +173,17 @@ struct RecentlyDeletedView: View {
 
     private func restore(_ items: [DeletedDocument]) {
         do {
-            try library.performBatch { for item in items { try library.restoreDeleted(item) } }
+            var restoredURLs: [URL] = []
+            try library.performBatch {
+                for item in items { restoredURLs.append(try library.restoreDeleted(item)) }
+            }
             selection.subtract(items.map(\.id))
             if selection.isEmpty { isSelecting = false }
+            let restoredDocuments = library.documents.filter { restoredURLs.contains($0.url) }
+            let subject = items.count == 1 ? items[0].displayName : "\(items.count) documents"
+            showNotice("Restored \(subject)", actionTitle: restoredDocuments.isEmpty ? nil : "Undo") {
+                library.delete(restoredDocuments)
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -185,5 +198,9 @@ struct RecentlyDeletedView: View {
             errorMessage = error.localizedDescription
         }
         deletionTargets = []
+    }
+
+    private func showNotice(_ message: String, actionTitle: String? = nil, action: (() -> Void)? = nil) {
+        actionNotice = LibraryActionNotice(message: message, actionTitle: actionTitle, action: action)
     }
 }

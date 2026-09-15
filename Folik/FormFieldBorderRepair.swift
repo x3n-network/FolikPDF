@@ -25,9 +25,21 @@ enum FormFieldBorderRepair {
                 var properties = original.annotationKeyValues
                 properties.removeValue(forKey: PDFAnnotationKey.appearanceDictionary.rawValue)
                 properties.removeValue(forKey: PDFAnnotationKey.page.rawValue)
-                let annotation: PDFAnnotation = original.widgetFieldType == .signature
-                    ? VisibleSignatureField(bounds: original.bounds, forType: .widget, withProperties: properties)
-                    : PDFAnnotation(bounds: original.bounds, forType: .widget, withProperties: properties)
+                let annotation: PDFAnnotation
+                if original.widgetFieldType == .signature {
+                    annotation = VisibleSignatureField(bounds: original.bounds, forType: .widget, withProperties: properties)
+                } else if original.widgetFieldType == .button,
+                          original.widgetControlType == .checkBoxControl {
+                    annotation = VisibleCheckboxField(bounds: original.bounds, forType: .widget, withProperties: properties)
+                } else {
+                    annotation = PDFAnnotation(bounds: original.bounds, forType: .widget, withProperties: properties)
+                }
+                for key in ["FolikFieldKind", "FolikFieldOrder", "/FolikFillOrder"] {
+                    let annotationKey = PDFAnnotationKey(rawValue: key)
+                    if let value = original.value(forAnnotationKey: annotationKey) {
+                        annotation.setValue(value, forAnnotationKey: annotationKey)
+                    }
+                }
                 replacedField = true
                 let appearance = PDFAppearanceCharacteristics()
                 appearance.backgroundColor = original.backgroundColor ?? .white

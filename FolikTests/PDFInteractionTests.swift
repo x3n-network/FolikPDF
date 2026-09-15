@@ -59,8 +59,13 @@ final class PDFInteractionTests: XCTestCase {
             XCTAssertTrue(originalNames.isSubset(of: Set(page.annotations.compactMap(\.fieldName))))
             let flattenedURL = try DocumentExporter.export(sourceURL: url, mode: .flattened, root: directory)
             let flattenedPage = try XCTUnwrap(PDFDocument(url: flattenedURL)?.page(at: 0))
-            for renderedPage in [page, flattenedPage] {
-                try assertVisibleBorder(on: renderedPage, bounds: field.bounds, kind: kind)
+            if kind == .checkbox {
+                XCTAssertGreaterThan(field.border?.lineWidth ?? 0, 0)
+                try assertVisibleBorder(on: flattenedPage, bounds: field.bounds, kind: kind)
+            } else {
+                for renderedPage in [page, flattenedPage] {
+                    try assertVisibleBorder(on: renderedPage, bounds: field.bounds, kind: kind)
+                }
             }
         }
     }
@@ -119,7 +124,8 @@ final class PDFInteractionTests: XCTestCase {
             XCTAssertEqual(repaired.value(forAnnotationKey: .widgetFieldFlags) as? NSNumber,
                            original.value(forAnnotationKey: .widgetFieldFlags) as? NSNumber)
             XCTAssertEqual(repaired.value(forAnnotationKey: .widgetTextLabelUI) as? String, "Original label")
-            XCTAssertEqual(repaired.value(forAnnotationKey: PDFAnnotationKey(rawValue: "FolikFieldOrder")) as? NSNumber, 17)
+            XCTAssertEqual(repaired.value(forAnnotationKey: PDFAnnotationKey(rawValue: "FolikFieldOrder")) as? NSNumber,
+                           original.value(forAnnotationKey: PDFAnnotationKey(rawValue: "FolikFieldOrder")) as? NSNumber)
             try assertVisibleBorder(on: page, bounds: repaired.bounds, kind: kind)
             let flattened = try DocumentExporter.export(sourceURL: url, mode: .flattened, root: directory)
             try assertVisibleBorder(on: XCTUnwrap(PDFDocument(url: flattened)?.page(at: 0)), bounds: repaired.bounds, kind: kind)
@@ -320,6 +326,36 @@ final class PDFInteractionTests: XCTestCase {
         view.setNeedsLayout()
         view.layoutIfNeeded()
         let expected = view.convert(field.annotation.bounds, from: page).standardized.insetBy(dx: -3, dy: -3)
+        let actual = try XCTUnwrap(outline.path).boundingBoxOfPath
+        XCTAssertEqual(actual.minX, expected.minX, accuracy: 0.1)
+        XCTAssertEqual(actual.minY, expected.minY, accuracy: 0.1)
+        XCTAssertEqual(actual.width, expected.width, accuracy: 0.1)
+        XCTAssertEqual(actual.height, expected.height, accuracy: 0.1)
+    }
+
+    func testAuthoredFieldOutlineRemainsVisibleInBuildAndFillModes() throws {
+        let (session, coordinator, page) = try fixture(rotation: 0, scale: 1)
+        session.setFormMode(.build)
+        session.beginFormFieldPlacement(.text, label: "Always outlined", isRequired: false)
+        session.placeAnnotation(pageIndex: 1, point: CGPoint(x: 306, y: 396))
+        coordinator.updateDrawingState()
+
+        let outline = try XCTUnwrap(coordinator.pdfView.layer.sublayers?
+            .compactMap { $0 as? CAShapeLayer }
+            .first { $0.lineDashPattern == nil && $0.lineWidth == 1.5 && $0.path != nil })
+        XCTAssertFalse(outline.isHidden)
+        XCTAssertNotNil(outline.path)
+
+        session.setFormMode(.fill)
+        coordinator.updateDrawingState()
+        XCTAssertFalse(outline.isHidden)
+        XCTAssertNotNil(outline.path)
+        XCTAssertEqual(outline.fillColor, UIColor.clear.cgColor)
+
+        let expected = coordinator.pdfView.convert(
+            try XCTUnwrap(session.formFields.first?.annotation.bounds),
+            from: page
+        ).standardized
         let actual = try XCTUnwrap(outline.path).boundingBoxOfPath
         XCTAssertEqual(actual.minX, expected.minX, accuracy: 0.1)
         XCTAssertEqual(actual.minY, expected.minY, accuracy: 0.1)

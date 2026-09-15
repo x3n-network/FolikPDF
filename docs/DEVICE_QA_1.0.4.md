@@ -11,6 +11,19 @@ Use the separately installed **Folik Polish QA** app for exploratory device chec
 5. Use a large scan for OCR/compression. Ensure progress and Cancel Processing remain visible at large text sizes and in landscape. Cancel, wait for the current step to finish, and retry. Confirm no cancelled copy appears in the library. Cancel export preparation and then share again.
 6. Observe a real document you regularly use for scrolling, thumbnail rendering, form entry, and saving. Record its page count/file size, device/build, and any visible pause without adding its private contents to the repository.
 
+## Workflow finishing checks
+
+- Search for text that appears on several pages, expand and collapse the matching pages, activate early and later excerpts with touch and VoiceOver, and confirm the reader opens the stated page with Find still populated.
+- Duplicate, favorite, delete, restore, rename, and organize documents. Confirm feedback is announced once, Undo restores the exact prior state where offered, undoing a duplicate does not add it to Recently Deleted, and the banner does not cover essential controls at large text sizes.
+- Enable Reduce Motion and repeat a reversible library action. Confirm the feedback fades without sliding and remains understandable through VoiceOver.
+- Change a page-organizer draft and a Batch to PDF draft, then try Cancel and an interactive sheet dismissal. Confirm each offers Keep Editing and a destructive discard action; unchanged drafts should close without a warning.
+- At the largest accessibility text size, traverse reader, inspector, form-builder, and page-organizer controls in portrait and landscape. Confirm compact toolbars scroll and no required action is clipped.
+- Open several different entries in Add & Tools, reopen it, and verify Recent reflects the last three distinct tools without making the grouped list harder to navigate.
+- In Build, place and select fields on iPhone and iPad. Confirm the guidance is understandable, haptics are restrained, and Edit/Duplicate remain reachable in portrait, landscape, and large text.
+- Preview modified, added, and removed comparison pages. Check the compact Original/Revised switch, iPad side-by-side layout, and VoiceOver descriptions.
+- Verify bundled and personal template thumbnails, then rename a personal template with touch and VoiceOver. Reopen it and confirm its PDF is unchanged.
+- Open Settings → Using Folik and check reading order, terminology, Dynamic Type layout, and Back navigation.
+
 Do not treat the injected full-disk test as a real low-storage device test. It confirms original-byte preservation, staging cleanup, retained edits, and retry after a failed replacement. Neither the background execution allowance nor the Back safeguard guarantees recovery after force-quitting, a crash, or iOS ending the process.
 
 ## Completed device checks

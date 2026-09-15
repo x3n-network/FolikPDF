@@ -14,8 +14,35 @@ FolikPDF 1.0.4 makes everyday PDF work smoother:
 - More responsive document preparation and better memory cleanup.
 - More efficient library text search and automatic cleanup of temporary sharing copies.
 - Clearer save recovery, accessible processing controls, keyboard shortcuts, and easier first steps.
+- Compatibility updates for iOS 27, including more reliable editable form fields and consistently visible field outlines.
 
 Free, private, and on your device.
+
+## Workflow finishing polish
+
+- Library search excerpts now open the exact matching page with the query already active in Find.
+- Search results show a concise first set of matching pages and can expand in place to reveal the rest of the retained matches.
+- Duplicate, favorite, organize, rename, delete, and restore actions provide brief confirmation; reversible library actions include Undo. Undoing a duplicate now removes the new copy outright instead of sending it to Recently Deleted.
+- Shared action feedback announces completion once and avoids sliding motion when Reduce Motion is enabled.
+- Page organization and batch conversion ask before abandoning changed drafts, while unchanged workflows still dismiss immediately.
+- Reader, inspector, page-organizer, and form-builder controls support the full accessibility Dynamic Type range with scrollable compact controls where needed.
+- Add & Tools remembers up to three recently used tools while keeping the existing grouped catalog.
+- Form building gives clearer placement guidance, identifies the selected field, exposes Edit and Duplicate nearby, and confirms placement with restrained haptic feedback.
+- Comparison reports can preview each changed, added, or removed page, side by side on wider layouts and with an Original/Revised switch on compact layouts.
+- Form templates show page thumbnails, and personal templates can be renamed from swipe actions or their context menu.
+- Settings includes an on-device Using Folik guide for search, organization, forms, signatures, and export choices.
+
+Validation for this finishing pass: the full iPhone 17e native suite passed with 167 tests and one optional private fixture skipped. Six focused iPhone UI workflows passed for exact duplicate Undo, expandable matching pages, batch and page-organizer discard protection, large-text reader rotation, and large-text form building. The latter two search/form workflows also passed on iPad mini. Earlier focused coverage remains in place for exact-page search, comparison previews, Help/version, templates, and form layout/fill order. The final Release simulator build passed for both architectures; the app and share extension report 1.0.4 (build 1). Physical Reduce Motion, VoiceOver, touch, interruption, and cross-viewer checks remain in the device QA checklist.
+
+## iOS 27 compatibility
+
+- The project has been updated for Xcode 27 while retaining iOS 18.6 as the minimum deployment target.
+- Editable saves, organized documents, extracted pages, and personal templates repair Folik-created widgets into the canonical AcroForm field catalog when PDFKit omits them. Field values are synchronized without modifying encrypted files.
+- Checkbox borders and flattened-export borders receive explicit drawing support where iOS 27 no longer reliably produces the prior PDFKit appearance.
+- Folik-created field outlines remain visible in both Build and Fill, and now track scrolling, inertial deceleration, zoom, focus changes, and recycled PDF page tiles.
+- Compatibility tests account for documented viewer-dependent PDFKit behavior while continuing to verify field names, values, widgets, editable exports, flattened exports, and signed/encrypted-document safeguards.
+
+Final iOS 27 validation: 169 unit tests passed with one optional private fixture skipped, the Fill-mode outline UI regression passed, the focused iOS 26.5 compatibility check passed, and the unsigned Release build succeeded. The final simulator screenshot shows a complete field outline without focus or selection.
 
 ## Included usability polish
 
@@ -31,7 +58,7 @@ OCR, compression, redaction, sanitizing, and fillable-copy previews have task-sp
 - **Thumbnails:** file-backed library and reader previews share a worker-owned PDFKit renderer and an in-memory cache, with a 32 MiB cost limit and 128-entry limit. Keys include file modification time, size, page, dimensions, and save revision. Visible view tasks cancel obsolete requests. Unsaved page-organizer drafts and unlocked encrypted documents retain their live-document preview path.
 - **Annotation saves:** the reader combines edits within a 250 ms idle window into one staged write and atomic replacement. Explicit save, sharing, page organization, leaving the reader, and app deactivation still request a flush. Save status remains visible. This reduces repeated PDF serialization; serialization itself still runs with the live document on the main actor.
 - **Sharing storage:** each export receives its own UUID directory while preserving a readable filename. Completed/dismissed share sheets schedule cleanup after a 60-second grace period. Launch cleanup removes owned exports older than 24 hours; original library documents and unrelated directories are excluded.
-- **Search:** uncached PDFs are matched one page at a time. Cache-eligible text is retained up to 8 MiB per document and 48 MiB across the index; oversized documents continue matching without accumulating their text. Results retain matching-page counts, up to three excerpts, and image-only/skipped-document reporting. The archive size is checked before reading its data. These are retained-text budgets, not a hard process-memory ceiling.
+- **Search:** uncached PDFs are matched one page at a time. Cache-eligible text is retained up to 8 MiB per document and 48 MiB across the index; oversized documents continue matching without accumulating their text. Results retain matching-page counts and up to 50 lightweight excerpts per document, initially showing a compact subset that the user can expand, plus image-only/skipped-document reporting. The archive size is checked before reading its data. These are retained-text budgets, not a hard process-memory ceiling.
 
 ## Validation
 
@@ -95,7 +122,7 @@ Validation: mode-switch value preservation, Build/Fill UI separation, and scanne
 
 ## Faster form placement
 
-Build keeps field tools beside the page. Choose a type once and tap repeatedly, or use Place center. Arrange supports editing labels and required flags after placement, independent blank duplicates, and undo/redo. Field sizes are reused within the editing session. Dragged fields snap nearby matching edges and show alignment guides. Form layout supports page scrolling and pinch zoom; Fill hides the authoring outlines.
+Build keeps field tools beside the page. Choose a type once and tap repeatedly, or use Place center. Arrange supports editing labels and required flags after placement, independent blank duplicates, and undo/redo. Field sizes are reused within the editing session. Dragged fields snap nearby matching edges and show alignment guides. Form layout supports page scrolling and pinch zoom; Fill keeps a clean stroke-only field outline without the Build-mode tint.
 
 Validation: repeat placement, independent duplicates, required/label undo and redo, remembered sizes, save/reopen, and edge snapping passed unit checks. iPhone UI checks passed after fixing a largest-text landscape overflow. iPad placement, large-text rotation, and suggested-field zoom checks passed; screenshots reviewed. Results: `/tmp/folik-form-quick.xcresult`, `/tmp/folik-form-quick-fixed.xcresult`, `/tmp/folik-form-quick-ipad.xcresult`.
 

@@ -309,7 +309,7 @@ private struct AnnotationNavigator: View {
             }
             #endif
         }
-        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility5)
     }
 
     private var textAlertIsPresented: Binding<Bool> {
@@ -650,7 +650,7 @@ private struct SearchNavigator: View {
         .task(id: query) {
             guard !query.isEmpty else { return }
             try? await Task.sleep(for: .milliseconds(280))
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, query != session.searchQuery else { return }
             session.search(for: query)
         }
     }
@@ -895,7 +895,7 @@ private struct FormNavigator: View {
             Text("This removes the added PDF field. You can undo it while this document remains open.")
         }
         .onDisappear { suggestionTask?.cancel() }
-        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility5)
     }
 
     @ViewBuilder

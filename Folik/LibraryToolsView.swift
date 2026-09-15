@@ -1,8 +1,68 @@
 import SwiftUI
 
-nonisolated enum LibraryTool: String, Identifiable {
+nonisolated enum LibraryTool: String, Identifiable, CaseIterable {
     case scan, importPDF, images, documents, text, searchable, fillable, compress, batch, redact, sanitize, protect, compare, sample, templates
     var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .templates: "Form Templates"
+        case .scan: "Scan Document"
+        case .importPDF: "Choose PDFs"
+        case .images: "Images to PDF"
+        case .sample: "Try a Sample Form"
+        case .documents: "Documents to PDF"
+        case .text: "Text/RTF to PDF"
+        case .batch: "Batch to PDF"
+        case .searchable: "Make PDF Searchable"
+        case .fillable: "Make Fillable Copy"
+        case .compress: "Compress PDF"
+        case .redact: "Redact PDF"
+        case .sanitize: "Inspect & Sanitize"
+        case .protect: "Protect PDF"
+        case .compare: "Compare PDFs"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .templates: "Start a ready-made form, available offline"
+        case .scan: "Capture paper with automatic edge detection"
+        case .importPDF: "Add one or more PDFs from Files"
+        case .images: "Create an ordered, searchable PDF"
+        case .sample: "Practice filling, signing, and sharing"
+        case .documents: "Convert DOCX, ODT, DOC, or Pages previews"
+        case .text: "Turn plain or rich text into a paginated PDF"
+        case .batch: "Prepare separate PDFs or combine several files"
+        case .searchable: "Add an on-device OCR text layer"
+        case .fillable: "Add editable fields over a scan or PDF"
+        case .compress: "Reduce image-heavy file sizes"
+        case .redact: "Permanently remove marked information in a new copy"
+        case .sanitize: "See what a PDF carries, then make a safer copy"
+        case .protect: "Require a password to open a new copy"
+        case .compare: "Find text changes between two PDFs on-device"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .templates: "doc.on.doc"
+        case .scan: "doc.viewfinder"
+        case .importPDF: "folder"
+        case .images: "photo.on.rectangle"
+        case .sample: "doc.text"
+        case .documents: "doc.richtext"
+        case .text: "doc.text"
+        case .batch: "square.stack.3d.up"
+        case .searchable: "text.viewfinder"
+        case .fillable: "list.clipboard"
+        case .compress: "arrow.down.right.and.arrow.up.left"
+        case .redact: "eye.slash"
+        case .sanitize: "checkmark.shield"
+        case .protect: "lock.doc"
+        case .compare: "arrow.left.arrow.right"
+        }
+    }
 }
 
 nonisolated enum LibraryPDFTool: String, CaseIterable, Identifiable {
@@ -36,33 +96,46 @@ struct LibraryToolsView: View {
     let canScan: Bool
     let choose: (LibraryTool) -> Void
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("folik.recentLibraryTools") private var recentToolNames = ""
+
+    private var recentTools: [LibraryTool] {
+        recentToolNames.split(separator: ",").compactMap { LibraryTool(rawValue: String($0)) }
+    }
 
     var body: some View {
         NavigationStack {
             List {
+                if !recentTools.isEmpty {
+                    Section("Recent") {
+                        ForEach(recentTools) { tool in
+                            toolRow(tool, identifierPrefix: "tools.recent")
+                                .disabled(tool == .scan && !canScan)
+                        }
+                    }
+                }
                 Section("Add a document") {
-                    tool(.templates, title: "Form Templates", subtitle: "Start a ready-made form, available offline", icon: "doc.on.doc")
-                    tool(.scan, title: "Scan Document", subtitle: "Capture paper with automatic edge detection", icon: "doc.viewfinder")
+                    toolRow(.templates)
+                    toolRow(.scan)
                         .disabled(!canScan)
-                    tool(.importPDF, title: "Choose PDFs", subtitle: "Add one or more PDFs from Files", icon: "folder")
-                    tool(.images, title: "Images to PDF", subtitle: "Create an ordered, searchable PDF", icon: "photo.on.rectangle")
+                    toolRow(.importPDF)
+                    toolRow(.images)
                 }
                 Section("Try Folik") {
-                    tool(.sample, title: "Try a Sample Form", subtitle: "Practice filling, signing, and sharing", icon: "doc.text")
+                    toolRow(.sample)
                 }
                 Section("More ways to convert") {
-                    tool(.documents, title: "Documents to PDF", subtitle: "Convert DOCX, ODT, DOC, or Pages previews", icon: "doc.richtext")
-                    tool(.text, title: "Text/RTF to PDF", subtitle: "Turn plain or rich text into a paginated PDF", icon: "doc.text")
-                    tool(.batch, title: "Batch to PDF", subtitle: "Prepare separate PDFs or combine several files", icon: "square.stack.3d.up")
+                    toolRow(.documents)
+                    toolRow(.text)
+                    toolRow(.batch)
                 }
                 Section("Improve and protect") {
-                    tool(.searchable, title: "Make PDF Searchable", subtitle: "Add an on-device OCR text layer", icon: "text.viewfinder")
-                    tool(.fillable, title: "Make Fillable Copy", subtitle: "Add editable fields over a scan or PDF", icon: "list.clipboard")
-                    tool(.compress, title: "Compress PDF", subtitle: "Reduce image-heavy file sizes", icon: "arrow.down.right.and.arrow.up.left")
-                    tool(.redact, title: "Redact PDF", subtitle: "Permanently remove marked information in a new copy", icon: "eye.slash")
-                    tool(.sanitize, title: "Inspect & Sanitize", subtitle: "See what a PDF carries, then make a safer copy", icon: "checkmark.shield")
-                    tool(.protect, title: "Protect PDF", subtitle: "Require a password to open a new copy", icon: "lock.doc")
-                    tool(.compare, title: "Compare PDFs", subtitle: "Find text changes between two PDFs on-device", icon: "arrow.left.arrow.right")
+                    toolRow(.searchable)
+                    toolRow(.fillable)
+                    toolRow(.compress)
+                    toolRow(.redact)
+                    toolRow(.sanitize)
+                    toolRow(.protect)
+                    toolRow(.compare)
                 }
             }
             .navigationTitle("Add & Tools")
@@ -73,22 +146,20 @@ struct LibraryToolsView: View {
         }
     }
 
-    private func tool(
-        _ tool: LibraryTool,
-        title: String,
-        subtitle: String,
-        icon: String
-    ) -> some View {
-        Button { choose(tool) } label: {
+    private func toolRow(_ tool: LibraryTool, identifierPrefix: String = "tools") -> some View {
+        Button {
+            remember(tool)
+            choose(tool)
+        } label: {
             HStack(spacing: 14) {
-                Image(systemName: icon)
+                Image(systemName: tool.icon)
                     .font(.title3)
                     .foregroundStyle(FolikTheme.cobalt)
                     .frame(width: 32)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(title).font(.body.weight(.semibold)).foregroundStyle(FolikTheme.ink)
-                    Text(subtitle).font(.footnote).foregroundStyle(FolikTheme.mutedInk)
+                    Text(tool.title).font(.body.weight(.semibold)).foregroundStyle(FolikTheme.ink)
+                    Text(tool.subtitle).font(.footnote).foregroundStyle(FolikTheme.mutedInk)
                 }
                 Spacer(minLength: 0)
             }
@@ -96,7 +167,14 @@ struct LibraryToolsView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(title)
-        .accessibilityHint(subtitle)
+        .accessibilityLabel(tool.title)
+        .accessibilityHint(tool.subtitle)
+        .accessibilityIdentifier("\(identifierPrefix).\(tool.rawValue)")
+    }
+
+    private func remember(_ tool: LibraryTool) {
+        var values = recentTools.filter { $0 != tool }
+        values.insert(tool, at: 0)
+        recentToolNames = values.prefix(3).map(\.rawValue).joined(separator: ",")
     }
 }

@@ -41,9 +41,11 @@ nonisolated enum PersonalTemplateStore {
                 }
             }
         }
-        guard let output = document.dataRepresentation(), PDFDocument(data: output) != nil else {
+        guard let serialized = document.dataRepresentation() else {
             throw CocoaError(.fileWriteUnknown)
         }
+        let output = PDFAcroFormRepair.repair(serialized)
+        guard PDFDocument(data: output) != nil else { throw CocoaError(.fileWriteUnknown) }
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let base = URL(fileURLWithPath: filename).deletingPathExtension().lastPathComponent
         var destination = root.appendingPathComponent(filename)
@@ -53,6 +55,20 @@ nonisolated enum PersonalTemplateStore {
             suffix += 1
         }
         try output.write(to: destination, options: [.atomic, .completeFileProtectionUnlessOpen])
+        return PersonalFormTemplate(url: destination)
+    }
+
+    static func rename(_ template: PersonalFormTemplate, to proposedName: String, in root: URL) throws -> PersonalFormTemplate {
+        guard template.url.deletingLastPathComponent().standardizedFileURL == root.standardizedFileURL else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        let filename = try PDFConverter.fileName(proposedName)
+        let destination = root.appendingPathComponent(filename)
+        if destination.standardizedFileURL == template.url.standardizedFileURL { return template }
+        guard !FileManager.default.fileExists(atPath: destination.path) else {
+            throw LibraryOrganizationError.nameAlreadyExists
+        }
+        try FileManager.default.moveItem(at: template.url, to: destination)
         return PersonalFormTemplate(url: destination)
     }
 

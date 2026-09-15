@@ -9,14 +9,18 @@ final class PageOrganizerDraft: ObservableObject {
     @Published private(set) var document: PDFDocument
     @Published private(set) var revision = UUID()
     @Published private(set) var canUndo = false
+    @Published private(set) var hasUnsavedChanges = false
     @Published var errorMessage: String?
 
     let sourceURL: URL
-    private var undoSnapshots: [Data] = []
+    private var stateID = UUID()
+    private var savedStateID: UUID
+    private var undoSnapshots: [(data: Data, stateID: UUID)] = []
 
     init(sourceURL: URL) {
         self.sourceURL = sourceURL
         document = PDFDocument(url: sourceURL) ?? PDFDocument()
+        savedStateID = stateID
     }
 
     var pageCount: Int { document.pageCount }
@@ -107,15 +111,20 @@ final class PageOrganizerDraft: ObservableObject {
     }
 
     func undo() {
-        guard let data = undoSnapshots.popLast(), let restored = PDFDocument(data: data) else { return }
+        guard let snapshot = undoSnapshots.popLast(), let restored = PDFDocument(data: snapshot.data) else { return }
         document = restored
+        stateID = snapshot.stateID
         canUndo = !undoSnapshots.isEmpty
+        hasUnsavedChanges = stateID != savedStateID
         revision = UUID()
     }
 
     func saveOrganizedCopy() throws -> URL {
         let destination = uniqueDestination(suffix: "Organized")
         guard document.write(to: destination) else { throw PageOrganizerError.couldNotWrite }
+        try repairFormTree(at: destination)
+        savedStateID = stateID
+        hasUnsavedChanges = false
         return destination
     }
 
@@ -130,7 +139,14 @@ final class PageOrganizerDraft: ObservableObject {
         guard extracted.pageCount > 0 else { throw PageOrganizerError.noPagesSelected }
         let destination = uniqueDestination(suffix: "Extracted Pages")
         guard extracted.write(to: destination) else { throw PageOrganizerError.couldNotWrite }
+        try repairFormTree(at: destination)
         return destination
+    }
+
+    private func repairFormTree(at url: URL) throws {
+        let serialized = try Data(contentsOf: url)
+        let repaired = PDFAcroFormRepair.repair(serialized)
+        if repaired != serialized { try repaired.write(to: url) }
     }
 
     private func performChange(_ change: () -> Void) {
@@ -138,9 +154,11 @@ final class PageOrganizerDraft: ObservableObject {
             errorMessage = PageOrganizerError.couldNotSnapshot.localizedDescription
             return
         }
-        undoSnapshots.append(snapshot)
+        undoSnapshots.append((snapshot, stateID))
         change()
+        stateID = UUID()
         canUndo = true
+        hasUnsavedChanges = true
         revision = UUID()
     }
 
@@ -197,6 +215,7 @@ struct PageOrganizerView: View {
     @State private var importerPresented = false
     @State private var moreActionsPresented = false
     @State private var sharedDocument: SharedOrganizerDocument?
+    @State private var confirmingDiscard = false
 
     init(sourceURL: URL) {
         _draft = StateObject(wrappedValue: PageOrganizerDraft(sourceURL: sourceURL))
@@ -224,7 +243,7 @@ struct PageOrganizerView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(action: { dismiss() }) {
+                    Button(action: requestDismissal) {
                         if dynamicTypeSize.isAccessibilitySize {
                             Image(systemName: "xmark")
                                 .frame(width: 44, height: 44)
@@ -307,6 +326,13 @@ struct PageOrganizerView: View {
             } message: {
                 Text(draft.errorMessage ?? "Folik couldn’t complete that page operation.")
             }
+            .confirmationDialog("Discard page changes?", isPresented: $confirmingDiscard, titleVisibility: .visible) {
+                Button("Discard Changes", role: .destructive) { dismiss() }
+                Button("Keep Editing") {}
+            } message: {
+                Text("Your original PDF is unchanged, but edits in this organizer will be lost.")
+            }
+            .interactiveDismissDisabled(isSaving || draft.hasUnsavedChanges)
         }
     }
 
@@ -380,7 +406,7 @@ struct PageOrganizerView: View {
         .padding(.vertical, 6)
         .background(.bar)
         .overlay(alignment: .top) { Divider() }
-        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility5)
     }
 
     private func organizerButton(
@@ -416,6 +442,14 @@ struct PageOrganizerView: View {
 
     private func toggleSelection(_ index: Int) {
         if selection.contains(index) { selection.remove(index) } else { selection.insert(index) }
+    }
+
+    private func requestDismissal() {
+        if draft.hasUnsavedChanges {
+            confirmingDiscard = true
+        } else {
+            dismiss()
+        }
     }
 
     private func saveCopy() {

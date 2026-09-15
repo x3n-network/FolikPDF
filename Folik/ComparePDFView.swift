@@ -67,7 +67,15 @@ struct ComparePDFView: View {
             }
             .fileImporter(isPresented: $choosingOriginal, allowedContentTypes: [.pdf]) { handle($0, slot: .original) }
             .fileImporter(isPresented: $choosingRevised, allowedContentTypes: [.pdf]) { handle($0, slot: .revised) }
-            .sheet(item: $report) { PDFComparisonReportView(report: $0, originalName: originalName ?? "Original", revisedName: revisedName ?? "Revised") }
+            .sheet(item: $report) {
+                PDFComparisonReportView(
+                    report: $0,
+                    originalName: originalName ?? "Original",
+                    revisedName: revisedName ?? "Revised",
+                    originalData: originalData,
+                    revisedData: revisedData
+                )
+            }
             .interactiveDismissDisabled(busy)
             .onDisappear { task?.cancel() }
             .onAppear(perform: loadInitialSource)
@@ -150,7 +158,10 @@ private struct PDFComparisonReportView: View {
     let report: PDFComparisonReport
     let originalName: String
     let revisedName: String
+    let originalData: Data?
+    let revisedData: Data?
     @Environment(\.dismiss) private var dismiss
+    @State private var preview: ComparisonPreviewRequest?
 
     var body: some View {
         NavigationStack {
@@ -180,6 +191,19 @@ private struct PDFComparisonReportView: View {
                                 if let revised = change.revisedExcerpt {
                                     comparisonExcerpt("Revised", text: revised)
                                 }
+                                Button {
+                                    preview = ComparisonPreviewRequest(
+                                        originalData: originalData,
+                                        revisedData: revisedData,
+                                        originalPageIndex: change.originalPage.map { $0 - 1 },
+                                        revisedPageIndex: change.revisedPage.map { $0 - 1 },
+                                        title: change.title
+                                    )
+                                } label: {
+                                    Label("Preview changed pages", systemImage: "rectangle.split.2x1")
+                                        .frame(minHeight: 44)
+                                }
+                                .disabled(originalData == nil && revisedData == nil)
                             } label: {
                                 Label(change.title, systemImage: change.kind.icon)
                                     .font(.subheadline.weight(.semibold))
@@ -195,6 +219,13 @@ private struct PDFComparisonReportView: View {
             .navigationTitle("Comparison Report")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .sheet(item: $preview) { request in
+                ComparisonPagePreview(
+                    request: request,
+                    originalName: originalName,
+                    revisedName: revisedName
+                )
+            }
         }
     }
 
@@ -206,5 +237,103 @@ private struct PDFComparisonReportView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 3)
+    }
+}
+
+private struct ComparisonPreviewRequest: Identifiable {
+    let id = UUID()
+    let originalData: Data?
+    let revisedData: Data?
+    let originalPageIndex: Int?
+    let revisedPageIndex: Int?
+    let title: String
+}
+
+private struct ComparisonPagePreview: View {
+    enum Side: String, CaseIterable, Identifiable {
+        case original = "Original"
+        case revised = "Revised"
+        var id: Self { self }
+    }
+
+    let request: ComparisonPreviewRequest
+    let originalName: String
+    let revisedName: String
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @State private var side: Side
+
+    init(request: ComparisonPreviewRequest, originalName: String, revisedName: String) {
+        self.request = request
+        self.originalName = originalName
+        self.revisedName = revisedName
+        _side = State(initialValue: request.originalPageIndex == nil ? .revised : .original)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if horizontalSizeClass == .regular,
+                   request.originalData != nil,
+                   request.revisedData != nil {
+                    HStack(spacing: 0) {
+                        pagePreview(.original)
+                        Divider()
+                        pagePreview(.revised)
+                    }
+                } else {
+                    VStack(spacing: 0) {
+                        if request.originalData != nil && request.revisedData != nil {
+                            Picker("Document", selection: $side) {
+                                ForEach(Side.allCases) { Text($0.rawValue).tag($0) }
+                            }
+                            .pickerStyle(.segmented)
+                            .padding()
+                        }
+                        pagePreview(availableSide)
+                    }
+                }
+            }
+            .background(FolikTheme.canvas)
+            .navigationTitle(request.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+        }
+    }
+
+    private var availableSide: Side {
+        if side == .original, request.originalData != nil { return .original }
+        if side == .revised, request.revisedData != nil { return .revised }
+        return request.originalData == nil ? .revised : .original
+    }
+
+    @ViewBuilder
+    private func pagePreview(_ side: Side) -> some View {
+        let data = side == .original ? request.originalData : request.revisedData
+        let pageIndex = side == .original ? request.originalPageIndex : request.revisedPageIndex
+        let name = side == .original ? originalName : revisedName
+        VStack(spacing: 8) {
+            Text("\(side.rawValue): \(name)")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(FolikTheme.mutedInk)
+                .lineLimit(2)
+                .padding(.horizontal)
+            if let data, let pageIndex {
+                ReadOnlyPDFPreview(data: data, pageIndex: pageIndex)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(side.rawValue) preview, page \(pageIndex + 1)")
+                    .accessibilityIdentifier("compare.preview.\(side.rawValue.lowercased()).\(pageIndex + 1)")
+            } else {
+                ContentUnavailableView(
+                    side == .original ? "No Original Page" : "No Revised Page",
+                    systemImage: side == .original ? "minus.circle" : "plus.circle",
+                    description: Text("This page exists only in the other document.")
+                )
+            }
+        }
+        .padding(.top, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

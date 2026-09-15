@@ -9,6 +9,12 @@ private struct LibraryPDFToolRequest: Identifiable {
     var sourceURL: URL? = nil
 }
 
+private struct LibrarySearchLaunch {
+    let documentID: LibraryDocument.ID
+    let pageIndex: Int
+    let query: String
+}
+
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var showingDeleted = false
@@ -32,6 +38,7 @@ struct ContentView: View {
     @State private var searchResult = LibrarySearchResult()
     @State private var searchingText = false
     @State private var searchIndex = LibrarySearchIndex()
+    @State private var searchLaunch: LibrarySearchLaunch?
     @State private var handledDebugLaunch = false
     @State private var isDropTargeted = false
     @Environment(\.openWindow) private var openWindow
@@ -41,7 +48,11 @@ struct ContentView: View {
         NavigationStack(path: $path) {
             libraryRoot
                 .navigationDestination(for: LibraryDocument.self) { item in
-                    ReaderView(item: item, initialPanel: item.id == initialFormDocumentID ? .forms : nil,
+                    let launch = searchLaunch?.documentID == item.id ? searchLaunch : nil
+                    ReaderView(item: item,
+                               initialPanel: launch != nil ? .search : (item.id == initialFormDocumentID ? .forms : nil),
+                               initialPageIndex: launch?.pageIndex,
+                               initialSearchQuery: launch?.query,
                                showScanActions: item.id == scannedDocumentID,
                                scanAction: { tool in pdfToolRequest = LibraryPDFToolRequest(tool: tool, sourceURL: item.url) })
                 }
@@ -194,7 +205,11 @@ struct ContentView: View {
             }
         }
         .onChange(of: path.count) { _, count in
-            if count == 0 { scannedDocumentID = nil; Task { await library.refreshInBackground() } }
+            if count == 0 {
+                scannedDocumentID = nil
+                searchLaunch = nil
+                Task { await library.refreshInBackground() }
+            }
         }
         .onAppear {
             #if DEBUG
@@ -286,11 +301,21 @@ struct ContentView: View {
             openTools: { toolsPresented = true },
             openSettings: { isSettingsPresented = true },
             openRecentlyDeleted: { showingDeleted = true },
-            openDocument: { path.append($0) },
+            openDocument: {
+                searchLaunch = nil
+                path.append($0)
+            },
+            openSearchHit: { document, hit in
+                searchLaunch = LibrarySearchLaunch(
+                    documentID: document.id,
+                    pageIndex: max(0, hit.page - 1),
+                    query: searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+                path.append(document)
+            },
             openDocumentWindow: supportsMultipleWindows ? { document in
                 openWindow(id: "pdf", value: document.id.uuidString)
             } : nil,
-            deleteDocument: library.delete,
             openDocumentTool: { tool, document in
                 pdfToolRequest = LibraryPDFToolRequest(tool: tool, sourceURL: document.url)
             }

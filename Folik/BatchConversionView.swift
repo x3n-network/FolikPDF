@@ -20,6 +20,13 @@ struct BatchConversionView: View {
     @State private var status = ""
     @State private var error: String?
     @State private var task: Task<Void, Never>?
+    @State private var hasDraftChanges = false
+    @State private var confirmingDiscard = false
+
+    private var hasDiscardableWork: Bool {
+        hasDraftChanges && (!sources.isEmpty || !outputs.isEmpty)
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -28,9 +35,9 @@ struct BatchConversionView: View {
                     Text(isLibraryMerge ? "Combine 2–20 PDFs in the order below, up to 100 MB total. Review the merged pages before saving a new copy. Your originals are kept." : "Up to 20 files and 100 MB total. PDFs, supported Office files, TXT/RTF, and images. Reorder files before preparing the PDFs.")
                         .font(.footnote).foregroundStyle(.secondary)
                     if !isLibraryMerge {
-                        Toggle("Combine into one PDF", isOn: $combined).disabled(busy).accessibilityIdentifier("batch.combine")
+                        Toggle("Combine into one PDF", isOn: combinedBinding).disabled(busy).accessibilityIdentifier("batch.combine")
                     }
-                    if combined { TextField("Combined filename", text: $filename).disabled(busy) }
+                    if combined { TextField("Combined filename", text: filenameBinding).disabled(busy) }
                 }
                 Section("Source order") {
                     ForEach(Array(sources.enumerated()), id: \.element.id) { index, source in
@@ -38,9 +45,9 @@ struct BatchConversionView: View {
                             Text("\(index + 1). \(source.name).\(source.extensionName)").lineLimit(2)
                             Spacer()
                             Menu("Actions") {
-                                if index > 0 { Button("Move Up") { sources.swapAt(index, index - 1); outputs = [] } }
-                                if index + 1 < sources.count { Button("Move Down") { sources.swapAt(index, index + 1); outputs = [] } }
-                                Button("Remove", role: .destructive) { sources.remove(at: index); outputs = [] }
+                                if index > 0 { Button("Move Up") { moveSource(from: index, to: index - 1) } }
+                                if index + 1 < sources.count { Button("Move Down") { moveSource(from: index, to: index + 1) } }
+                                Button("Remove", role: .destructive) { removeSource(at: index) }
                             }.disabled(busy).accessibilityLabel("Actions for \(source.name)")
                         }
                     }
@@ -62,7 +69,7 @@ struct BatchConversionView: View {
                 }
             }
             .navigationTitle(isLibraryMerge ? "Merge PDFs" : "Batch to PDF").navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { task?.cancel(); dismiss() }.disabled(saving) } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel", action: requestDismissal).disabled(saving) } }
             .safeAreaInset(edge: .bottom) {
                 Button(outputs.isEmpty ? (isLibraryMerge ? "Preview Merged PDF" : "Prepare PDFs") : (isLibraryMerge ? "Save Merged Copy" : "Save All to Library")) { outputs.isEmpty ? prepare() : save() }
                     .buttonStyle(.borderedProminent).frame(minHeight: 48).padding().disabled(busy || !canPrepare)
@@ -83,27 +90,35 @@ struct BatchConversionView: View {
                         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { review = nil } } }
                 }
             }
-            .onChange(of: combined) { outputs = [] }
-            .onChange(of: filename) { outputs = [] }
             .onDisappear { task?.cancel() }
-            .interactiveDismissDisabled(saving)
+            .confirmationDialog("Discard batch?", isPresented: $confirmingDiscard, titleVisibility: .visible) {
+                Button("Discard Batch", role: .destructive) {
+                    task?.cancel()
+                    dismiss()
+                }
+                Button("Keep Editing") {}
+            } message: {
+                Text("Selected files, their order, and prepared results will be lost. Your originals are unchanged.")
+            }
+            .interactiveDismissDisabled(saving || hasDiscardableWork)
             .onAppear {
                 guard !loadedInitialSources else { return }
                 loadedInitialSources = true
                 if isLibraryMerge {
                     combined = true
-                    load(libraryDocuments.map(\.url))
+                    load(libraryDocuments.map(\.url), marksDraft: false)
                     return
                 }
                 #if DEBUG
                 if ProcessInfo.processInfo.arguments.contains("--ui-test-batch") && sources.isEmpty {
                     sources = [BatchSource(name: "First", extensionName: "txt", data: Data("FIRST BATCH MARKER".utf8)), BatchSource(name: "Second", extensionName: "txt", data: Data("SECOND BATCH MARKER".utf8))]
+                    hasDraftChanges = true
                 }
                 #endif
             }
         }
     }
-    private func load(_ urls: [URL]) {
+    private func load(_ urls: [URL], marksDraft: Bool = true) {
         guard urls.count + sources.count <= 20 else { error = "Choose at most 20 files."; return }
         busy = true; outputs = []; error = nil; status = "Reading files…"
         let existingBytes = sources.reduce(0) { $0 + $1.data.count }
@@ -112,7 +127,9 @@ struct BatchConversionView: View {
             do {
                 let worker = Task.detached { try BatchConversion.load(urls, existingBytes: existingBytes) }
                 let loaded = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
-                try Task.checkCancellation(); sources += loaded
+                try Task.checkCancellation()
+                sources += loaded
+                if marksDraft && !loaded.isEmpty { hasDraftChanges = true }
             } catch is CancellationError { } catch { self.error = error.localizedDescription }
         }
     }
@@ -127,6 +144,7 @@ struct BatchConversionView: View {
             do {
                 let prepared = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
                 try Task.checkCancellation(); outputs = prepared
+                hasDraftChanges = true
                 if isLibraryMerge { review = prepared.first?.preview }
             } catch is CancellationError { } catch { self.error = error.localizedDescription }
         }
@@ -137,6 +155,49 @@ struct BatchConversionView: View {
             defer { saving = false; busy = false }
             do { _ = try await library.importBatchPDFs(outputs); didSave?(); dismiss() }
             catch { self.error = error.localizedDescription }
+        }
+    }
+
+    private var combinedBinding: Binding<Bool> {
+        Binding(
+            get: { combined },
+            set: {
+                combined = $0
+                outputs = []
+                hasDraftChanges = true
+            }
+        )
+    }
+
+    private var filenameBinding: Binding<String> {
+        Binding(
+            get: { filename },
+            set: {
+                filename = $0
+                outputs = []
+                hasDraftChanges = true
+            }
+        )
+    }
+
+    private func moveSource(from source: Int, to destination: Int) {
+        sources.swapAt(source, destination)
+        outputs = []
+        hasDraftChanges = true
+    }
+
+    private func removeSource(at index: Int) {
+        sources.remove(at: index)
+        outputs = []
+        hasDraftChanges = true
+    }
+
+    private func requestDismissal() {
+        if hasDiscardableWork {
+            confirmingDiscard = true
+        } else {
+            task?.cancel()
+            dismiss()
         }
     }
 }

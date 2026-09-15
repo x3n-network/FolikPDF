@@ -438,7 +438,7 @@ final class Release104Tests: XCTestCase {
         let bounded = LibrarySearchIndex(cacheURL: root.appendingPathComponent("bounded.json"), documentCacheLimit: 24, archiveCacheLimit: 24)
         let result = try await bounded.search("needle", documents: [document])
         XCTAssertEqual(result.matchingPageCounts[url], 4)
-        XCTAssertEqual(result.hits[url]?.map(\.page), [2, 3, 4])
+        XCTAssertEqual(result.hits[url]?.map(\.page), [2, 3, 4, 5])
         let peak = await bounded.peakRetainedDocumentTextBytes
         XCTAssertLessThanOrEqual(peak, 24)
         let index = LibrarySearchIndex(cacheURL: root.appendingPathComponent("warm.json"))

@@ -5,7 +5,7 @@ nonisolated struct LibrarySearchRequest: Hashable {
     let query: String
     let documents: [LibraryDocument]
 }
-nonisolated struct LibrarySearchHit: Sendable {
+nonisolated struct LibrarySearchHit: Sendable, Hashable {
     let page: Int
     let excerpt: String
 }
@@ -54,6 +54,7 @@ nonisolated enum LibrarySearch {
     }
 
     struct DocumentMatches {
+        private static let maximumRetainedHits = 50
         let query: String
         private(set) var hasText = false
         private(set) var matchingPages = 0
@@ -63,7 +64,7 @@ nonisolated enum LibrarySearch {
             if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { hasText = true }
             guard !query.isEmpty, let range = text.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) else { return }
             matchingPages += 1
-            guard hits.count < 3 else { return }
+            guard hits.count < Self.maximumRetainedHits else { return }
             let start = text.index(range.lowerBound, offsetBy: -35, limitedBy: text.startIndex) ?? text.startIndex
             let end = text.index(range.upperBound, offsetBy: 80, limitedBy: text.endIndex) ?? text.endIndex
             let excerpt = text[start..<end].split(whereSeparator: \.isWhitespace).joined(separator: " ")

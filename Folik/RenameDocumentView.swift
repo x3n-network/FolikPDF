@@ -2,13 +2,15 @@ import SwiftUI
 
 struct RenameDocumentView: View {
     let document: LibraryDocument
+    var onRename: (LibraryDocument) -> Void = { _ in }
     @EnvironmentObject private var library: DocumentLibrary
     @Environment(\.dismiss) private var dismiss
     @State private var name: String
     @State private var error: String?
 
-    init(document: LibraryDocument) {
+    init(document: LibraryDocument, onRename: @escaping (LibraryDocument) -> Void = { _ in }) {
         self.document = document
+        self.onRename = onRename
         _name = State(initialValue: document.displayName)
     }
 
@@ -33,8 +35,9 @@ struct RenameDocumentView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Rename") {
                         do {
-                            try library.rename(document, to: name)
+                            let renamed = try library.rename(document, to: name)
                             dismiss()
+                            onRename(renamed)
                         } catch {
                             self.error = error.localizedDescription
                         }

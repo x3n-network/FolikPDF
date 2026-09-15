@@ -6,6 +6,7 @@ struct FormBuilderToolbar: View {
     let showFields: () -> Void
     let fill: () -> Void
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var editingProperties = false
     @State private var layoutTools = false
     @State private var label = ""
@@ -13,37 +14,60 @@ struct FormBuilderToolbar: View {
 
     var body: some View {
         Group {
-            if verticalSizeClass == .compact {
-                ScrollView(.horizontal) {
-                    HStack(spacing: 12) {
-                        Button("Fields", action: showFields).accessibilityIdentifier("reader.panel.forms")
-                        layoutButton
-                        Button("Fill", action: fill).accessibilityIdentifier("builder.fill")
-                        Menu("Add field") {
-                            ForEach(FormFieldPlacementKind.allCases) { kind in
-                                Button(kind.title) { session.beginQuickFormFieldPlacement(kind) }
-                            }
-                        }
-                        if session.formFieldPlacement != nil {
-                            Button("Place center", action: session.placeAnnotationAtCurrentPageCenter)
-                                .accessibilityIdentifier("reader.annotation.placeCenter")
-                        }
-                        Button("Arrange", action: session.arrangeFormFields).accessibilityIdentifier("builder.arrange")
-                        if let field = session.selectedAuthoredFormField {
-                            Button("Edit label") {
-                                label = field.title; required = field.isRequired; editingProperties = true
-                            }.accessibilityIdentifier("builder.properties")
-                            Button("Duplicate", action: session.duplicateSelectedFormField).accessibilityIdentifier("builder.duplicate")
-                        }
-                        Button("Undo", action: session.undoAnnotationAction).disabled(!session.canUndoAnnotation)
-                            .accessibilityIdentifier("builder.undo")
-                        Button("Redo", action: session.redoAnnotationAction).disabled(!session.canRedoAnnotation)
+            if verticalSizeClass == .compact || dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 6) {
+                    if verticalSizeClass != .compact, session.formFieldPlacement != nil {
+                        Button("Place center", action: session.placeAnnotationAtCurrentPageCenter)
+                            .buttonStyle(.borderedProminent)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .accessibilityIdentifier("reader.annotation.placeCenter")
                     }
-                    .buttonStyle(.bordered)
-                    .frame(minHeight: 44)
+                    ScrollView(.horizontal) {
+                        HStack(spacing: 12) {
+                            if verticalSizeClass == .compact, session.formFieldPlacement != nil {
+                                Button("Place center", action: session.placeAnnotationAtCurrentPageCenter)
+                                    .accessibilityIdentifier("reader.annotation.placeCenter")
+                            }
+                            Button("Fields", action: showFields).accessibilityIdentifier("reader.panel.forms")
+                            layoutButton
+                            Button("Fill", action: fill).accessibilityIdentifier("builder.fill")
+                            Button("Arrange", action: session.arrangeFormFields).accessibilityIdentifier("builder.arrange")
+                            if verticalSizeClass == .compact {
+                                Menu("Add field") {
+                                    ForEach(FormFieldPlacementKind.allCases) { kind in
+                                        Button(kind.title) { session.beginQuickFormFieldPlacement(kind) }
+                                    }
+                                }
+                            } else {
+                                ForEach(FormFieldPlacementKind.allCases) { kind in
+                                    Button(kind.title) { session.beginQuickFormFieldPlacement(kind) }
+                                        .accessibilityLabel("Add \(kind.title.lowercased())")
+                                        .accessibilityIdentifier("builder.add.\(kind.rawValue)")
+                                }
+                            }
+                            if let field = session.selectedAuthoredFormField {
+                                Button("Edit label") {
+                                    label = field.title; required = field.isRequired; editingProperties = true
+                                }.accessibilityIdentifier("builder.properties")
+                                Button("Duplicate", action: session.duplicateSelectedFormField).accessibilityIdentifier("builder.duplicate")
+                            }
+                            Button("Undo", action: session.undoAnnotationAction).disabled(!session.canUndoAnnotation)
+                                .accessibilityIdentifier("builder.undo")
+                            Button("Redo", action: session.redoAnnotationAction).disabled(!session.canRedoAnnotation)
+                        }
+                        .buttonStyle(.bordered)
+                        .frame(minHeight: 44)
+                    }
                 }
             } else {
                 VStack(spacing: 6) {
+                    if session.formFields.isEmpty && session.formFieldPlacement == nil {
+                        Label("Choose a field type, then tap the page.", systemImage: "hand.tap")
+                            .font(.caption)
+                            .foregroundStyle(FolikTheme.mutedInk)
+                            .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+                            .accessibilityIdentifier("builder.guidance")
+                    }
                     HStack(spacing: 8) {
                         Button("Fields", action: showFields)
                             .accessibilityIdentifier("reader.panel.forms")
@@ -86,16 +110,9 @@ struct FormBuilderToolbar: View {
                             VStack { placementActions }
                         }
                     } else if let field = session.selectedAuthoredFormField {
-                        HStack(spacing: 8) {
-                            Button("Edit label") {
-                                label = field.title
-                                required = field.isRequired
-                                editingProperties = true
-                            }
-                            .accessibilityIdentifier("builder.properties")
-                            Button("Duplicate", action: session.duplicateSelectedFormField)
-                                .accessibilityIdentifier("builder.duplicate")
-                            Spacer(minLength: 0)
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 8) { selectedFieldActions(field) }
+                            VStack(alignment: .leading, spacing: 6) { selectedFieldActions(field) }
                         }
                         .buttonStyle(.bordered)
                         .frame(minHeight: 44)
@@ -108,7 +125,7 @@ struct FormBuilderToolbar: View {
             }
         }
         .font(.subheadline)
-        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility5)
         .sheet(isPresented: $layoutTools) { FormLayoutToolsView(session: session) }
         .sheet(isPresented: $editingProperties) {
             NavigationStack {
@@ -150,6 +167,24 @@ struct FormBuilderToolbar: View {
         Button("Arrange", action: session.arrangeFormFields)
             .frame(minHeight: 44)
             .accessibilityIdentifier("builder.arrange")
+    }
+
+    @ViewBuilder private func selectedFieldActions(_ field: FormField) -> some View {
+        Label(field.isRequired ? "\(field.title) · Required" : field.title, systemImage: "list.clipboard")
+            .font(.caption.weight(.semibold))
+            .lineLimit(1)
+            .foregroundStyle(FolikTheme.mutedInk)
+            .accessibilityLabel("Selected field: \(field.title)\(field.isRequired ? ", required" : "")")
+        Spacer(minLength: 0)
+        Button("Edit") {
+            label = field.title
+            required = field.isRequired
+            editingProperties = true
+        }
+        .accessibilityLabel("Edit field details")
+        .accessibilityIdentifier("builder.properties")
+        Button("Duplicate", action: session.duplicateSelectedFormField)
+            .accessibilityIdentifier("builder.duplicate")
     }
 
     private func shortTitle(_ kind: FormFieldPlacementKind) -> String {

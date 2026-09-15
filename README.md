@@ -42,7 +42,7 @@ Current development version: **1.0.4**. See the [1.0.4 release notes](docs/RELEA
 - Combine 2–20 selected library PDFs, review the merged result, and save a new copy
 - Restore one or several PDFs from Recently Deleted with their folders, tags, favorites, bookmarks, and reading position; bulk permanent deletion requires confirmation
 - Rename, duplicate, favorite, and sort documents, or select several to organize, share, favorite, or remove together
-- Search filenames, folders, tags, and selectable PDF text across the library with a private disposable index, matching-page counts, and highlighted excerpts
+- Search filenames, folders, tags, and selectable PDF text across the library with a private disposable index, matching-page counts, highlighted excerpts, and expandable matching-page results
 - Read PDFs with native PDFKit rendering
 - Resume each PDF at its last-viewed page and restore its continuous, single-page, or two-page layout, with a dismissible Continue Reading card
 - Browse page thumbnails and switch to Contents within the Pages panel
@@ -95,6 +95,8 @@ Choose **Add (+) → Protect PDF** to create a new PDF that requires a password 
 
 ### Local PDF comparison
 
+Each changed, added, or removed result can open a corresponding original/revised page preview.
+
 Choose **Add (+) → Compare PDFs**, or begin from a document's **… → Tools** menu, to compare selectable text in two PDFs entirely on-device. Folik aligns identical pages using their normalized extracted text so inserted or removed pages do not automatically make every later page look changed. The report counts aligned, added, removed, and changed pages and provides bounded before/after excerpts.
 
 This is a text-and-page-structure comparison, not a visual or cryptographic comparison. It does not detect changes limited to images, positioning, fonts, colors, annotations, or other appearance details. Scanned PDFs need searchable copies from OCR first. Protected PDFs are rejected. Each input is limited to 100 MB, 500 pages, and 16 MB of extracted text; nothing is uploaded or retained as a comparison history.
@@ -113,13 +115,15 @@ Drop one or more PDFs from Files or another app anywhere over the Folik library 
 
 ### Batch conversion
 
-Choose **Add (+) → Batch to PDF** for up to 20 files and 100 MB total. Add PDFs, supported Office documents, TXT/RTF, or images; move items up/down or remove them before preparing separate PDFs or one combined document. Review each prepared result and its conversion notes, then save the batch. Duplicate filenames get unique suffixes. Preparation failures save nothing; library saving stages and validates every PDF first and rolls back newly moved files on a handled failure. Originals remain unchanged. Combined PDFs can change outlines and page destinations, and retain the conversion limits of each source format.
+Choose **Add (+) → Batch to PDF** for up to 20 files and 100 MB total. Add PDFs, supported Office documents, TXT/RTF, or images; move items up/down or remove them before preparing separate PDFs or one combined document. Review each prepared result and its conversion notes, then save the batch. Folik asks before discarding a changed batch. Duplicate filenames get unique suffixes. Preparation failures save nothing; library saving stages and validates every PDF first and rolls back newly moved files on a handled failure. Originals remain unchanged. Combined PDFs can change outlines and page destinations, and retain the conversion limits of each source format.
 
 ### Library organization and search
 
+Tap a matching page excerpt to open that exact page with the query active in Find.
+
 Use a document’s **… → Organize** menu to assign a virtual folder and comma-separated tags. Folder and tag filters narrow the library without moving or renaming files. Organization is stored atomically in an app-local sidecar; unreadable metadata is not silently overwritten. Folder names are limited to 80 characters, with up to 20 tags of 40 characters each.
 
-Library search matches filenames, folder/tag labels, and selectable PDF text, with matching-page counts and up to three highlighted excerpts. Search runs off the main thread, debounces typing, and cancels superseded requests. To make repeat searches fast, extracted text is kept in a bounded, disposable cache protected by iOS file protection; entries are invalidated when a source PDF changes and stale entries are removed. Nothing is uploaded, and the cache is never required to open a document. Locked, unreadable, or oversized documents are skipped with a count. Scanned documents need OCR first.
+Library search matches filenames, folder/tag labels, and selectable PDF text, with matching-page counts and highlighted excerpts. A compact first set is shown initially; expand a result to reveal the remaining retained matching pages. Search runs off the main thread, debounces typing, and cancels superseded requests. To make repeat searches fast, extracted text is kept in a bounded, disposable cache protected by iOS file protection; entries are invalidated when a source PDF changes and stale entries are removed. Nothing is uploaded, and the cache is never required to open a document. Locked, unreadable, or oversized documents are skipped with a count. Scanned documents need OCR first.
 
 ### PDF compression
 
@@ -233,6 +237,8 @@ Folik is available under the [MIT License](LICENSE).
 The practice PDF is bundled at `Folik/Resources/SampleForm.pdf` and copied only when requested. Rebuild it with `python3 Tools/create_sample_form.py` in a development environment with ReportLab installed. ReportLab is not an app runtime dependency. Tests verify field independence, saved canonical form values, fresh blank copies, and the sample UI workflow.
 
 ### Offline form templates
+
+Template rows include first-page thumbnails. Personal templates can also be renamed from the gallery without changing their PDF contents.
 
 Choose **Add & Tools → Form Templates** (or **Browse Form Templates** in an empty library) to preview a Work Order, Inspection Checklist, or Meeting Notes form. **Start Form** saves an independent fillable copy and opens Fill mode. Templates are bundled, require no download, and stay blank for next time. Use Build to customize your copy.
 

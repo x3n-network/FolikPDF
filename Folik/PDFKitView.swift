@@ -57,6 +57,7 @@ struct PDFKitView: UIViewRepresentable {
 
         private let session: DocumentSession
         private var isObserving = false
+        private var scrollOffsetObservation: NSKeyValueObservation?
         private var isPageReportScheduled = false
         private var isSelectionReportScheduled = false
         private var drawingPage: PDFPage?
@@ -151,6 +152,11 @@ struct PDFKitView: UIViewRepresentable {
             if let scrollView = findScrollView(in: pdfView) {
                 scrollView.panGestureRecognizer.addTarget(self, action: #selector(viewportGestureChanged(_:)))
                 scrollView.pinchGestureRecognizer?.addTarget(self, action: #selector(viewportGestureChanged(_:)))
+                scrollOffsetObservation = scrollView.observe(\.contentOffset, options: [.new]) { [weak self] _, _ in
+                    MainActor.assumeIsolated {
+                        self?.updateAnnotationSelectionOverlay()
+                    }
+                }
             }
         }
 
@@ -158,6 +164,8 @@ struct PDFKitView: UIViewRepresentable {
             pdfView.endEditing(true)
             session.commitPendingEdits = nil
             pendingRestore = nil
+            scrollOffsetObservation?.invalidate()
+            scrollOffsetObservation = nil
             if let scrollView = findScrollView(in: pdfView) {
                 scrollView.panGestureRecognizer.removeTarget(self, action: #selector(viewportGestureChanged(_:)))
                 scrollView.pinchGestureRecognizer?.removeTarget(self, action: #selector(viewportGestureChanged(_:)))
@@ -185,14 +193,23 @@ struct PDFKitView: UIViewRepresentable {
         private func updateAuthoredFormFieldOverlay() {
             authoredFormFieldLayer.frame = CGRect(origin: .zero, size: pdfView.bounds.size)
             let path = UIBezierPath()
-            for field in session.formFields where field.annotation.contents == "Folik form field" {
+            for field in session.formFields where field.isAuthoredByFolik {
                 guard let page = pdfView.document?.page(at: field.pageIndex) else { continue }
                 let viewBounds = annotationViewBounds(field.annotation, on: page)
                 guard viewBounds.intersects(pdfView.bounds.insetBy(dx: -20, dy: -20)) else { continue }
                 path.append(UIBezierPath(roundedRect: viewBounds, cornerRadius: 3))
             }
+            // PDFKit can temporarily omit a widget's native border after focus or while its
+            // tiled page view is being recycled. Keep our non-interactive outline visible in
+            // both Build and Fill so the field does not appear to vanish.
+            authoredFormFieldLayer.fillColor = session.formMode == .build
+                ? FolikTheme.annotationBlue.withAlphaComponent(0.06).cgColor
+                : UIColor.clear.cgColor
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
             authoredFormFieldLayer.path = path.cgPath
-            authoredFormFieldLayer.isHidden = path.isEmpty || session.formMode == .fill
+            authoredFormFieldLayer.isHidden = path.isEmpty
+            CATransaction.commit()
         }
 
         func gestureRecognizer(
@@ -274,6 +291,7 @@ struct PDFKitView: UIViewRepresentable {
                 pageIndex: document.index(for: page),
                 point: pdfView.convert(viewPoint, to: page)
             )
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
         }
 
         @objc private func handleAnnotationSelectionTap(_ gesture: UITapGestureRecognizer) {

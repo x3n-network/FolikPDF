@@ -312,7 +312,13 @@ struct FormField: Identifiable {
     }
 
     var isEditable: Bool { !isReadOnly && kind.supportsEditing }
-    var isAuthoredByFolik: Bool { annotation.contents == "Folik form field" }
+    var isAuthoredByFolik: Bool {
+        if annotation.contents == "Folik form field" { return true }
+        guard let rawKind = annotation.value(
+            forAnnotationKey: PDFAnnotationKey(rawValue: "FolikFieldKind")
+        ) as? String else { return false }
+        return FormFieldPlacementKind(rawValue: rawKind) != nil
+    }
 
     var limitation: String? {
         switch kind {
@@ -440,6 +446,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
     @Published var errorMessage: String?
 
     private var currentSelection: PDFSelection?
+    private var pendingSearchTargetPageIndex: Int?
     private var savedFormValues: [String: FormFieldSnapshot] = [:]
     private var lastVisitedFormFieldLogicalID: String?
     private var annotationUndoStack: [AnnotationHistoryAction] = []
@@ -1130,9 +1137,10 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         command = PDFReaderCommand(action: .setLayout(layout))
     }
 
-    func search(for query: String) {
+    func search(for query: String, openingPageIndex: Int? = nil) {
         guard let document else { return }
         let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        pendingSearchTargetPageIndex = openingPageIndex
         searchQuery = normalized
         document.cancelFindString()
         searchMatches = []
@@ -1164,7 +1172,15 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
             pageIndex: document.index(for: page),
             excerpt: contextualExcerpt?.nilIfEmpty ?? excerpt?.nilIfEmpty ?? "Match"
         ))
-        if selectedSearchMatchIndex == nil { selectedSearchMatchIndex = 0 }
+        let appendedIndex = searchMatches.count - 1
+        let matchedPageIndex = document.index(for: page)
+        if pendingSearchTargetPageIndex == matchedPageIndex {
+            pendingSearchTargetPageIndex = nil
+            selectedSearchMatchIndex = appendedIndex
+            command = PDFReaderCommand(action: .goToSelection(instance))
+        } else if selectedSearchMatchIndex == nil {
+            selectedSearchMatchIndex = 0
+        }
     }
 
     func documentDidEndPageFind(_ notification: Notification) {
@@ -1175,6 +1191,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
     func documentDidEndDocumentFind(_ notification: Notification) {
         searchedPageCount = pageCount
         isSearching = false
+        pendingSearchTargetPageIndex = nil
     }
 
     func noteFormEditing() {
@@ -1512,9 +1529,15 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         bounds: CGRect,
         fieldName: String
     ) -> PDFAnnotation {
-        let annotation: PDFAnnotation = placement.kind == .signature
-            ? VisibleSignatureField(bounds: bounds, forType: .widget, withProperties: nil)
-            : PDFAnnotation(bounds: bounds, forType: .widget, withProperties: nil)
+        let annotation: PDFAnnotation
+        switch placement.kind {
+        case .signature:
+            annotation = VisibleSignatureField(bounds: bounds, forType: .widget, withProperties: nil)
+        case .checkbox:
+            annotation = VisibleCheckboxField(bounds: bounds, forType: .widget, withProperties: nil)
+        default:
+            annotation = PDFAnnotation(bounds: bounds, forType: .widget, withProperties: nil)
+        }
         switch placement.kind {
         case .text, .multilineText, .date:
             annotation.widgetFieldType = .text
@@ -2100,6 +2123,17 @@ private extension String {
 }
 
 final class VisibleSignatureField: PDFAnnotation {
+    override func draw(with box: PDFDisplayBox, in context: CGContext) {
+        super.draw(with: box, in: context)
+        context.saveGState()
+        context.setStrokeColor(FolikTheme.annotationBlue.cgColor)
+        context.setLineWidth(1.5)
+        context.stroke(bounds.insetBy(dx: 0.75, dy: 0.75))
+        context.restoreGState()
+    }
+}
+
+final class VisibleCheckboxField: PDFAnnotation {
     override func draw(with box: PDFDisplayBox, in context: CGContext) {
         super.draw(with: box, in: context)
         context.saveGState()

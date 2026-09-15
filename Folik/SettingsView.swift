@@ -45,6 +45,15 @@ struct SettingsView: View {
                     .accessibilityIdentifier("settings.recentlyDeleted")
                 }
 
+                Section("Help") {
+                    NavigationLink {
+                        FolikHelpView()
+                    } label: {
+                        Label("Using Folik", systemImage: "questionmark.circle")
+                    }
+                    .accessibilityIdentifier("settings.help")
+                }
+
                 Section("Automation") {
                     ShortcutsLink()
                         .accessibilityIdentifier("settings.shortcuts")
@@ -156,6 +165,79 @@ struct SettingsView: View {
             }
         }
         .tint(FolikTheme.cobalt)
+    }
+}
+
+private struct FolikHelpView: View {
+    var body: some View {
+        List {
+            Section("Getting started") {
+                helpRow(
+                    "Open, sign, and share",
+                    icon: "signature",
+                    detail: "Choose a PDF or scan paper, open Forms or Annotations to sign it, then use Share to create an editable or flattened copy."
+                )
+                helpRow(
+                    "Find text",
+                    icon: "magnifyingglass",
+                    detail: "Search your whole library from Library. Tap a matching excerpt to open that page in Find. Scans need Make PDF Searchable first."
+                )
+                helpRow(
+                    "Keep work organized",
+                    icon: "folder",
+                    detail: "Use a document’s actions to rename, favorite, duplicate, add folders or tags, or open PDF tools."
+                )
+            }
+
+            Section("Forms") {
+                helpRow(
+                    "Fill",
+                    icon: "list.clipboard",
+                    detail: "Use Fill for existing fields, completion progress, required-field review, and signing. Entries save into your local library copy."
+                )
+                helpRow(
+                    "Build",
+                    icon: "hammer",
+                    detail: "Make a fillable copy, choose a field type, and tap repeatedly to place fields. Arrange, edit, duplicate, align, and reorder them without changing the original PDF."
+                )
+            }
+
+            Section("Sharing") {
+                helpRow(
+                    "Editable copy",
+                    icon: "square.and.arrow.up",
+                    detail: "Keeps supported forms and annotations editable for compatible PDF apps."
+                )
+                helpRow(
+                    "Flattened copy",
+                    icon: "checkmark.seal",
+                    detail: "Makes visible entries and annotations part of each page. Review the preview because editing, search, links, and accessibility text may be removed."
+                )
+            }
+
+            Section {
+                Text("Folik works locally and never uploads your documents. Keep an original copy of important PDFs while checking compatibility with the apps used by your recipients.")
+                    .font(.footnote)
+                    .foregroundStyle(FolikTheme.mutedInk)
+            }
+        }
+        .navigationTitle("Using Folik")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func helpRow(_ title: String, icon: String, detail: String) -> some View {
+        Label {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.body.weight(.semibold))
+                Text(detail).font(.footnote).foregroundStyle(FolikTheme.mutedInk)
+            }
+            .padding(.vertical, 4)
+        } icon: {
+            Image(systemName: icon)
+                .foregroundStyle(FolikTheme.cobalt)
+                .accessibilityHidden(true)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

@@ -531,6 +531,34 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["2 matching pages"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Page 1:'")).firstMatch.exists)
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Page 2:'")).firstMatch.exists)
+
+        let pageTwo = app.buttons["library.searchHit.Folik UI Test.pdf.2"]
+        XCTAssertTrue(pageTwo.waitForExistence(timeout: 5))
+        pageTwo.tap()
+        XCTAssertTrue(app.textFields["reader.find.query"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.textFields["reader.find.query"].value as? String, "Folik searchable")
+        let pageStatus = app.staticTexts["reader.pageStatus"]
+        expectation(for: NSPredicate(format: "label == 'Page 2 of 2'"), evaluatedWith: pageStatus)
+        waitForExpectations(timeout: 10)
+    }
+
+    func testLibrarySearchCanExpandMatchingPages() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-search-many-pages"]
+        app.launch()
+
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.tap()
+        search.typeText("Folik searchable")
+
+        XCTAssertTrue(app.staticTexts["6 matching pages"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["library.searchHit.Folik UI Test.pdf.5"].exists)
+        let toggle = app.buttons["library.searchHits.toggle.Folik UI Test.pdf"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        toggle.tap()
+        XCTAssertTrue(app.buttons["library.searchHit.Folik UI Test.pdf.5"].waitForExistence(timeout: 5))
+        XCTAssertEqual(toggle.label, "Show fewer matching pages")
     }
 
     func testLibraryDocumentCanBeDuplicated() {
@@ -544,6 +572,13 @@ final class FolikUITests: XCTestCase {
 
         XCTAssertTrue(app.buttons["library.document.Folik UI Test Copy.pdf"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["library.document.Folik UI Test.pdf"].exists)
+        XCTAssertTrue(app.staticTexts["Created Folik UI Test Copy"].waitForExistence(timeout: 3))
+        let undo = app.buttons["Undo"]
+        XCTAssertTrue(undo.exists)
+        undo.tap()
+        XCTAssertFalse(app.buttons["library.document.Folik UI Test Copy.pdf"].exists)
+        XCTAssertTrue(app.buttons["library.document.Folik UI Test.pdf"].exists)
+        XCTAssertFalse(app.buttons["library.recentlyDeleted"].exists)
     }
 
     func testRecentlyDeletedCanRestoreSeveralSelectedDocuments() {
@@ -862,6 +897,16 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Comparison Report"].waitForExistence(timeout: 15))
         XCTAssertTrue(app.buttons["Page 2 added"].exists)
         XCTAssertTrue(app.staticTexts["Text-based result only. Review both PDFs for image, layout, color, annotation, and other visual changes."].exists)
+        app.buttons["Page 2 added"].tap()
+        let preview = app.buttons["Preview changed pages"]
+        XCTAssertTrue(preview.waitForExistence(timeout: 3))
+        preview.tap()
+        XCTAssertTrue(app.navigationBars["Page 2 added"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["compare.preview.revised.2"].waitForExistence(timeout: 3))
+        let originalSide = app.segmentedControls.firstMatch.buttons["Original"]
+        XCTAssertTrue(originalSide.waitForExistence(timeout: 3))
+        originalSide.tap()
+        XCTAssertTrue(app.staticTexts["No Original Page"].waitForExistence(timeout: 3))
     }
 
     func testConversionScreensCanBeCancelledWithoutCreatingDocuments() {
@@ -987,6 +1032,25 @@ final class FolikUITests: XCTestCase {
             if !combined { XCTAssertTrue(app.buttons["library.document.Second.pdf"].exists) }
             app.terminate()
         }
+    }
+
+    func testBatchCancelProtectsSelectedFiles() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-batch"]
+        app.launch()
+
+        app.buttons["library.addDocument"].tap()
+        app.buttons["Batch to PDF"].tap()
+        XCTAssertTrue(app.navigationBars["Batch to PDF"].waitForExistence(timeout: 5))
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.staticTexts["Discard batch?"].waitForExistence(timeout: 3))
+        app.buttons["Keep Editing"].tap()
+        XCTAssertTrue(app.navigationBars["Batch to PDF"].exists)
+
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.buttons["Discard Batch"].waitForExistence(timeout: 3))
+        app.buttons["Discard Batch"].tap()
+        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
     }
 
     func testLibraryOrganizationAndContentSearch() {
@@ -1131,7 +1195,13 @@ final class FolikUITests: XCTestCase {
 
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))
         let settingsElements = app.descendants(matching: .any)
-        XCTAssertTrue(app.staticTexts["Version 1.0.3 (1)"].exists)
+        XCTAssertTrue(app.staticTexts["Version 1.0.4 (1)"].exists)
+        XCTAssertTrue(settingsElements["settings.help"].exists)
+        settingsElements["settings.help"].tap()
+        XCTAssertTrue(app.navigationBars["Using Folik"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Find text"].exists)
+        app.navigationBars["Using Folik"].buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))
         XCTAssertTrue(settingsElements["settings.shortcuts"].waitForExistence(timeout: 3))
         app.swipeUp()
         XCTAssertTrue(settingsElements["settings.website"].exists)
@@ -1512,6 +1582,15 @@ final class FolikUITests: XCTestCase {
         XCTAssertFalse(app.buttons["organizer.page.1"].exists)
         app.buttons["organizer.undo"].tap()
         XCTAssertTrue(app.buttons["organizer.page.1"].waitForExistence(timeout: 3))
+
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.staticTexts["Discard page changes?"].waitForExistence(timeout: 3))
+        app.buttons["Keep Editing"].tap()
+        XCTAssertTrue(app.navigationBars["Organize"].exists)
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.buttons["Discard Changes"].waitForExistence(timeout: 3))
+        app.buttons["Discard Changes"].tap()
+        XCTAssertTrue(app.navigationBars["Folik UI Test"].waitForExistence(timeout: 5))
     }
 
     func testCaptureVersion102Screenshots() throws {

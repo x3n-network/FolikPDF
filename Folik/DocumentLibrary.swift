@@ -48,6 +48,18 @@ final class DocumentLibrary: ObservableObject {
         personalTemplates.removeAll { $0.id == template.id }
     }
 
+    @discardableResult
+    func renameTemplate(_ template: PersonalFormTemplate, to name: String) throws -> PersonalFormTemplate {
+        guard personalTemplates.contains(template),
+              template.url.deletingLastPathComponent().standardizedFileURL == templatesDirectory.standardizedFileURL else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        let renamed = try PersonalTemplateStore.rename(template, to: name, in: templatesDirectory)
+        personalTemplates = personalTemplates.map { $0 == template ? renamed : $0 }
+            .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+        return renamed
+    }
+
     @Published var errorMessage: String?
 
     private let fileManager: FileManager
@@ -362,6 +374,30 @@ final class DocumentLibrary: ObservableObject {
         return copy
     }
 
+    /// Removes a just-created library copy without creating a Recently Deleted record.
+    /// Intended for a short-lived Undo action where the copy did not exist beforehand.
+    func discardNewDocument(_ document: LibraryDocument) throws {
+        guard documents.contains(where: { $0.id == document.id }),
+              document.url.deletingLastPathComponent().standardizedFileURL == documentsDirectory.standardizedFileURL else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        let previous = try LibraryOrganization.load(from: organizationURL)
+        var records = previous
+        records.removeValue(forKey: document.url.lastPathComponent)
+        let staging = documentsDirectory.appendingPathComponent(".discard-\(UUID().uuidString).pdf")
+        try fileManager.moveItem(at: document.url, to: staging)
+        do {
+            try LibraryOrganization.save(records, to: organizationURL)
+        } catch {
+            try? fileManager.moveItem(at: staging, to: document.url)
+            throw error
+        }
+        bookmarkStore.removeBookmarks(for: document.url)
+        readerStateStore.removeState(for: document.url)
+        try? fileManager.removeItem(at: staging)
+        refresh()
+    }
+
     func delete(_ document: LibraryDocument) {
         defer { refresh() }
         do {
@@ -557,8 +593,9 @@ final class DocumentLibrary: ObservableObject {
             bookmarkStore.removeBookmarks(for: fixtureURL)
             readerStateStore.removeState(for: fixtureURL)
             let renderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 612, height: 792))
+            let searchPageCount = ProcessInfo.processInfo.arguments.contains("--ui-test-search-many-pages") ? 6 : 2
             try renderer.writePDF(to: fixtureURL) { context in
-                for pageNumber in 1...2 {
+                for pageNumber in 1...searchPageCount {
                     context.beginPage()
                     NSString(string: "Folik searchable test page \(pageNumber)").draw(
                         at: CGPoint(x: 72, y: 96),

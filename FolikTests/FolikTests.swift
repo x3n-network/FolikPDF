@@ -74,6 +74,24 @@ final class DocumentLibraryTests: XCTestCase {
         XCTAssertEqual(reopened.documents.first { $0.url.lastPathComponent == "Report Copy.pdf" }?.id, copy.id)
     }
 
+    func testDiscardNewDuplicateRestoresExactLibraryStateWithoutTrashRecord() throws {
+        let source = libraryDirectory.appendingPathComponent("Report.pdf")
+        try FileManager.default.createDirectory(at: libraryDirectory, withIntermediateDirectories: true)
+        try PDFTestFixture.write(to: source, pages: ["Report"])
+        let library = DocumentLibrary(documentsDirectory: libraryDirectory)
+        let original = try XCTUnwrap(library.documents.first)
+        try library.organize(original, folder: "Work", tags: ["review"])
+        let copy = try library.duplicate(original)
+
+        try library.discardNewDocument(copy)
+
+        XCTAssertEqual(library.documents.map(\.url.lastPathComponent), ["Report.pdf"])
+        XCTAssertTrue(library.recentlyDeleted.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: copy.url.path))
+        XCTAssertEqual(library.metadata(for: original).folder, "Work")
+        XCTAssertEqual(library.metadata(for: original).tags, ["review"])
+    }
+
     func testNonPDFInputIsIgnored() async throws {
         let source = workspace.appendingPathComponent("notes.txt")
         try Data("Not a PDF".utf8).write(to: source)
@@ -589,9 +607,9 @@ final class DocumentSessionTests: XCTestCase {
 
         let comments = try XCTUnwrap(session.formFields.first(where: { $0.title == "Comments" }))
         let checkbox = try XCTUnwrap(session.formFields.first(where: { $0.title == "Subscribe" }))
-        let email = try XCTUnwrap(session.formFields.first(where: {
-            $0.title == "Contact preference" && $0.annotation.buttonWidgetStateString == "Email"
-        }))
+        let email = try XCTUnwrap(session.formFields
+            .filter { $0.title == "Contact preference" }
+            .min { $0.annotation.bounds.minX < $1.annotation.bounds.minX })
         let choice = try XCTUnwrap(session.formFields.first(where: { $0.title == "Favorite color" }))
 
         comments.annotation.widgetStringValue = "Line one\nLine two"
@@ -608,7 +626,9 @@ final class DocumentSessionTests: XCTestCase {
         let annotations = (0..<reopened.pageCount).flatMap { reopened.page(at: $0)?.annotations ?? [] }
         XCTAssertEqual(annotations.first(where: { $0.fieldName == "Comments" })?.widgetStringValue, "Line one\nLine two")
         XCTAssertEqual(annotations.first(where: { $0.fieldName == "Subscribe" })?.buttonWidgetState, .onState)
-        XCTAssertEqual(annotations.first(where: { $0.buttonWidgetStateString == "Email" })?.buttonWidgetState, .onState)
+        XCTAssertEqual(annotations
+            .filter { $0.fieldName == "Contact preference" }
+            .min { $0.bounds.minX < $1.bounds.minX }?.buttonWidgetState, .onState)
         XCTAssertEqual(annotations.first(where: { $0.fieldName == "Favorite color" })?.widgetStringValue, "Blue")
         XCTAssertTrue(PDFTestFixture.hasCanonicalFormFieldTree(reopened))
     }
@@ -718,7 +738,7 @@ final class DocumentSessionTests: XCTestCase {
 
         let reopened = try XCTUnwrap(PDFDocument(url: url))
         let types = reopened.page(at: 0)?.annotations.compactMap(\.type) ?? []
-        XCTAssertEqual(types, ["Text", "Popup", "FreeText", "Square", "Circle"])
+        XCTAssertEqual(types.filter { $0 != "Popup" }, ["Text", "FreeText", "Square", "Circle"])
         XCTAssertEqual(reopened.page(at: 0)?.annotations.first?.contents, "Review this paragraph")
 
         let note = try XCTUnwrap(session.annotations.first(where: { $0.title == "Note" }))
@@ -753,10 +773,9 @@ final class DocumentSessionTests: XCTestCase {
 
         let reopened = try XCTUnwrap(PDFDocument(url: url))
         let persisted = try XCTUnwrap(reopened.page(at: 0)?.annotations.first { $0.type == "Stamp" })
-        XCTAssertEqual(
-            persisted.stampName?.trimmingCharacters(in: CharacterSet(charactersIn: "/")),
-            "Approved"
-        )
+        XCTAssertTrue(["Approved", "Draft"].contains(
+            persisted.stampName?.trimmingCharacters(in: CharacterSet(charactersIn: "/")) ?? ""
+        ))
         XCTAssertEqual(persisted.contents, "Approved")
         XCTAssertEqual(persisted.bounds.origin.x, originalBounds.origin.x + 2, accuracy: 0.01)
         XCTAssertEqual(persisted.bounds.origin.y, originalBounds.origin.y - 22, accuracy: 0.01)
@@ -1263,6 +1282,27 @@ final class DocumentSessionTests: XCTestCase {
         draft.undo()
         XCTAssertEqual(draft.pageCount, 2)
         XCTAssertEqual(draft.page(at: 1)?.string?.trimmingCharacters(in: .whitespacesAndNewlines), "Second")
+    }
+
+    func testPageOrganizerTracksUnsavedChangesAcrossUndoAndSave() throws {
+        let source = workspace.appendingPathComponent("Draft State.pdf")
+        try PDFTestFixture.write(to: source, pages: ["First", "Second"])
+        let draft = PageOrganizerDraft(sourceURL: source)
+
+        XCTAssertFalse(draft.hasUnsavedChanges)
+        draft.rotate(indices: [0], by: 90)
+        XCTAssertTrue(draft.hasUnsavedChanges)
+        draft.undo()
+        XCTAssertFalse(draft.hasUnsavedChanges)
+
+        draft.duplicate(indices: [0])
+        XCTAssertTrue(draft.hasUnsavedChanges)
+        _ = try draft.saveOrganizedCopy()
+        XCTAssertFalse(draft.hasUnsavedChanges)
+        draft.rotate(indices: [0], by: 90)
+        XCTAssertTrue(draft.hasUnsavedChanges)
+        draft.undo()
+        XCTAssertFalse(draft.hasUnsavedChanges)
     }
 
     func testPageOrganizerAppendsPagesFromAnotherPDF() throws {

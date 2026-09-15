@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import PDFKit
+import UIKit
 
 enum DocumentExportMode: String, Sendable {
     case original
@@ -89,6 +90,25 @@ enum DocumentExporter {
             context.beginPDFPage([kCGPDFContextMediaBox as String: boundsData] as CFDictionary)
             // PDFPage applies crop offsets and rotation, and draws visible annotations once.
             page.draw(with: .cropBox, to: context)
+            if let pageRef = page.pageRef {
+                context.saveGState()
+                context.concatenate(pageRef.getDrawingTransform(
+                    .cropBox,
+                    rect: outputBounds,
+                    rotate: 0,
+                    preserveAspectRatio: true
+                ))
+                context.setStrokeColor(UIColor.systemBlue.cgColor)
+                for annotation in page.annotations where
+                    annotation.type == "Widget"
+                    && annotation.contents == "Folik form field"
+                    && annotation.widgetFieldType == .button
+                    && annotation.widgetControlType == .checkBoxControl {
+                    context.setLineWidth(max(annotation.border?.lineWidth ?? 0, 1.5))
+                    context.stroke(annotation.bounds.insetBy(dx: 0.75, dy: 0.75))
+                }
+                context.restoreGState()
+            }
             context.endPDFPage()
         }
     }
