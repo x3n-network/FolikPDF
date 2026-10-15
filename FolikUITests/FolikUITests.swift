@@ -141,7 +141,7 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(finishDrawing.waitForExistence(timeout: 3))
         finishDrawing.tap()
 
-        let forms = app.buttons["reader.panel.forms"]
+        let forms = app.buttons["reader.fill"]
         XCTAssertTrue(forms.waitForExistence(timeout: 3))
         forms.tap()
         XCTAssertTrue(app.navigationBars["Forms"].waitForExistence(timeout: 3))
@@ -206,7 +206,7 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(app.buttons["reader.form.nextIncomplete"].exists)
         capture("form-fill-mode", in: app)
         app.buttons["reader.form.nextIncomplete"].tap()
-        XCTAssertTrue(app.buttons["reader.panel.forms"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["reader.fill"].waitForExistence(timeout: 3))
     }
 
     func testQuickFormPlacementAndProperties() {
@@ -245,7 +245,7 @@ final class FolikUITests: XCTestCase {
         app.buttons["builder.fill"].tap()
         XCTAssertTrue(app.buttons["reader.sign"].waitForExistence(timeout: 5))
         app.navigationBars["Forms"].buttons["Done"].tap()
-        XCTAssertTrue(app.buttons["reader.panel.forms"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["reader.fill"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["builder.add.text"].exists)
         XCTAssertEqual(pdf.value as? String ?? "", "")
         capture("added-field-visible-in-fill-mode", in: app)
@@ -342,7 +342,7 @@ final class FolikUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(app.navigationBars["Scan"].waitForExistence(timeout: 5))
-        app.buttons["reader.panel.forms"].tap()
+        app.buttons["reader.fill"].tap()
         XCTAssertTrue(app.navigationBars["Forms"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["Add fields to turn this PDF into a fillable form."].exists)
         app.segmentedControls["reader.form.mode"].buttons["Build"].tap()
@@ -394,7 +394,7 @@ final class FolikUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(app.navigationBars["Scan"].waitForExistence(timeout: 5))
-        app.buttons["reader.panel.forms"].tap()
+        app.buttons["reader.fill"].tap()
         app.segmentedControls["reader.form.mode"].buttons["Build"].tap()
         XCTAssertTrue(app.buttons["reader.form.suggest"].waitForExistence(timeout: 3))
         app.buttons["reader.form.suggest"].tap()
@@ -1345,7 +1345,7 @@ final class FolikUITests: XCTestCase {
         app.launch()
         defer { XCUIDevice.shared.orientation = .portrait }
         XCTAssertTrue(app.buttons["reader.export"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["reader.panel.forms"].isHittable)
+        XCTAssertTrue(app.buttons["reader.fill"].isHittable)
         capture("polish-reader-large-text-portrait", in: app)
         XCUIDevice.shared.orientation = .landscapeLeft
         XCTAssertTrue(app.buttons["reader.export"].isHittable)
@@ -1376,7 +1376,7 @@ final class FolikUITests: XCTestCase {
         let place = app.buttons["reader.annotation.placeCenter"]
         XCTAssertTrue(place.waitForExistence(timeout: 4))
         place.tap()
-        app.buttons["reader.panel.forms"].tap()
+        app.buttons["reader.fill"].tap()
         XCTAssertTrue(app.buttons["reader.sign"].waitForExistence(timeout: 3))
         app.buttons["reader.sign"].tap()
         XCTAssertTrue(place.waitForExistence(timeout: 3))
@@ -1452,7 +1452,7 @@ final class FolikUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-fixture", "--open-first-document", "--place-test-signature"]
         app.launch()
-        XCTAssertTrue(app.buttons["reader.panel.forms"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["reader.fill"].waitForExistence(timeout: 10))
         let pdf = app.descendants(matching: .any)["reader.pdf"]
         let pageFrame = pdf.textViews.firstMatch.children(matching: .other).firstMatch.frame
         // Tap the known fixture widget while leaving its native editor active.
@@ -1475,8 +1475,8 @@ final class FolikUITests: XCTestCase {
         let document = app.buttons["library.document.Folik UI Test.pdf"]
         XCTAssertTrue(document.waitForExistence(timeout: 10))
         document.tap()
-        XCTAssertTrue(app.buttons["reader.panel.forms"].waitForExistence(timeout: 10))
-        app.buttons["reader.panel.forms"].tap()
+        XCTAssertTrue(app.buttons["reader.fill"].waitForExistence(timeout: 10))
+        app.buttons["reader.fill"].tap()
         let field = app.buttons["reader.form.field.0:0:Full name"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         XCTAssertTrue((field.value as? String ?? "").localizedCaseInsensitiveContains("abc"))

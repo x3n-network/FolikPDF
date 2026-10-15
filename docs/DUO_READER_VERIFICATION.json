@@ -1,0 +1,190 @@
+{
+  "baseline": "a80cb3987c708f54c6a9865b415e42bfd8983125",
+  "branch": "feat/duo-adaptive-reader",
+  "sourceReview": {
+    "model": "claude-sonnet-5-5-medium",
+    "passed": true,
+    "securityConcerns": [],
+    "logicErrors": [],
+    "verdictFile": "/Users/josephspears/.hermes/cache/scratch/folik-duo-review-final-verdict.txt",
+    "nonblockingSuggestions": [
+      "Folik/ReaderFillCompanion.swift:359-366, 382-385: The field menu keeps only the first widget of each logicalID, but the checkmark compares field.id with selectedFillFieldID. If the selection is a later duplicate, for example after goToFormField or Next unfinished lands on the second widget, no menu entry shows as selected. Compare logicalID instead, or show the selected field's own page.",
+      "Folik/DocumentSession.swift:60, 98 (setFillFieldValue and setFillFieldSelected call requestSave): Every accepted keystroke starts a full-document save, and saveForSharing coalesces only overlapping saves. DocumentSession already has the debounced scheduleAnnotationSave path (DocumentSession.swift:1328-1340). Using it for text edits would also match the 'normal persistence' intent. This is a design suggestion, not a measured performance claim.",
+      "Folik/DocumentSession.swift:454, 1393-1396: formFieldIdentities holds a strong reference to every PDFAnnotation the session has seen, including removed widgets, for the life of the session. The retention is needed so ObjectIdentifier values are never reused, and the growth is small. Consider a code comment that it is deliberately unbounded.",
+      "Folik/ReaderView.swift:362-370: onChange(of: presentedPanel) restores VoiceOver focus to panelOrigin, which is the origin of the last-opened tool. After the Read button (ReaderView.swift:~473-480) closes a panel, focus moves to Fill or Build instead of Read. Setting panelOrigin to a read-specific target in that action would avoid this.",
+      "Folik/DocumentSession.swift:97-100 and ReaderFillCompanion.swift:445-446: The companion writes widgetStringValue directly while PDFKit's native widget editor may be active on the same widget. saveForSharing then calls commitPendingEdits, which could commit the native editor's stale text over the companion value. I could not confirm this from source alone. A native test that edits in the page and then in the companion would settle it.",
+      "FolikTests/ReaderFillCompanionTests.swift:1189: The literal test password is isolated fixture data, as stated in the request. It is not a credential."
+    ]
+  },
+  "staticScan": {
+    "addedLinePatterns": [
+      "(?i)(api_key|secret|password|token|passwd)\\s*=\\s*[\\\"\\'][^\\\"\\']{6,}",
+      "os\\.system\\(|subprocess.*shell=True",
+      "\\beval\\(|\\bexec\\(",
+      "pickle\\.loads?\\("
+    ],
+    "findings": []
+  },
+  "testResults": {
+    "wideAndUnit": {
+      "bundle": "/Users/josephspears/.hermes/cache/scratch/folik-production-wide-final2.xcresult",
+      "result": "Passed",
+      "passedTests": 182,
+      "failedTests": 0,
+      "skippedTests": 1,
+      "runtimeWarnings": [],
+      "testFailures": [],
+      "devicesAndConfigurations": [
+        {
+          "device": {
+            "architecture": "arm64",
+            "deviceId": "A761FB1E-C160-443C-8437-7977228BB791",
+            "deviceName": "Folik Duo Layout Lab",
+            "modelName": "iPad Pro 13-inch (M5)",
+            "osBuildNumber": "24A434",
+            "osVersion": "27.0",
+            "platform": "iOS Simulator"
+          },
+          "expectedFailures": 0,
+          "failedTests": 0,
+          "passedTests": 182,
+          "skippedTests": 1,
+          "testPlanConfiguration": {
+            "configurationId": "1",
+            "configurationName": "Test Scheme Action"
+          }
+        }
+      ]
+    },
+    "compact": {
+      "bundle": "/Users/josephspears/.hermes/cache/scratch/folik-production-compact-final2.xcresult",
+      "result": "Passed",
+      "passedTests": 14,
+      "failedTests": 0,
+      "skippedTests": 0,
+      "runtimeWarnings": [
+        {
+          "issueType": "Runtime Warning",
+          "message": "Publishing changes from within view updates is not allowed, this will cause undefined behavior."
+        }
+      ],
+      "testFailures": [],
+      "devicesAndConfigurations": [
+        {
+          "device": {
+            "architecture": "arm64",
+            "deviceId": "B7CBA58E-200A-4210-A2EE-6B00FAE18846",
+            "deviceName": "iPhone 17e",
+            "modelName": "iPhone 17e",
+            "osBuildNumber": "24A434",
+            "osVersion": "27.0",
+            "platform": "iOS Simulator"
+          },
+          "expectedFailures": 0,
+          "failedTests": 0,
+          "passedTests": 14,
+          "skippedTests": 0,
+          "testPlanConfiguration": {
+            "configurationId": "1",
+            "configurationName": "Test Scheme Action"
+          }
+        }
+      ]
+    },
+    "cleanBaselineCompact": {
+      "bundle": "/Users/josephspears/.hermes/cache/scratch/folik-compact-exact-baseline-regression.xcresult",
+      "result": "Passed",
+      "passedTests": 12,
+      "failedTests": 0,
+      "skippedTests": 0,
+      "runtimeWarnings": [
+        {
+          "issueType": "Runtime Warning",
+          "message": "Publishing changes from within view updates is not allowed, this will cause undefined behavior."
+        }
+      ],
+      "testFailures": [],
+      "devicesAndConfigurations": [
+        {
+          "device": {
+            "architecture": "arm64",
+            "deviceId": "B7CBA58E-200A-4210-A2EE-6B00FAE18846",
+            "deviceName": "iPhone 17e",
+            "modelName": "iPhone 17e",
+            "osBuildNumber": "24A434",
+            "osVersion": "27.0",
+            "platform": "iOS Simulator"
+          },
+          "expectedFailures": 0,
+          "failedTests": 0,
+          "passedTests": 12,
+          "skippedTests": 0,
+          "testPlanConfiguration": {
+            "configurationId": "1",
+            "configurationName": "Test Scheme Action"
+          }
+        }
+      ]
+    },
+    "cleanBaselineAnnotationFailure": {
+      "bundle": "/Users/josephspears/.hermes/cache/scratch/folik-production-annotation-exact-baseline.xcresult",
+      "result": "Failed",
+      "passedTests": 0,
+      "failedTests": 1,
+      "skippedTests": 0,
+      "runtimeWarnings": [],
+      "testFailures": [
+        {
+          "failureText": "XCTAssertTrue failed",
+          "targetName": "FolikUITests",
+          "testIdentifier": 1,
+          "testIdentifierString": "FolikUITests/testAnnotationEditingOffersAccessibleMovementControls()",
+          "testIdentifierURL": "test://com.apple.xcode/Folik/FolikUITests/FolikUITests/testAnnotationEditingOffersAccessibleMovementControls",
+          "testName": "testAnnotationEditingOffersAccessibleMovementControls()"
+        }
+      ],
+      "devicesAndConfigurations": [
+        {
+          "device": {
+            "architecture": "arm64",
+            "deviceId": "B7CBA58E-200A-4210-A2EE-6B00FAE18846",
+            "deviceName": "iPhone 17e",
+            "modelName": "iPhone 17e",
+            "osBuildNumber": "24A434",
+            "osVersion": "27.0",
+            "platform": "iOS Simulator"
+          },
+          "expectedFailures": 0,
+          "failedTests": 1,
+          "passedTests": 0,
+          "skippedTests": 0,
+          "testPlanConfiguration": {
+            "configurationId": "1",
+            "configurationName": "Test Scheme Action"
+          }
+        }
+      ]
+    }
+  },
+  "releaseSimulatorBuild": {
+    "exitCode": 0,
+    "log": "/Users/josephspears/.hermes/cache/scratch/folik-duo-production-release-final.log"
+  },
+  "screenshots": {
+    "count": 3,
+    "files": ["evidence/duo-reader/read.png", "evidence/duo-reader/fill.png", "evidence/duo-reader/build.png"],
+    "rawExportDirectory": "/Users/josephspears/.hermes/cache/scratch/folik-production-wide-final2-attachments/",
+    "orientationCorrectionDegrees": -90,
+    "testIdentifier": "AdaptiveReaderUITests/testExpandedFillKeepsPDFContextAndDraftAcrossWidthChanges()",
+    "deviceId": "A761FB1E-C160-443C-8437-7977228BB791",
+    "realFold": false
+  },
+  "scope": {
+    "realFoldVerified": false,
+    "hardwareAnimationPerformanceVerified": false,
+    "allAppUITestsRun": false,
+    "controlledWideHost": "iPad Pro simulator, not a real Duo fold",
+    "fieldIdentityDeletionUndoReplacementVerified": true,
+    "shippingPDFViewportTaskWidthAndDraftContinuityVerified": true
+  }
+}

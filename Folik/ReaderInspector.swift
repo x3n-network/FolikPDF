@@ -6,9 +6,37 @@ struct ReaderInspector: View {
     @ObservedObject var session: DocumentSession
     let close: () -> Void
     let organizePages: () -> Void
+    var isCompanion = false
     @State private var showingContents = false
 
     var body: some View {
+        Group {
+            if isCompanion {
+                VStack(spacing: 0) {
+                    HStack {
+                        Text(panel == .forms && session.formMode == .build ? "Build form" : panel.title).font(.headline)
+                        Spacer()
+                        Button(action: close) { Image(systemName: "xmark").frame(width: 44, height: 44) }
+                            .accessibilityLabel("Close tools").accessibilityIdentifier("reader.done")
+                    }.padding(.horizontal, 16)
+                    Divider()
+                    inspectorContent
+                }
+            } else {
+                inspectorContent
+                    .navigationTitle(panel.title)
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done", systemImage: "checkmark", action: close)
+                                .accessibilityIdentifier("reader.done")
+                        }
+                    }
+            }
+        }.background(FolikTheme.surface)
+    }
+
+    private var inspectorContent: some View {
         Group {
             switch panel {
             case .pages:
@@ -34,14 +62,6 @@ struct ReaderInspector: View {
                 AnnotationNavigator(session: session, close: close)
             case .forms:
                 FormNavigator(session: session, close: close)
-            }
-        }
-        .background(FolikTheme.surface)
-        .navigationTitle(panel.title)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Done", action: close)
             }
         }
     }

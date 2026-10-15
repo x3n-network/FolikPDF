@@ -30,6 +30,8 @@ enum ReaderPanel: String, Identifiable {
     }
 }
 
+private enum ReaderActionFocus: Hashable { case fill, build, pages, search, annotations }
+
 struct ReaderView: View {
     @StateObject private var session: DocumentSession
     @EnvironmentObject private var library: DocumentLibrary
@@ -60,9 +62,21 @@ struct ReaderView: View {
     @State private var reviewRequiredAfterShare = false
     @State private var pageOrganizerPresented = false
     @State private var pageOrganizerPending = false
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var viewportWidth: CGFloat = 0
+    @State private var panelOrigin: ReaderActionFocus = .fill
+    @AccessibilityFocusState private var focusedPanel: ReaderActionFocus?
+    #if DEBUG
+    @StateObject private var pdfProbe = ReaderPDFProbe()
+    @State private var testWidth: CGFloat = 951
+    #endif
+
+    private var usesCompanion: Bool { viewportWidth >= 620 && !dynamicTypeSize.isAccessibilitySize }
+    private var companionWidth: CGFloat {
+        min(420, max(280, viewportWidth * (session.formMode == .build && presentedPanel == .forms ? 0.42 : 0.34)))
+    }
 
     init(item: LibraryDocument, startInFormBuilder: Bool = false, finishForm: ((LibraryDocument) -> Void)? = nil, initialPanel: ReaderPanel? = nil, initialPageIndex: Int? = nil, initialSearchQuery: String? = nil, showScanActions: Bool = false, scanAction: ((LibraryPDFTool) -> Void)? = nil) {
         self.initialPanel = initialPanel
@@ -85,20 +99,50 @@ struct ReaderView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            if horizontalSizeClass == .regular, let presentedPanel {
-                ReaderInspector(
-                    panel: presentedPanel,
-                    session: session,
-                    close: { self.presentedPanel = nil },
-                    organizePages: requestPageOrganizer
-                )
-                .frame(width: 330)
-                Divider()
-            }
-
+            // Keep the real PDFKit viewport at the same structural identity in every task and width.
             documentCanvas
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .allowsHitTesting(!isExporting && !session.isPreparingDocument)
+            if usesCompanion, let presentedPanel {
+                Divider()
+                Group {
+                    if presentedPanel == .forms && session.formMode == .fill {
+                        ReaderFillCompanion(session: session, close: { self.presentedPanel = nil })
+                    } else {
+                        ReaderInspector(panel: presentedPanel, session: session,
+                                        close: { self.presentedPanel = nil }, organizePages: requestPageOrganizer,
+                                        isCompanion: true)
+                    }
+                }
+                .frame(width: companionWidth)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("reader.companion")
+                .transition(.move(edge: .trailing))
+            }
         }
+        .animation(reduceMotion || dynamicTypeSize.isAccessibilitySize ? nil : .easeOut(duration: 0.18), value: presentedPanel)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { viewportWidth = $0 }
+        #if DEBUG
+        .frame(width: ProcessInfo.processInfo.arguments.contains("--ui-test-reader-resize") ? testWidth : nil)
+        .safeAreaInset(edge: .top) {
+            if ProcessInfo.processInfo.arguments.contains("--ui-test-reader-continuity") {
+                VStack(spacing: 4) {
+                    if ProcessInfo.processInfo.arguments.contains("--ui-test-reader-resize") {
+                        Text("Controlled reader width · not a real fold").font(.caption2)
+                    }
+                    HStack {
+                        Button("Seed") { pdfProbe.seed() }.accessibilityIdentifier("reader.probe.seed")
+                        Button("Inspect") { pdfProbe.inspect() }.accessibilityIdentifier("reader.probe.inspect")
+                        if ProcessInfo.processInfo.arguments.contains("--ui-test-reader-resize") {
+                            Button("Compact") { testWidth = 382 }.accessibilityIdentifier("reader.probe.compact")
+                            Button("Expanded") { testWidth = 951 }.accessibilityIdentifier("reader.probe.expanded")
+                        }
+                    }
+                    Text(pdfProbe.snapshot).font(.caption2).accessibilityIdentifier("reader.probe.snapshot")
+                }
+            }
+        }
+        #endif
         .background(FolikTheme.canvas)
         .navigationTitle(session.item.displayName)
         .navigationBarTitleDisplayMode(.inline)
@@ -315,6 +359,16 @@ struct ReaderView: View {
             }
             #endif
         }
+        .onChange(of: presentedPanel) { previous, current in
+            if let current {
+                switch current {
+                case .forms: panelOrigin = session.formMode == .build ? .build : .fill
+                case .pages, .outline: panelOrigin = .pages
+                case .search: panelOrigin = .search
+                case .annotations: panelOrigin = .annotations
+                }
+            } else if previous != nil { focusedPanel = panelOrigin }
+        }
         .onChange(of: session.isLocked) { _, isLocked in
             passwordPromptPresented = isLocked
         }
@@ -334,7 +388,7 @@ struct ReaderView: View {
     private func requestPageOrganizer() {
         Task {
             guard await session.saveForSharing() else { return }
-            if horizontalSizeClass == .compact {
+            if !usesCompanion {
                 pageOrganizerPending = true
                 presentedPanel = nil
             } else {
@@ -352,9 +406,15 @@ struct ReaderView: View {
     @ViewBuilder
     private var documentCanvas: some View {
         if session.document != nil {
+            #if DEBUG
+            PDFKitView(session: session, probe: pdfProbe)
+                .accessibilityLabel("PDF document")
+                .accessibilityValue(selectedAnnotationCanvasDescription)
+            #else
             PDFKitView(session: session)
                 .accessibilityLabel("PDF document")
                 .accessibilityValue(selectedAnnotationCanvasDescription)
+            #endif
         } else {
             ContentUnavailableView(
                 "Unable to open PDF",
@@ -410,6 +470,39 @@ struct ReaderView: View {
                 .accessibilityIdentifier("reader.saveAndBack")
                 .accessibilityHint("Saves your changes before returning")
             }
+        }
+        ToolbarItemGroup(placement: .bottomBar) {
+            Button("Read", systemImage: "doc.text") {
+                session.cancelAnnotationPlacement()
+                session.finishAnnotationEditing()
+                session.setDrawingEnabled(false)
+                session.setFormMode(.fill)
+                presentedPanel = nil
+            }.accessibilityIdentifier("reader.read")
+            Button("Fill form", systemImage: "list.clipboard") {
+                panelOrigin = .fill
+                session.setFormMode(.fill)
+                presentedPanel = .forms
+            }.accessibilityIdentifier("reader.fill")
+                .accessibilityFocused($focusedPanel, equals: .fill)
+            Button("Build form", systemImage: "square.and.pencil") {
+                panelOrigin = .build
+                session.setFormMode(.build)
+                presentedPanel = .forms
+            }.accessibilityIdentifier("reader.build")
+                .accessibilityFocused($focusedPanel, equals: .build)
+        }
+        ToolbarItemGroup(placement: .bottomBar) {
+            Button("Pages", systemImage: "square.grid.2x2") { presentedPanel = .pages }
+                .accessibilityIdentifier("reader.panel.pages")
+                .accessibilityFocused($focusedPanel, equals: .pages)
+            Button("Find", systemImage: "magnifyingglass") { presentedPanel = .search }
+                .accessibilityIdentifier("reader.panel.find")
+                .accessibilityFocused($focusedPanel, equals: .search)
+                .keyboardShortcut("f", modifiers: .command)
+            Button("Annotations", systemImage: "pencil.and.list.clipboard") { presentedPanel = .annotations }
+                .accessibilityIdentifier("reader.panel.annotations")
+                .accessibilityFocused($focusedPanel, equals: .annotations)
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
             if isExporting {
@@ -545,8 +638,8 @@ struct ReaderView: View {
 
     private var compactPanelBinding: Binding<ReaderPanel?> {
         Binding(
-            get: { horizontalSizeClass == .compact ? presentedPanel : nil },
-            set: { presentedPanel = $0 }
+            get: { viewportWidth > 0 && !usesCompanion ? presentedPanel : nil },
+            set: { if !usesCompanion { presentedPanel = $0 } }
         )
     }
 
@@ -612,9 +705,7 @@ private struct ActivityView: UIViewControllerRepresentable {
 private struct ReaderBottomChrome: View {
     @ObservedObject var session: DocumentSession
     @Binding var presentedPanel: ReaderPanel?
-    @AccessibilityFocusState private var focusedPanel: ReaderPanel?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     var body: some View {
         VStack(spacing: 0) {
@@ -720,57 +811,13 @@ private struct ReaderBottomChrome: View {
                 PlacementToolbar(session: session)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-            } else {
-                readerTools
-                    .padding(.horizontal, 10)
-                    .padding(.top, 4)
-                    .padding(.bottom, 6)
             }
-        }
-        .onChange(of: presentedPanel) { previous, current in
-            if current == nil { focusedPanel = previous }
         }
         .background(FolikTheme.raisedSurface.opacity(0.98))
         .overlay(alignment: .top) { Divider() }
     }
 
-    @ViewBuilder
-    private var readerTools: some View {
-        if dynamicTypeSize.isAccessibilitySize && verticalSizeClass != .compact {
-            LazyVGrid(
-                columns: [GridItem(.flexible()), GridItem(.flexible())],
-                spacing: 8
-            ) {
-                toolButtons
-            }
-        } else {
-            HStack(spacing: 8) {
-                toolButtons
-            }
-        }
-    }
 
-    @ViewBuilder
-    private var toolButtons: some View {
-        ForEach(availablePanels) { panel in
-            ReaderToolButton(
-                title: panel.title,
-                icon: panel.icon,
-                isSelected: presentedPanel == panel
-            ) {
-                presentedPanel = presentedPanel == panel ? nil : panel
-            }
-            .accessibilityFocused($focusedPanel, equals: panel)
-            .keyboardShortcut(panel == .search ? KeyboardShortcut("f", modifiers: .command) : nil)
-        }
-
-    }
-
-    private var availablePanels: [ReaderPanel] {
-        session.formFields.isEmpty
-            ? [.pages, .search, .annotations, .forms]
-            : [.pages, .search, .forms, .annotations]
-    }
 }
 
 private struct AnnotationEditingToolbar: View {
@@ -1079,70 +1126,6 @@ private struct DrawingToolbar: View {
         .frame(minHeight: 44)
         .fixedSize(horizontal: true, vertical: false)
         .accessibilityIdentifier("reader.drawing.done")
-    }
-}
-
-private struct ReaderToolButton: View {
-    let title: String
-    let icon: String
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            ReaderToolLabel(
-                title: title,
-                icon: icon,
-                foregroundStyle: isSelected ? FolikTheme.cobalt : FolikTheme.mutedInk
-            )
-            .background(
-                isSelected ? FolikTheme.cobalt.opacity(0.12) : Color.clear,
-                in: RoundedRectangle(cornerRadius: 11, style: .continuous)
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("reader.panel.\(title.lowercased())")
-        .accessibilityValue(isSelected ? "Selected" : "Not selected")
-    }
-}
-
-private struct ReaderToolLabel: View {
-    let title: String
-    let icon: String
-    let foregroundStyle: Color
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-    var body: some View {
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(spacing: 6) {
-                    iconView
-                    Text(title)
-                        .font(.headline.weight(.semibold))
-                        .dynamicTypeSize(...DynamicTypeSize.accessibility5)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                }
-                .padding(.horizontal, 8)
-            } else {
-                VStack(spacing: 4) {
-                    iconView
-                    Text(title)
-                        .font(.caption2.weight(.semibold))
-                }
-            }
-        }
-        .foregroundStyle(foregroundStyle)
-        .frame(maxWidth: .infinity, minHeight: dynamicTypeSize.isAccessibilitySize ? 64 : 52)
-        .contentShape(Rectangle())
-    }
-
-    private var iconView: some View {
-        Image(systemName: icon)
-            .font(.system(size: 18, weight: .semibold))
-            .frame(width: 24)
-            .accessibilityHidden(true)
     }
 }
 

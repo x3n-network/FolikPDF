@@ -17,6 +17,9 @@ final class LayoutAwarePDFView: PDFView {
 
 struct PDFKitView: UIViewRepresentable {
     @ObservedObject var session: DocumentSession
+    #if DEBUG
+    var probe: ReaderPDFProbe? = nil
+    #endif
 
     func makeCoordinator() -> Coordinator {
         Coordinator(session: session)
@@ -27,6 +30,9 @@ struct PDFKitView: UIViewRepresentable {
         pdfView.accessibilityIdentifier = "reader.pdf"
         pdfView.document = session.document
         context.coordinator.startObserving()
+        #if DEBUG
+        probe?.view = pdfView
+        #endif
         return pdfView
     }
 

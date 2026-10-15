@@ -400,6 +400,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
     @Published private(set) var outlineEntries: [OutlineEntry] = []
     @Published private(set) var annotations: [DocumentAnnotation] = []
     @Published private(set) var formFields: [FormField] = []
+    @Published private(set) var selectedFillFieldID: String?
     @Published private(set) var hasTextSelection = false
     @Published private(set) var isSearching = false
     @Published private(set) var isModified = false
@@ -448,6 +449,10 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
     private var currentSelection: PDFSelection?
     private var pendingSearchTargetPageIndex: Int?
     private var savedFormValues: [String: FormFieldSnapshot] = [:]
+    // Retain issued identities for the session, including removed widgets, so an
+    // annotation-index shift or a replacement can never reuse another widget's ID.
+    private var formFieldIdentities: [ObjectIdentifier: (annotation: PDFAnnotation, id: String)] = [:]
+    private var issuedFormFieldIDs: Set<String> = []
     private var lastVisitedFormFieldLogicalID: String?
     private var annotationUndoStack: [AnnotationHistoryAction] = []
     private var annotationRedoStack: [AnnotationHistoryAction] = []
@@ -563,7 +568,91 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         command = PDFReaderCommand(action: .goToSelection(searchMatches[index].selection))
     }
 
+    /// Opening/recomposing a pane must not issue a PDF navigation command.
+    func prepareFillCompanion() {
+        refreshFormState(markModified: false)
+        guard selectedFillField == nil else { return }
+        selectedFillFieldID = formFields.first(where: { $0.pageIndex == pageIndex && $0.isEditable })?.id
+            ?? formFields.first(where: \.isEditable)?.id
+            ?? formFields.first?.id
+    }
+
+    var selectedFillField: FormField? {
+        guard let document else { return nil }
+        return self.formFields(in: document).first { $0.id == selectedFillFieldID }
+    }
+
+    /// Resolve IDs against the current document, never mutate a captured FormField snapshot.
+    @discardableResult
+    func setFillFieldValue(fieldID: String, value: String) -> Bool {
+        guard let document, !isLocked, document.allowsFormFieldEntry, canFillForms else { return false }
+        let liveFields = self.formFields(in: document)
+        guard let field = liveFields.first(where: { $0.id == fieldID }),
+              [.text, .multilineText, .choice].contains(field.kind) else { return false }
+        let group = liveFields.filter { $0.logicalID == field.logicalID }
+        guard group.allSatisfy({ $0.isEditable && $0.kind == field.kind }) else { return false }
+        if field.kind == .choice {
+            guard group.allSatisfy({ Self.fillChoices(for: $0).contains { $0.value == value } }) else { return false }
+        } else {
+            guard group.allSatisfy({ $0.annotation.maximumLength <= 0 || value.utf16.count <= $0.annotation.maximumLength }) else { return false }
+        }
+        guard group.contains(where: { $0.value != value }) else { return true }
+        for member in group { member.annotation.widgetStringValue = value }
+        formFields = liveFields
+        noteFormEditing()
+        requestSave()
+        return true
+    }
+
+    struct FillChoice: Identifiable, Equatable {
+        let title: String
+        let value: String
+        var id: String { value }
+    }
+
+    func fillFieldChoices(fieldID: String) -> [FillChoice] {
+        guard let document,
+              let field = self.formFields(in: document).first(where: { $0.id == fieldID }) else { return [] }
+        return Self.fillChoices(for: field)
+    }
+
+    private static func fillChoices(for field: FormField) -> [FillChoice] {
+        let flags = (field.annotation.value(forAnnotationKey: .widgetFieldFlags) as? NSNumber)?.intValue ?? 0
+        guard field.kind == .choice, flags & (1 << 21) == 0,
+              let titles = field.annotation.choices, !titles.isEmpty else { return [] }
+        let values = field.annotation.values ?? titles
+        guard values.count == titles.count, Set(values).count == values.count else { return [] }
+        return zip(titles, values).map { FillChoice(title: $0, value: $1) }
+    }
+
+    @discardableResult
+    func setFillFieldSelected(fieldID: String, selected: Bool) -> Bool {
+        guard let document, !isLocked, document.allowsFormFieldEntry, canFillForms else { return false }
+        let liveFields = self.formFields(in: document)
+        // Radio widgets remain on the native page workflow. PDFKit can lose their
+        // distinct appearances on serialization; do not claim a companion edit saved.
+        guard let field = liveFields.first(where: { $0.id == fieldID }), field.kind == .checkbox else { return false }
+        let group = liveFields.filter { $0.logicalID == field.logicalID }
+        guard group.allSatisfy({ $0.isEditable && $0.kind == .checkbox }) else { return false }
+        guard group.contains(where: { $0.isSelected != selected }) else { return true }
+        for member in group { member.annotation.buttonWidgetState = selected ? .onState : .offState }
+        formFields = liveFields
+        noteFormEditing()
+        requestSave()
+        return true
+    }
+
+    /// Explicit user selection may navigate; pane appearance uses prepareFillCompanion instead.
+    func selectFillField(_ fieldID: String, navigate: Bool = true) {
+        guard let document,
+              let field = self.formFields(in: document).first(where: { $0.id == fieldID }) else { return }
+        selectedFillFieldID = field.id
+        if navigate { goToFormField(field) }
+    }
+
     func goToFormField(_ field: FormField) {
+        guard document?.page(at: field.pageIndex)?.annotations.contains(where: { $0 === field.annotation }) == true else { return }
+        selectedFillFieldID = field.id
         lastVisitedFormFieldLogicalID = field.logicalID
         command = PDFReaderCommand(action: .goToAnnotation(field.annotation, pageIndex: field.pageIndex))
     }
@@ -1284,7 +1373,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         for pageIndex in 0..<document.pageCount {
             guard let page = document.page(at: pageIndex) else { continue }
             for (annotationIndex, annotation) in page.annotations.enumerated() where annotation.type == "Widget" {
-                let key = Self.formFieldID(pageIndex: pageIndex, annotationIndex: annotationIndex, annotation: annotation)
+                let key = formFieldID(pageIndex: pageIndex, annotationIndex: annotationIndex, annotation: annotation)
                 guard let snapshot = savedFormValues[key] else { continue }
                 annotation.widgetStringValue = snapshot.stringValue
                 Self.restoreButtonState(snapshot.buttonState, to: annotation)
@@ -1306,7 +1395,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
     func refreshFormState(markModified: Bool) {
         guard let document else { return }
         let previousValues = currentFormValues()
-        formFields = Self.formFields(in: document)
+        formFields = self.formFields(in: document)
         if markModified, previousValues != currentFormValues() { isModified = true }
     }
 
@@ -1842,7 +1931,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
                 let batchStart = CFAbsoluteTimeGetCurrent()
                 let range = start..<min(start + 8, document.pageCount)
                 autoreleasepool {
-                    fields.append(contentsOf: Self.formFields(in: document, pages: range))
+                    fields.append(contentsOf: self.formFields(in: document, pages: range))
                     annotations.append(contentsOf: Self.annotations(in: document, pages: range))
                 }
                 self.longestPreparationBatchMilliseconds = max(self.longestPreparationBatchMilliseconds, (CFAbsoluteTimeGetCurrent() - batchStart) * 1000)
@@ -1889,9 +1978,9 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
 
     private func configureForms(in document: PDFDocument, preparedFields: [FormField]? = nil) {
         canFillForms = document.allowsFormFieldEntry
-        let loadedFields = preparedFields ?? Self.formFields(in: document)
+        let loadedFields = preparedFields ?? self.formFields(in: document)
         let repairedBorders = FormFieldBorderRepair.repair(in: document, fields: loadedFields.map(\.annotation), sourceURL: item.url)
-        formFields = Self.orderedFormFields(repairedBorders ? Self.formFields(in: document) : loadedFields)
+        formFields = Self.orderedFormFields(repairedBorders ? self.formFields(in: document) : loadedFields)
         if Self.containsXFA(in: document) {
             formCompatibilityNotice = formFields.isEmpty
                 ? "This PDF uses an XFA form, which iOS cannot fill."
@@ -1915,7 +2004,7 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
         })
     }
 
-    private static func formFields(in document: PDFDocument, pages: Range<Int>? = nil) -> [FormField] {
+    private func formFields(in document: PDFDocument, pages: Range<Int>? = nil) -> [FormField] {
         var fields: [FormField] = []
         for pageIndex in pages ?? 0..<document.pageCount {
             guard let page = document.page(at: pageIndex) else { continue }
@@ -1944,8 +2033,8 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
                 let accessibleLabel = (annotation.value(forAnnotationKey: .widgetTextLabelUI) as? String)?
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                     .nilIfEmpty
-                let nearbyLabel = fieldName.map(isTechnicalFieldName) == true
-                    ? nearbyFormLabel(for: annotation, kind: kind, on: page)
+                let nearbyLabel = fieldName.map(Self.isTechnicalFieldName) == true
+                    ? Self.nearbyFormLabel(for: annotation, kind: kind, on: page)
                     : nil
                 let id = formFieldID(pageIndex: pageIndex, annotationIndex: annotationIndex, annotation: annotation)
                 fields.append(FormField(
@@ -1958,11 +2047,11 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
                     value: annotation.widgetStringValue ?? "",
                     isReadOnly: annotation.isReadOnly,
                     isSelected: annotation.buttonWidgetState == .onState,
-                    isRequired: isRequired(annotation)
+                    isRequired: Self.isRequired(annotation)
                 ))
             }
         }
-        return orderedFormFields(fields)
+        return Self.orderedFormFields(fields)
     }
 
     private static func nearbyFormLabel(
@@ -2002,8 +2091,14 @@ final class DocumentSession: NSObject, ObservableObject, PDFDocumentDelegate {
             || name.range(of: #"^f\d+[_\d]*$"#, options: .regularExpression) != nil
     }
 
-    private static func formFieldID(pageIndex: Int, annotationIndex: Int, annotation: PDFAnnotation) -> String {
-        "\(pageIndex):\(annotationIndex):\(annotation.fieldName ?? "field")"
+    private func formFieldID(pageIndex: Int, annotationIndex: Int, annotation: PDFAnnotation) -> String {
+        let identity = ObjectIdentifier(annotation)
+        if let existing = formFieldIdentities[identity] { return existing.id }
+        let indexedID = "\(pageIndex):\(annotationIndex):\(annotation.fieldName ?? "field")"
+        let id = issuedFormFieldIDs.contains(indexedID) ? "\(indexedID):\(UUID().uuidString)" : indexedID
+        formFieldIdentities[identity] = (annotation, id)
+        issuedFormFieldIDs.insert(id)
+        return id
     }
 
     private static func restoreButtonState(_ rawValue: Int, to annotation: PDFAnnotation) {
