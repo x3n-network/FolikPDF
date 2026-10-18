@@ -93,6 +93,9 @@ struct LibraryView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("folik.libraryGridLayout") private var isGrid = false
     @State private var availableWidth: CGFloat = 390
+    #if DEBUG
+    @State private var navigationIdentity = UUID()
+    #endif
     @AppStorage("folik.librarySortOrder") private var sortOrderRawValue = LibrarySortOrder.newest.rawValue
     @State private var organizing: LibraryDocumentSelection?
     @State private var renaming: LibraryDocument?
@@ -144,6 +147,16 @@ struct LibraryView: View {
 
     var body: some View {
         mainLibraryContent
+        #if DEBUG
+        .overlay(alignment: .topLeading) {
+            if ProcessInfo.processInfo.arguments.contains("--ui-test-library-identity") {
+                Text(navigationIdentity.uuidString)
+                    .font(.caption2)
+                    .accessibilityIdentifier("library.navigationIdentity")
+                    .allowsHitTesting(false)
+            }
+        }
+        #endif
         .sheet(isPresented: $choosingOCRSource, onDismiss: finishChoosingOCRSource) {
             ocrSourcePicker
         }
@@ -281,11 +294,9 @@ struct LibraryView: View {
             .accessibilityIdentifier("library.settings")
 
             Button(action: openTools) {
-                if isImporting {
-                    ProgressView()
-                } else {
-                    Label("Add Document", systemImage: "plus")
-                }
+                // Keep the native toolbar item's representation stable while work
+                // runs. Progress is already shown in the library's status area.
+                Label("Add Document", systemImage: "plus")
             }
             .disabled(isImporting)
             .accessibilityIdentifier("library.addDocument")

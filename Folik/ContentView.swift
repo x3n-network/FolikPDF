@@ -132,7 +132,6 @@ struct ContentView: View {
         .sheet(isPresented: $templatesPresented, onDismiss: {
             if let document = convertedDocument {
                 convertedDocument = nil
-                initialFormDocumentID = document.id
                 path.append(document)
             }
         }) {
@@ -279,6 +278,13 @@ struct ContentView: View {
         }
     }
 
+    private var libraryIsImporting: Bool {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--ui-test-library-importing") { return true }
+        #endif
+        return library.isImporting
+    }
+
     @ViewBuilder
     private var libraryRoot: some View {
         let libraryView = LibraryView(
@@ -291,7 +297,7 @@ struct ContentView: View {
             noTextDocuments: library.documents.filter { searchResult.noSearchableText.contains($0.url) },
             clearSearch: { searchText = "" },
             documents: filteredDocuments,
-            isImporting: library.isImporting,
+            isImporting: libraryIsImporting,
             importStatus: library.importStatus,
             canScan: DocumentScannerView.isSupported,
             openImporter: { isImporterPresented = true },
@@ -321,11 +327,9 @@ struct ContentView: View {
             }
         )
 
-        if library.documents.isEmpty {
-            libraryView
-        } else {
-            libraryView.searchable(text: $searchText, prompt: "Search your library")
-        }
+        // Keep the navigation root's identity when the first PDF arrives. Swapping
+        // between searchable/non-searchable branches rebuilds the library mid-push.
+        libraryView.searchable(text: $searchText, prompt: "Search your library")
     }
 
     private var filteredDocuments: [LibraryDocument] {
@@ -369,7 +373,6 @@ struct ContentView: View {
         Task {
             do {
                 let document = try await library.importConvertedPDF(.preparedPDF(SampleForm.data()), named: "Try a Sample Form")
-                initialFormDocumentID = document.id
                 path.append(document)
             } catch { library.errorMessage = "Folik couldn’t create the sample. \(error.localizedDescription)" }
         }

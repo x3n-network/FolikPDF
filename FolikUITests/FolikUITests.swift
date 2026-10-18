@@ -315,6 +315,8 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(sample.waitForExistence(timeout: 8))
         if !sample.isHittable { app.swipeUp() }
         sample.tap()
+        XCTAssertTrue(app.buttons["reader.fill"].waitForExistence(timeout: 10))
+        app.buttons["reader.fill"].tap()
         XCTAssertTrue(app.buttons["reader.sign"].waitForExistence(timeout: 10))
         capture("sample-form-fill", in: app)
         app.buttons["reader.sign"].tap()
@@ -1816,6 +1818,9 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(app.buttons["template.start"].waitForExistence(timeout: 5))
         capture("template-work-order-preview", in: app)
         app.buttons["template.start"].tap()
+        XCTAssertTrue(app.buttons["reader.fill"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.navigationBars["Forms"].exists)
+        app.buttons["reader.fill"].tap()
         XCTAssertTrue(app.buttons["reader.sign"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.segmentedControls["reader.form.mode"].buttons["Fill"].isSelected)
         capture("template-fill-ready", in: app)
@@ -1829,6 +1834,9 @@ final class FolikUITests: XCTestCase {
         browse.tap()
         app.buttons["template.workOrder"].tap()
         app.buttons["template.start"].tap()
+        XCTAssertTrue(app.buttons["reader.fill"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.navigationBars["Forms"].exists)
+        app.buttons["reader.fill"].tap()
         let saveTemplate = app.buttons["reader.form.saveTemplate"]
         XCTAssertTrue(saveTemplate.waitForExistence(timeout: 10))
         if !saveTemplate.isHittable { app.swipeUp() }
@@ -1849,6 +1857,9 @@ final class FolikUITests: XCTestCase {
         if !work.isHittable { app.swipeUp() }
         work.tap()
         app.buttons["template.start"].tap()
+        XCTAssertTrue(app.buttons["reader.fill"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.navigationBars["Forms"].exists)
+        app.buttons["reader.fill"].tap()
         XCTAssertTrue(app.segmentedControls["reader.form.mode"].waitForExistence(timeout: 10))
         app.segmentedControls["reader.form.mode"].buttons["Build"].tap()
         app.buttons["reader.form.editLayout"].tap()

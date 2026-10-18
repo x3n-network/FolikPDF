@@ -2,7 +2,12 @@ import XCTest
 
 @MainActor
 final class AdaptiveReaderUITests: XCTestCase {
-    override func setUpWithError() throws { continueAfterFailure = false }
+    override func setUpWithError() throws {
+        continueAfterFailure = false
+        // Tests that exercise expanded layouts opt into landscape themselves.
+        // Never inherit a preceding accessibility/rotation test's viewport.
+        XCUIDevice.shared.orientation = .portrait
+    }
 
     func testAccessibilitySizeKeepsToolsInReachableSheet() {
         XCUIDevice.shared.orientation = .landscapeLeft
@@ -104,6 +109,59 @@ final class AdaptiveReaderUITests: XCTestCase {
             app.buttons["reader.probe.inspect"].tap()
             XCTAssertEqual(snapshot.label, original)
         }
+    }
+
+    func testImportingKeepsNativeAddToolbarLabelAndBounds() {
+        let app = XCUIApplication()
+        // Hold the rendered import state without delaying real PDF work.
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-empty-library", "--ui-test-library-importing"]
+        app.launch()
+        let add = app.buttons["library.addDocument"]
+        XCTAssertTrue(add.waitForExistence(timeout: 8))
+        XCTAssertEqual(add.label, "Add Document")
+        XCTAssertFalse(add.isEnabled)
+        XCTAssertLessThanOrEqual(add.frame.width, 100)
+        XCTAssertLessThanOrEqual(add.frame.height, 64)
+    }
+
+    func testFirstSamplePreservesLibraryNavigationIdentity() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-empty-library", "--ui-test-library-identity"]
+        app.launch()
+        let identity = app.staticTexts["library.navigationIdentity"]
+        XCTAssertTrue(identity.waitForExistence(timeout: 8))
+        let original = identity.label
+        let sample = app.buttons["library.sample"]
+        if !sample.isHittable { app.swipeUp() }
+        sample.tap()
+        XCTAssertTrue(app.buttons["reader.fill"].waitForExistence(timeout: 10))
+        let railBack = app.buttons["BackButton"]
+        if railBack.exists { railBack.tap() } else { app.navigationBars.buttons["Library"].tap() }
+        XCTAssertTrue(identity.waitForExistence(timeout: 5))
+        XCTAssertEqual(identity.label, original, "The first document must not replace the navigation root and restart native toolbar transitions.")
+    }
+
+    func testSampleOpensDocumentFirstAndFillRemainsExplicit() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--ui-test-empty-library"]
+        app.launch()
+        let sample = app.buttons["library.sample"]
+        XCTAssertTrue(sample.waitForExistence(timeout: 8))
+        if !sample.isHittable { app.swipeUp() }
+        sample.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["reader.pdf"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["reader.fill"].waitForExistence(timeout: 8))
+        let opening = XCTAttachment(screenshot: app.screenshot())
+        opening.name = "Sample-Initial-Reader"; opening.lifetime = .keepAlways; add(opening)
+        XCTAssertFalse(app.navigationBars["Forms"].exists, "Opening a sample must not automatically present a Forms sheet over navigation.")
+        XCTAssertFalse(app.descendants(matching: .any)["reader.companion"].exists)
+        XCTAssertTrue(app.buttons["reader.fill"].isHittable)
+        app.buttons["reader.fill"].tap()
+        let done = app.buttons["reader.done"]
+        let close = app.buttons["reader.fill.close"]
+        XCTAssertTrue(done.waitForExistence(timeout: 5) || close.waitForExistence(timeout: 5))
+        if done.exists { done.tap() } else { close.tap() }
+        XCTAssertTrue(app.buttons["reader.read"].isHittable)
     }
 
     func testReaderStartsDocumentFirstWithNativeTaskActions() {
