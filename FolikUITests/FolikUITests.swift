@@ -113,9 +113,9 @@ final class FolikUITests: XCTestCase {
         expectation(for: secondPage, evaluatedWith: pageStatus)
         waitForExpectations(timeout: 3)
 
-        let annotations = app.buttons["reader.panel.annotations"]
+        let annotations = readerTool("Annotations", in: app)
         XCTAssertTrue(annotations.waitForExistence(timeout: 3))
-        annotations.tap()
+        readerTool("Annotations", in: app).tap()
         XCTAssertTrue(app.navigationBars["Annotations"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["reader.annotation.draw"].waitForExistence(timeout: 3))
         XCTAssertEqual(
@@ -128,14 +128,14 @@ final class FolikUITests: XCTestCase {
         let placeCenter = app.buttons["reader.annotation.placeCenter"]
         XCTAssertTrue(placeCenter.waitForExistence(timeout: 3))
         placeCenter.tap()
-        annotations.tap()
+        readerTool("Annotations", in: app).tap()
         XCTAssertTrue(app.staticTexts["2 annotations"].waitForExistence(timeout: 3))
         app.buttons["reader.annotation.edit"].tap()
         let doneEditing = app.buttons["reader.annotation.doneEditing"]
         XCTAssertTrue(doneEditing.waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["Tap or drag an annotation"].exists)
         doneEditing.tap()
-        annotations.tap()
+        readerTool("Annotations", in: app).tap()
         app.buttons["reader.annotation.draw"].tap()
         let finishDrawing = app.buttons["reader.drawing.done"]
         XCTAssertTrue(finishDrawing.waitForExistence(timeout: 3))
@@ -155,7 +155,7 @@ final class FolikUITests: XCTestCase {
         expectation(for: firstPage, evaluatedWith: pageStatus)
         waitForExpectations(timeout: 3)
 
-        let find = app.buttons["reader.panel.find"]
+        let find = readerTool("Find", in: app)
         XCTAssertTrue(find.waitForExistence(timeout: 3))
         find.tap()
         let query = app.textFields["reader.find.query"]
@@ -305,6 +305,16 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(app.buttons["builder.arrange"].isHittable)
         capture("form-builder-landscape", in: app)
         XCUIDevice.shared.orientation = .portrait
+    }
+
+    private func readerTool(_ title: String, in app: XCUIApplication) -> XCUIElement {
+        let ids = ["Pages": "reader.panel.pages", "Find": "reader.panel.find", "Annotations": "reader.panel.annotations"]
+        let direct = app.buttons[ids[title]!]
+        if direct.exists { return direct }
+        let action = app.collectionViews.buttons[title]
+        if !action.exists { app.buttons["More"].tap() }
+        XCTAssertTrue(action.waitForExistence(timeout: 5))
+        return action
     }
 
     func testEmptyLibrarySampleCanBeSignedAndShared() {
@@ -931,14 +941,14 @@ final class FolikUITests: XCTestCase {
         app.launchArguments = ["--ui-test-fixture", "--ui-test-conversion-selection"]
         app.launch()
         app.buttons["library.addDocument"].tap()
-        app.buttons["Images to PDF"].tap()
+        app.buttons["tools.images"].tap()
         XCTAssertTrue(app.buttons["converter.create"].waitForExistence(timeout: 3))
         app.buttons["Actions for page 2"].tap()
         app.buttons["Move Up"].tap()
         app.buttons["converter.create"].tap()
         XCTAssertTrue(app.navigationBars["Converted Images"].waitForExistence(timeout: 20))
         XCTAssertEqual(app.staticTexts["reader.pageStatus"].label, "Page 1 of 2")
-        app.buttons["reader.panel.find"].tap()
+        readerTool("Find", in: app).tap()
         let query = app.textFields["reader.find.query"]
         XCTAssertTrue(query.waitForExistence(timeout: 3))
         query.tap()
@@ -957,7 +967,7 @@ final class FolikUITests: XCTestCase {
         app.buttons["converter.create"].tap()
         XCTAssertTrue(app.navigationBars["Converted Text"].waitForExistence(timeout: 15))
         XCTAssertTrue(app.buttons["reader.nextPage"].isEnabled)
-        app.buttons["reader.panel.find"].tap()
+        readerTool("Find", in: app).tap()
         let query = app.textFields["reader.find.query"]
         XCTAssertTrue(query.waitForExistence(timeout: 3))
         query.tap()
@@ -1174,7 +1184,7 @@ final class FolikUITests: XCTestCase {
             NSPredicate(format: "identifier BEGINSWITH 'Scan 2023-11-14'")
         ).firstMatch
         XCTAssertTrue(scannedReader.waitForExistence(timeout: 12))
-        let find = app.buttons["reader.panel.find"]
+        let find = readerTool("Find", in: app)
         XCTAssertTrue(find.waitForExistence(timeout: 3))
         find.tap()
 
@@ -1254,7 +1264,7 @@ final class FolikUITests: XCTestCase {
         move.tap()
         app.buttons["Move right"].tap()
         app.buttons["reader.annotation.doneEditing"].tap()
-        XCTAssertTrue(app.buttons["reader.panel.annotations"].waitForExistence(timeout: 3))
+        XCTAssertTrue(readerTool("Annotations", in: app).waitForExistence(timeout: 3))
     }
 
     func testCurrentPageCanBeBookmarkedAndFilteredInPages() {
@@ -1273,10 +1283,10 @@ final class FolikUITests: XCTestCase {
         XCUIDevice.shared.orientation = .landscapeLeft
         addTeardownBlock { XCUIDevice.shared.orientation = .portrait }
         XCTAssertTrue(bookmark.waitForExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["reader.panel.pages"].isHittable)
+        XCTAssertTrue(readerTool("Pages", in: app).isHittable)
         XCUIDevice.shared.orientation = .portrait
 
-        app.buttons["reader.panel.pages"].tap()
+        readerTool("Pages", in: app).tap()
         XCTAssertTrue(app.navigationBars["Pages"].waitForExistence(timeout: 3))
         let filter = app.segmentedControls["reader.pages.filter"]
         XCTAssertTrue(filter.waitForExistence(timeout: 3))
@@ -1310,7 +1320,7 @@ final class FolikUITests: XCTestCase {
         let placeCenter = app.buttons["reader.annotation.placeCenter"]
         XCTAssertTrue(placeCenter.waitForExistence(timeout: 4))
         placeCenter.tap()
-        app.buttons["reader.panel.annotations"].tap()
+        readerTool("Annotations", in: app).tap()
         XCTAssertTrue(app.staticTexts["2 annotations"].waitForExistence(timeout: 3))
     }
 
@@ -1335,7 +1345,7 @@ final class FolikUITests: XCTestCase {
         let placeCenter = app.buttons["reader.annotation.placeCenter"]
         XCTAssertTrue(placeCenter.waitForExistence(timeout: 3))
         placeCenter.tap()
-        app.buttons["reader.panel.annotations"].tap()
+        readerTool("Annotations", in: app).tap()
 
         XCTAssertTrue(app.staticTexts["2 annotations"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["Approved"].exists)
@@ -1350,9 +1360,14 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue(app.buttons["reader.fill"].isHittable)
         capture("polish-reader-large-text-portrait", in: app)
         XCUIDevice.shared.orientation = .landscapeLeft
+        expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: app.buttons["reader.export"])
+        waitForExpectations(timeout: 5)
         XCTAssertTrue(app.buttons["reader.export"].isHittable)
-        XCTAssertTrue(app.buttons["reader.panel.pages"].isHittable)
+        XCTAssertTrue(readerTool("Pages", in: app).isHittable)
         capture("polish-reader-large-text-landscape", in: app)
+        readerTool("Pages", in: app).tap()
+        XCTAssertTrue(app.buttons["reader.done"].waitForExistence(timeout: 3))
+        app.buttons["reader.done"].tap()
         XCUIDevice.shared.orientation = .portrait
         app.buttons["reader.export"].tap()
         XCTAssertTrue(app.navigationBars["Share PDF"].waitForExistence(timeout: 3))
@@ -1391,9 +1406,9 @@ final class FolikUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-fixture", "--open-first-document"]
         app.launch()
-        XCTAssertTrue(app.buttons["reader.panel.pages"].waitForExistence(timeout: 5))
+        XCTAssertTrue(readerTool("Pages", in: app).waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["reader.panel.outline"].exists)
-        app.buttons["reader.panel.pages"].tap()
+        readerTool("Pages", in: app).tap()
         let picker = app.segmentedControls["reader.pages.contents"]
         XCTAssertTrue(picker.waitForExistence(timeout: 3))
         picker.buttons["Contents"].tap()
@@ -1484,7 +1499,7 @@ final class FolikUITests: XCTestCase {
         XCTAssertTrue((field.value as? String ?? "").localizedCaseInsensitiveContains("abc"))
         capture("form-value-after-background-relaunch", in: app)
         app.navigationBars["Forms"].buttons["Done"].tap()
-        app.buttons["reader.panel.annotations"].tap()
+        readerTool("Annotations", in: app).tap()
         XCTAssertTrue(app.staticTexts["Signature"].waitForExistence(timeout: 5))
     }
 
@@ -1501,7 +1516,7 @@ final class FolikUITests: XCTestCase {
         app.buttons["reader.saveAndBack"].tap()
         XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
         app.buttons["library.document.Folik UI Test.pdf"].tap()
-        app.buttons["reader.panel.annotations"].tap()
+        readerTool("Annotations", in: app).tap()
         XCTAssertTrue(app.staticTexts["Signature"].waitForExistence(timeout: 3))
     }
 
@@ -1561,7 +1576,7 @@ final class FolikUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(app.navigationBars["Folik UI Test"].waitForExistence(timeout: 5))
-        app.buttons["reader.panel.pages"].tap()
+        readerTool("Pages", in: app).tap()
         let organize = app.buttons["reader.pages.organize"]
         XCTAssertTrue(organize.waitForExistence(timeout: 3))
         organize.tap()

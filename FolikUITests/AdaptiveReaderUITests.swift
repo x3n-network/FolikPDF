@@ -111,6 +111,54 @@ final class AdaptiveReaderUITests: XCTestCase {
         }
     }
 
+    func testReaderRailClearsPageNavigationAndSecondaryToolsRemainReachable() {
+        verifyReaderRail()
+    }
+
+    func testAccessibilityReaderRailKeepsSecondaryToolsReachable() {
+        verifyReaderRail(additionalArguments: ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"])
+    }
+
+    private func verifyReaderRail(additionalArguments: [String] = []) {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--open-first-document"] + additionalArguments
+        app.launch()
+        let pdf = app.descendants(matching: .any)["reader.pdf"]
+        XCTAssertTrue(pdf.waitForExistence(timeout: 8))
+        let previous = app.buttons["reader.previousPage"]
+        XCTAssertTrue(previous.waitForExistence(timeout: 5))
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "Reader-Rail-Clearance"; capture.lifetime = .keepAlways; add(capture)
+        let hierarchy = XCTAttachment(string: app.debugDescription)
+        hierarchy.name = "Reader-Rail-Hierarchy"; hierarchy.lifetime = .keepAlways; add(hierarchy)
+        let usesRail = app.buttons["reader.fill"].frame.minX >= pdf.frame.maxX
+        if usesRail { XCTAssertTrue(app.buttons["More"].exists) }
+        for id in ["reader.read", "reader.fill", "reader.build"] {
+            XCTAssertTrue(app.buttons[id].exists); XCTAssertTrue(app.buttons[id].isHittable)
+        }
+        for id in ["reader.read", "reader.fill", "reader.build", "More", "reader.panel.pages", "reader.panel.find", "reader.panel.annotations"] {
+            let button = app.buttons[id]
+            if button.exists && button.isHittable && button.frame.minX >= pdf.frame.maxX {
+                XCTAssertLessThanOrEqual(button.frame.maxY, previous.frame.minY - 8,
+                                         "The side rail must remain above the page-navigation strip: \(id)")
+            }
+        }
+        for (title, id) in [("Pages", "reader.panel.pages"), ("Find", "reader.panel.find"), ("Annotations", "reader.panel.annotations")] {
+            if usesRail { app.buttons["More"].tap() }
+            // System overflow actions expose titles, while horizontal toolbars
+            // retain their original directly accessible identifiers.
+            let tool = usesRail ? app.collectionViews.buttons[title] : app.buttons[id]
+            XCTAssertTrue(tool.waitForExistence(timeout: 3)); XCTAssertTrue(tool.isHittable)
+            tool.tap()
+            XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5))
+            app.buttons["reader.done"].tap()
+        }
+        XCTAssertTrue(app.buttons["reader.fill"].isHittable)
+        XCTAssertTrue(app.buttons["reader.nextPage"].isHittable)
+        app.buttons["reader.nextPage"].tap()
+        XCTAssertEqual(app.staticTexts["reader.pageStatus"].label, "Page 2 of 2")
+    }
+
     func testImportingKeepsNativeAddToolbarLabelAndBounds() {
         let app = XCUIApplication()
         // Hold the rendered import state without delaying real PDF work.

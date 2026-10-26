@@ -30,6 +30,43 @@ enum ReaderPanel: String, Identifiable {
     }
 }
 
+private struct ReaderTaskToolbar<Actions: View, Secondary: View>: ViewModifier {
+    let actions: Actions
+    let secondary: Secondary
+
+    func body(content: Content) -> some View {
+        if #available(iOS 27.1, *) {
+            content.modifier(ReaderAxisTaskToolbar(actions: actions, secondary: secondary))
+        } else {
+            content.toolbar {
+                ToolbarItemGroup(placement: .bottomBar) { actions }
+                ToolbarItemGroup(placement: .bottomBar) { secondary }
+            }
+        }
+    }
+}
+
+@available(iOS 27.1, *)
+private struct ReaderAxisTaskToolbar<Actions: View, Secondary: View>: ViewModifier {
+    @Environment(\.toolbarVerticalEdge) private var verticalEdge
+    let actions: Actions
+    let secondary: Secondary
+
+    func body(content: Content) -> some View {
+        // A shorter bottom-bar group still sits at the bottom of a vertical
+        // rail. Use semantic primary actions only in the actual side layout.
+        content.toolbar {
+            if verticalEdge != nil {
+                ToolbarItemGroup(placement: .primaryAction) { actions }
+                ToolbarOverflowMenu { secondary }
+            } else {
+                ToolbarItemGroup(placement: .bottomBar) { actions }
+                ToolbarItemGroup(placement: .bottomBar) { secondary }
+            }
+        }
+    }
+}
+
 private enum ReaderActionFocus: Hashable { case fill, build, pages, search, annotations }
 
 struct ReaderView: View {
@@ -148,6 +185,7 @@ struct ReaderView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(finishForm != nil || session.isModified || session.saveFailed || session.isSaving || leaving)
         .toolbar { readerToolbar }
+        .modifier(ReaderTaskToolbar(actions: readerTaskActions, secondary: secondaryReaderActions))
         .safeAreaInset(edge: .top, spacing: 0) {
             if showScanActions && !scanActionsDismissed && !session.isLocked && !session.isPreparingDocument {
                 scanNextActions
@@ -471,39 +509,6 @@ struct ReaderView: View {
                 .accessibilityHint("Saves your changes before returning")
             }
         }
-        ToolbarItemGroup(placement: .bottomBar) {
-            Button("Read", systemImage: "doc.text") {
-                session.cancelAnnotationPlacement()
-                session.finishAnnotationEditing()
-                session.setDrawingEnabled(false)
-                session.setFormMode(.fill)
-                presentedPanel = nil
-            }.accessibilityIdentifier("reader.read")
-            Button("Fill form", systemImage: "list.clipboard") {
-                panelOrigin = .fill
-                session.setFormMode(.fill)
-                presentedPanel = .forms
-            }.accessibilityIdentifier("reader.fill")
-                .accessibilityFocused($focusedPanel, equals: .fill)
-            Button("Build form", systemImage: "square.and.pencil") {
-                panelOrigin = .build
-                session.setFormMode(.build)
-                presentedPanel = .forms
-            }.accessibilityIdentifier("reader.build")
-                .accessibilityFocused($focusedPanel, equals: .build)
-        }
-        ToolbarItemGroup(placement: .bottomBar) {
-            Button("Pages", systemImage: "square.grid.2x2") { presentedPanel = .pages }
-                .accessibilityIdentifier("reader.panel.pages")
-                .accessibilityFocused($focusedPanel, equals: .pages)
-            Button("Find", systemImage: "magnifyingglass") { presentedPanel = .search }
-                .accessibilityIdentifier("reader.panel.find")
-                .accessibilityFocused($focusedPanel, equals: .search)
-                .keyboardShortcut("f", modifiers: .command)
-            Button("Annotations", systemImage: "pencil.and.list.clipboard") { presentedPanel = .annotations }
-                .accessibilityIdentifier("reader.panel.annotations")
-                .accessibilityFocused($focusedPanel, equals: .annotations)
-        }
         ToolbarItemGroup(placement: .topBarTrailing) {
             if isExporting {
                 Button(cancellingExport ? "Stopping…" : "Cancel Export") {
@@ -543,6 +548,41 @@ struct ReaderView: View {
             .accessibilityIdentifier("reader.export")
             .accessibilityLabel(isExporting ? "Preparing PDF" : "Export and share")
         }
+    }
+
+    private var readerTaskActions: some View {
+        Group {
+            Button("Read", systemImage: "doc.text") {
+                session.cancelAnnotationPlacement()
+                session.finishAnnotationEditing()
+                session.setDrawingEnabled(false)
+                session.setFormMode(.fill)
+                presentedPanel = nil
+            }.accessibilityIdentifier("reader.read")
+            Button("Fill form", systemImage: "list.clipboard") {
+                panelOrigin = .fill
+                session.setFormMode(.fill)
+                presentedPanel = .forms
+            }.accessibilityIdentifier("reader.fill")
+                .accessibilityFocused($focusedPanel, equals: .fill)
+            Button("Build form", systemImage: "square.and.pencil") {
+                panelOrigin = .build
+                session.setFormMode(.build)
+                presentedPanel = .forms
+            }.accessibilityIdentifier("reader.build")
+                .accessibilityFocused($focusedPanel, equals: .build)
+        }
+    }
+
+    @ViewBuilder
+    private var secondaryReaderActions: some View {
+        Button("Pages", systemImage: "square.grid.2x2") { presentedPanel = .pages }
+            .accessibilityIdentifier("reader.panel.pages")
+        Button("Find", systemImage: "magnifyingglass") { presentedPanel = .search }
+            .accessibilityIdentifier("reader.panel.find")
+            .keyboardShortcut("f", modifiers: .command)
+        Button("Annotations", systemImage: "pencil.and.list.clipboard") { presentedPanel = .annotations }
+            .accessibilityIdentifier("reader.panel.annotations")
     }
 
     private var scanNextActions: some View {
